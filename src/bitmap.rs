@@ -1,8 +1,36 @@
 use crate::error::Jbig2Error;
-
-// Bitmap is represented as Vec<Vec<u8>> where each inner vec is a row
-pub type Bitmap = Vec<Vec<u8>>;
-
+use std::cell::RefCell;
+#[derive(Clone)]
+pub struct Bitmap {
+    pub data: Vec<u8>,
+    pub width: usize,
+    pub height: usize,
+    pub stride: usize, // bytes per row
+}
+impl Bitmap {
+    pub fn new(width: usize, height: usize) -> Self {
+        let stride = (width + 7) >> 3;
+        let data = vec![0; stride * height];
+        Bitmap { data, width, height, stride }
+    }
+    pub fn get_pixel(&self, x: usize, y: usize) -> u8 {
+        if y >= self.height || x >= self.width {
+            return 0;
+        }
+        let byte_index = y * self.stride + (x >> 3);
+        let bit_index = 7 - (x & 7);
+        (self.data[byte_index] >> bit_index) & 1
+    }
+    pub fn set_pixel(&mut self, x: usize, y: usize, value: u8) {
+        let byte_index = y * self.stride + (x >> 3);
+        let bit_index = 7 - (x & 7);
+        if value != 0 {
+            self.data[byte_index] |= 1 << bit_index;
+        } else {
+            self.data[byte_index] &= !(1 << bit_index);
+        }
+    }
+}
 #[derive(Clone)]
 struct QeEntry {
     qe: u16,
@@ -10,7 +38,6 @@ struct QeEntry {
     nlps: u8,
     switch_flag: u8,
 }
-
 const QE_TABLE: [QeEntry; 47] = [
     QeEntry { qe: 0x5601, nmps: 1, nlps: 1, switch_flag: 1 },
     QeEntry { qe: 0x3401, nmps: 2, nlps: 6, switch_flag: 0 },
@@ -60,7 +87,6 @@ const QE_TABLE: [QeEntry; 47] = [
     QeEntry { qe: 0x0001, nmps: 45, nlps: 43, switch_flag: 0 },
     QeEntry { qe: 0x5601, nmps: 46, nlps: 46, switch_flag: 0 },
 ];
-
 pub struct ArithmeticDecoder {
     data: *const u8,
     len: usize,
@@ -71,7 +97,6 @@ pub struct ArithmeticDecoder {
     ct: u8,
     a: u16,
 }
-
 impl ArithmeticDecoder {
     pub fn new(data: &[u8], start: usize, end: usize) -> Self {
         let data_ptr = data.as_ptr();
@@ -93,7 +118,6 @@ impl ArithmeticDecoder {
         decoder.a = 0x8000;
         decoder
     }
-
     fn byte_in(&mut self) {
         let bp = self.bp;
         unsafe {
@@ -117,15 +141,14 @@ impl ArithmeticDecoder {
             self.clow &= 0xffff;
         }
     }
-
-    pub fn read_bit(&mut self, contexts: &mut Vec<i8>, pos: usize) -> u8 {
+    pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
         let cx_index = (contexts[pos] >> 1) as usize;
         let mut cx_mps = (contexts[pos] & 1) as u8;
         let qe_entry = &QE_TABLE[cx_index];
         let qe_icx = qe_entry.qe;
-        let mut d: u8;
+        let d;
+        let new_cx_index;
         let mut a = self.a.wrapping_sub(qe_icx);
-        let mut new_cx_index = cx_index;
         if self.chigh < qe_icx as u32 {
             // exchangeLps
             if a < qe_icx {
@@ -176,58 +199,93 @@ impl ArithmeticDecoder {
         d
     }
 }
-
+const GB_INDEX: usize = 0;
+const GR_INDEX: usize = 1;
+const IAID_INDEX: usize = 2;
+const IADH_INDEX: usize = 3;
+const IADW_INDEX: usize = 4;
+const IAAI_INDEX: usize = 5;
+const IARI_INDEX: usize = 6;
+const IARDX_INDEX: usize = 7;
+const IARDY_INDEX: usize = 8;
+const IARDW_INDEX: usize = 9;
+const IARDH_INDEX: usize = 10;
+const IAEX_INDEX: usize = 11;
+const IAFS_INDEX: usize = 12;
+const IADT_INDEX: usize = 13;
+const IAIT_INDEX: usize = 14;
+const IADS_INDEX: usize = 15;
 pub struct ContextCache {
-    contexts: std::collections::HashMap<String, Vec<i8>>,
+    contexts: [Vec<i8>; 16],
+    initialized: [bool; 16],
 }
-
 impl Default for ContextCache {
     fn default() -> Self {
         Self::new()
     }
 }
-
 impl ContextCache {
     pub fn new() -> Self {
         ContextCache {
-            contexts: std::collections::HashMap::new(),
+            contexts: Default::default(),
+            initialized: [false; 16],
         }
     }
-
     pub fn get_contexts(&mut self, id: &str) -> &mut Vec<i8> {
-        self.contexts.entry(id.to_string()).or_insert_with(|| vec![0; 1 << 16])
+        let index = match id {
+            "GB" => GB_INDEX,
+            "GR" => GR_INDEX,
+            "IAID" => IAID_INDEX,
+            "IADH" => IADH_INDEX,
+            "IADW" => IADW_INDEX,
+            "IAAI" => IAAI_INDEX,
+            "IARI" => IARI_INDEX,
+            "IARDX" => IARDX_INDEX,
+            "IARDY" => IARDY_INDEX,
+            "IARDW" => IARDW_INDEX,
+            "IARDH" => IARDH_INDEX,
+            "IAEX" => IAEX_INDEX,
+            "IAFS" => IAFS_INDEX,
+            "IADT" => IADT_INDEX,
+            "IAIT" => IAIT_INDEX,
+            "IADS" => IADS_INDEX,
+            _ => panic!("unknown context id: {}", id),
+        };
+        if !self.initialized[index] {
+            self.contexts[index] = vec![0i8; 65536];
+            self.initialized[index] = true;
+        }
+        &mut self.contexts[index]
     }
 }
-
 pub struct DecodingContext {
     pub data: Vec<u8>,
     pub start: usize,
     pub end: usize,
-    pub context_cache: ContextCache,
-    pub decoder: Option<ArithmeticDecoder>,
+    pub context_cache: RefCell<ContextCache>,
+    pub decoder: RefCell<Option<ArithmeticDecoder>>,
 }
-
 impl DecodingContext {
     pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
         DecodingContext {
             data,
             start,
             end,
-            context_cache: ContextCache::new(),
-            decoder: None,
+            context_cache: RefCell::new(ContextCache::new()),
+            decoder: RefCell::new(None),
         }
     }
-
-    pub fn get_decoder(&mut self) -> &mut ArithmeticDecoder {
-        if self.decoder.is_none() {
-            self.decoder = Some(ArithmeticDecoder::new(&self.data[self.start..self.end], 0, self.end - self.start));
+    pub fn get_decoder(&self) -> std::cell::RefMut<'_, ArithmeticDecoder> {
+        let mut opt = self.decoder.borrow_mut();
+        if opt.is_none() {
+            *opt = Some(ArithmeticDecoder::new(&self.data[self.start..self.end], 0, self.end - self.start));
         }
-        self.decoder.as_mut().unwrap()
+        std::cell::RefMut::map(opt, |o| o.as_mut().unwrap())
+    }
+    pub fn get_contexts(&self, id: &str) -> std::cell::RefMut<'_, Vec<i8>> {
+        std::cell::RefMut::map(self.context_cache.borrow_mut(), |c| c.get_contexts(id))
     }
 }
-
-
-
 // Coding templates from the JS
 pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
     match index {
@@ -246,13 +304,11 @@ pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
         _ => &[],
     }
 }
-
 #[derive(Clone)]
 pub struct RefinementTemplate {
     pub coding: Vec<(i8, i8)>,
     pub reference: Vec<(i8, i8)>,
 }
-
 pub fn get_refinement_template(index: usize) -> RefinementTemplate {
     match index {
         0 => RefinementTemplate {
@@ -269,19 +325,47 @@ pub fn get_refinement_template(index: usize) -> RefinementTemplate {
         },
     }
 }
-
 pub const REUSED_CONTEXTS: [u16; 4] = [
     0x9b25, // 10011 0110010 0101
     0x0795, // 0011 110010 101
     0x00e5, // 001 11001 01
     0x0195, // 011001 0101
 ];
-
 pub const REFINEMENT_REUSED_CONTEXTS: [u16; 2] = [
     0x0020, // '000' + '0' (coding) + '00010000' + '0' (reference)
     0x0008, // '0000' + '001000'
 ];
-
+#[allow(clippy::too_many_arguments)]
+fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
+    let mut decoder = decoding_context.get_decoder();
+    let mut contexts = decoding_context.get_contexts("GB");
+    let mut bitmap = Bitmap::new(width, height);
+    const OLD_PIXEL_MASK: u16 = 0x7bf7;
+    for i in 0..height {
+        let mut context_label = 0u16;
+        if i >= 2 {
+            let row2_y = i - 2;
+            context_label |= (bitmap.get_pixel(0, row2_y) as u16) << 13;
+            context_label |= (bitmap.get_pixel(1, row2_y) as u16) << 12;
+            context_label |= (bitmap.get_pixel(2, row2_y) as u16) << 11;
+        }
+        if i >= 1 {
+            let row1_y = i - 1;
+            context_label |= (bitmap.get_pixel(0, row1_y) as u16) << 7;
+            context_label |= (bitmap.get_pixel(1, row1_y) as u16) << 6;
+            context_label |= (bitmap.get_pixel(2, row1_y) as u16) << 5;
+            context_label |= (bitmap.get_pixel(3, row1_y) as u16) << 4;
+        }
+        for j in 0..width {
+            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);
+            bitmap.set_pixel(j, i, pixel);
+            let row2_contrib = if i >= 2 && j + 3 < width { (bitmap.get_pixel(j + 3, i - 2) as u16) << 11 } else { 0 };
+            let row1_contrib = if i >= 1 && j + 4 < width { (bitmap.get_pixel(j + 4, i - 1) as u16) << 4 } else { 0 };
+            context_label = ((context_label & OLD_PIXEL_MASK) << 1) | row2_contrib | row1_contrib | (pixel as u16);
+        }
+    }
+    Ok(bitmap)
+}
 #[allow(clippy::too_many_arguments)]
 pub fn decode_bitmap(
     mmr: bool,
@@ -297,9 +381,16 @@ pub fn decode_bitmap(
         // TODO: implement decodeMMRBitmap
         return Err(Jbig2Error::new("MMR decoding not implemented"));
     }
-
+    // Use optimized version for the most common case
+    if template_index == 0 && skip.is_none() && !prediction && at.len() == 4 &&
+        at[0].0 == 3 && at[0].1 == -1 &&
+        at[1].0 == -3 && at[1].1 == -1 &&
+        at[2].0 == 2 && at[2].1 == -2 &&
+        at[3].0 == -2 && at[3].1 == -2 {
+        return decode_bitmap_template0(width, height, decoding_context);
+    }
     let useskip = skip.is_some();
-    let template = get_coding_template(template_index).iter().cloned().chain(at.into_iter()).collect::<Vec<_>>();
+    let template = get_coding_template(template_index).iter().cloned().chain(at).collect::<Vec<_>>();
     let mut template = template;
     template.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
     let template_length = template.len();
@@ -336,74 +427,60 @@ pub fn decode_bitmap(
     let sbb_top = (-min_y) as usize;
     let sbb_right = width - max_x as usize;
     let pseudo_pixel_context = REUSED_CONTEXTS[template_index];
-    let mut row = vec![0u8; width];
-    let mut bitmap = vec![];
-    let contexts = decoding_context.context_cache.get_contexts("GB");
-    if decoding_context.decoder.is_none() {
-        decoding_context.decoder = Some(ArithmeticDecoder::new(&decoding_context.data[decoding_context.start..decoding_context.end], 0, decoding_context.end - decoding_context.start));
-    }
-    let decoder = decoding_context.decoder.as_mut().unwrap();
+    let mut bitmap = Bitmap::new(width, height);
+    let mut decoder = decoding_context.get_decoder();
+    let mut contexts = decoding_context.get_contexts("GB");
     let mut ltp = 0i32;
     for i in 0..height {
         if prediction {
-            let sltp = decoder.read_bit(contexts, pseudo_pixel_context as usize) as i32;
+            let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize) as i32;
             ltp ^= sltp;
             if ltp != 0 {
-                bitmap.push(row.clone());
+                let src_start = (i - 1) * bitmap.stride;
+                let dst_start = i * bitmap.stride;
+                let (before, after) = bitmap.data.split_at_mut(dst_start);
+                let src_row = &before[src_start..];
+                let dst_row = &mut after[0..bitmap.stride];
+                dst_row.copy_from_slice(src_row);
                 continue;
             }
         }
-        bitmap.push(row.clone());
         for j in 0..width {
-            if useskip && skip.unwrap()[i][j] != 0 {
-                bitmap[i][j] = 0;
+            if useskip && skip.unwrap().get_pixel(j, i) != 0 {
                 continue;
             }
             let context_label = if j >= sbb_left && j < sbb_right && i >= sbb_top {
                 let mut context_label = 0u16;
-                let mut bits = vec![];
+                context_label = (context_label << 1) & reuse_mask;
                 for k in 0..changing_entries_length {
                     let i0 = i as i32 + changing_template_y[k] as i32;
                     let j0 = j as i32 + changing_template_x[k] as i32;
-                    let bit = if i0 >= 0 && i0 < height as i32 && j0 >= 0 && j0 < width as i32 {
-                        bitmap[i0 as usize][j0 as usize] != 0
-                    } else {
-                        false
-                    };
-                    bits.push(bit);
-                }
-                context_label = (context_label << 1) & reuse_mask;
-                for (k, &bit) in bits.iter().enumerate() {
-                    if bit {
+                    if i0 >= 0 && i0 < height as i32 && j0 >= 0 && j0 < width as i32 && bitmap.get_pixel(j0 as usize, i0 as usize) != 0 {
                         context_label |= changing_template_bit[k];
                     }
                 }
                 context_label
             } else {
                 let mut context_label = 0u16;
-                let mut shift = template_length as i32 - 1;
+                let mut shift = template_length - 1;
                 for k in 0..template_length {
                     let j0 = j as i32 + template_x[k] as i32;
                     if j0 >= 0 && j0 < width as i32 {
                         let i0 = i as i32 + template_y[k] as i32;
-                        if i0 >= 0 && i0 < height as i32 {
-                            if bitmap[i0 as usize][j0 as usize] != 0 {
-                                context_label |= 1u16 << shift;
-                            }
+                        if i0 >= 0 && i0 < height as i32 && bitmap.get_pixel(j0 as usize, i0 as usize) != 0 {
+                            context_label |= 1 << shift;
                         }
                     }
                     shift -= 1;
                 }
                 context_label
             };
-            let pixel = decoder.read_bit(contexts, context_label as usize);
-            bitmap[i][j] = pixel;
+            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);
+            bitmap.set_pixel(j, i, pixel);
         }
-        row = bitmap[i].clone();
     }
     Ok(bitmap)
 }
-
 #[allow(clippy::too_many_arguments)]
 pub fn decode_refinement(
     width: usize,
@@ -419,36 +496,26 @@ pub fn decode_refinement(
     if prediction {
         return Err(Jbig2Error::new("prediction is not supported"));
     }
-
     let mut coding_template = get_refinement_template(template_index).coding;
     if template_index == 0 {
         coding_template.push(at[0]);
     }
     let coding_template_length = coding_template.len();
-    let coding_template_x = coding_template.iter().map(|&(x, y)| x as i32).collect::<Vec<_>>();
-    let coding_template_y = coding_template.iter().map(|&(x, y)| y as i32).collect::<Vec<_>>();
-
+    let coding_template_x = coding_template.iter().map(|&(x, _)| x as i32).collect::<Vec<_>>();
+    let coding_template_y = coding_template.iter().map(|&(_, y)| y as i32).collect::<Vec<_>>();
     let mut reference_template = get_refinement_template(template_index).reference;
     if template_index == 0 {
         reference_template.push(at[1]);
     }
     let reference_template_length = reference_template.len();
-    let reference_template_x = reference_template.iter().map(|&(x, y)| x as i32).collect::<Vec<_>>();
-    let reference_template_y = reference_template.iter().map(|&(x, y)| y as i32).collect::<Vec<_>>();
-    let reference_width = reference_bitmap[0].len();
-    let reference_height = reference_bitmap.len();
-
-    let pseudo_pixel_context = REFINEMENT_REUSED_CONTEXTS[template_index];
-    let mut bitmap = vec![];
-    let contexts = decoding_context.context_cache.get_contexts("GR");
-    if decoding_context.decoder.is_none() {
-        decoding_context.decoder = Some(ArithmeticDecoder::new(&decoding_context.data[decoding_context.start..decoding_context.end], 0, decoding_context.end - decoding_context.start));
-    }
-    let decoder = decoding_context.decoder.as_mut().unwrap();
-
+    let reference_template_x = reference_template.iter().map(|&(x, _)| x as i32).collect::<Vec<_>>();
+    let reference_template_y = reference_template.iter().map(|&(_, y)| y as i32).collect::<Vec<_>>();
+    let reference_width = reference_bitmap.width;
+    let reference_height = reference_bitmap.height;
+    let mut contexts = decoding_context.get_contexts("GR");
+    let mut decoder = decoding_context.get_decoder();
+    let mut bitmap = Bitmap::new(width, height);
     for i in 0..height {
-        let row = vec![0u8; width];
-        bitmap.push(row);
         for j in 0..width {
             let mut context_label = 0u16;
             for k in 0..coding_template_length {
@@ -457,7 +524,7 @@ pub fn decode_refinement(
                 if i0 < 0 || j0 < 0 || j0 >= width as i32 {
                     context_label <<= 1;
                 } else {
-                    context_label = (context_label << 1) | (bitmap[i0 as usize][j0 as usize] as u16);
+                    context_label = (context_label << 1) | (bitmap.get_pixel(j0 as usize, i0 as usize) as u16);
                 }
             }
             for k in 0..reference_template_length {
@@ -466,11 +533,11 @@ pub fn decode_refinement(
                 if i0 < 0 || i0 >= reference_height as i32 || j0 < 0 || j0 >= reference_width as i32 {
                     context_label <<= 1;
                 } else {
-                    context_label = (context_label << 1) | (reference_bitmap[i0 as usize][j0 as usize] as u16);
+                    context_label = (context_label << 1) | (reference_bitmap.get_pixel(j0 as usize, i0 as usize) as u16);
                 }
             }
-            let pixel = decoder.read_bit(contexts, context_label as usize);
-            bitmap[i][j] = pixel;
+            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);
+            bitmap.set_pixel(j, i, pixel);
         }
     }
     Ok(bitmap)

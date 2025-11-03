@@ -1,6 +1,5 @@
 use crate::error::Jbig2Error;
-use crate::bitmap::{decode_bitmap, DecodingContext};
-
+use crate::bitmap::{Bitmap, decode_bitmap, DecodingContext};
 const SEGMENT_TYPES: [&str; 63] = [
     "SymbolDictionary", "", "", "", "IntermediateTextRegion", "", "ImmediateTextRegion",
     "ImmediateLosslessTextRegion", "", "", "", "", "", "", "", "", "PatternDictionary",
@@ -12,16 +11,14 @@ const SEGMENT_TYPES: [&str; 63] = [
     "EndOfPage", "EndOfStripe", "EndOfFile", "Profiles", "Tables", "", "", "", "", "", "",
     "", "", "Extension",
 ];
-
 fn read_u32(data: &[u8], pos: usize) -> u32 {
     ((data[pos] as u32) << 24) | ((data[pos + 1] as u32) << 16) | ((data[pos + 2] as u32) << 8) | (data[pos + 3] as u32)
 }
-
 fn read_u16(data: &[u8], pos: usize) -> u16 {
     ((data[pos] as u16) << 8) | (data[pos + 1] as u16)
 }
-
 #[derive(Clone)]
+#[allow(dead_code)]
 struct SegmentHeader {
     number: u32,
     segment_type: u8,
@@ -33,7 +30,6 @@ struct SegmentHeader {
     length: u32,
     header_end: usize,
 }
-
 fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
     let mut pos = start;
     let number = read_u32(data, pos);
@@ -99,14 +95,12 @@ fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2
         header_end: pos,
     })
 }
-
 struct Segment {
     header: SegmentHeader,
     data: Vec<u8>,
     start: usize,
     end: usize,
 }
-
 fn read_segments(_header: &FileHeader, data: &[u8], start: usize, end: usize) -> Result<Vec<Segment>, Jbig2Error> {
     let mut segments = vec![];
     let mut position = start;
@@ -128,13 +122,13 @@ fn read_segments(_header: &FileHeader, data: &[u8], start: usize, end: usize) ->
     }
     Ok(segments)
 }
-
+#[allow(dead_code)]
 struct FileHeader {
     random_access: bool,
     number_of_pages: Option<u32>,
 }
-
 #[derive(Clone)]
+#[allow(dead_code)]
 struct PageInfo {
     width: usize,
     height: usize,
@@ -147,7 +141,6 @@ struct PageInfo {
     requires_buffer: bool,
     combination_operator_override: bool,
 }
-
 #[derive(Clone)]
 struct RegionInfo {
     width: usize,
@@ -156,9 +149,7 @@ struct RegionInfo {
     y: usize,
     combination_operator: u8,
 }
-
 const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
-
 fn read_region_segment_information(data: &[u8], start: usize) -> RegionInfo {
     RegionInfo {
         width: read_u32(data, start) as usize,
@@ -168,7 +159,6 @@ fn read_region_segment_information(data: &[u8], start: usize) -> RegionInfo {
         combination_operator: data[start + 16] & 7,
     }
 }
-
 #[derive(Clone)]
 struct GenericRegion {
     info: RegionInfo,
@@ -177,7 +167,6 @@ struct GenericRegion {
     prediction: bool,
     at: Vec<(i8, i8)>,
 }
-
 fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2Error> {
     let info = read_region_segment_information(data, start);
     let generic_region_segment_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
@@ -201,12 +190,10 @@ fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2
         at,
     })
 }
-
 struct SimpleSegmentVisitor {
     current_page_info: Option<PageInfo>,
     buffer: Option<Vec<u8>>,
 }
-
 impl SimpleSegmentVisitor {
     fn new() -> Self {
         SimpleSegmentVisitor {
@@ -214,7 +201,6 @@ impl SimpleSegmentVisitor {
             buffer: None,
         }
     }
-
     fn on_page_information(&mut self, info: PageInfo) {
         self.current_page_info = Some(info.clone());
         let row_size = (info.width + 7) >> 3;
@@ -225,8 +211,7 @@ impl SimpleSegmentVisitor {
         }
         self.buffer = Some(buffer);
     }
-
-    fn draw_bitmap(&mut self, region_info: &RegionInfo, bitmap: &[Vec<u8>]) {
+    fn draw_bitmap(&mut self, region_info: &RegionInfo, bitmap: &Bitmap) {
         let page_info = self.current_page_info.as_ref().unwrap();
         let width = region_info.width;
         let height = region_info.height;
@@ -242,8 +227,8 @@ impl SimpleSegmentVisitor {
         for i in 0..height {
             let mut mask = mask0;
             let mut offset = offset0;
-            for j in 0..width {
-                let pixel = bitmap[i][j];
+            for _j in 0..width {
+                let pixel = bitmap.get_pixel(offset, i);
                 match combination_operator {
                     0 => { // OR
                         if pixel != 0 {
@@ -266,7 +251,6 @@ impl SimpleSegmentVisitor {
             offset0 += row_size;
         }
     }
-
     fn on_immediate_generic_region(&mut self, region: &GenericRegion, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
         let region_info = &region.info;
         let mut decoding_context = DecodingContext::new(data.to_vec(), start, end);
@@ -284,7 +268,6 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 }
-
 fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
     let header = &segment.header;
     let data = &segment.data;
@@ -299,8 +282,8 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
             let page_segment_flags = data[start + 16];
             let lossless = (page_segment_flags & 1) != 0;
             let refinement = (page_segment_flags & 2) != 0;
-            let default_pixel_value = ((page_segment_flags >> 2) & 1) as u8;
-            let combination_operator = ((page_segment_flags >> 3) & 3) as u8;
+            let default_pixel_value = (page_segment_flags >> 2) & 1;
+            let combination_operator = (page_segment_flags >> 3) & 3;
             let requires_buffer = (page_segment_flags & 32) != 0;
             let combination_operator_override = (page_segment_flags & 64) != 0;
             let info = PageInfo {
@@ -326,25 +309,21 @@ fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Res
     }
     Ok(())
 }
-
 fn process_segments(segments: &[Segment], visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
     for segment in segments {
         process_segment(segment, visitor)?;
     }
     Ok(())
 }
-
 pub struct Jbig2Image {
     pub width: usize,
     pub height: usize,
 }
-
 impl Default for Jbig2Image {
     fn default() -> Self {
         Self::new()
     }
 }
-
 impl Jbig2Image {
     pub fn new() -> Self {
         Jbig2Image {
@@ -352,12 +331,10 @@ impl Jbig2Image {
             height: 0,
         }
     }
-
     pub fn parse_chunks(&mut self, _chunks: Vec<Jbig2Chunk>) -> Result<(), Jbig2Error> {
         // TODO: implement parseJbig2Chunks
         Err(Jbig2Error::new("parse_chunks not implemented"))
     }
-
     pub fn parse(&mut self, data: &[u8]) -> Result<Vec<u8>, Jbig2Error> {
         if data.len() < 8 || &data[0..8] != b"\x97\x4a\x42\x32\x0d\x0a\x1a\x0a" {
             return Err(Jbig2Error::new("invalid header"));
@@ -390,7 +367,7 @@ impl Jbig2Image {
         for i in 0..height {
             let mut mask = 128u8;
             let mut buffer_pos = i * row_size;
-            for j in 0..width {
+            for _j in 0..width {
                 if buffer[buffer_pos] & mask != 0 {
                     img_data[q] = 255;
                 }
@@ -407,7 +384,6 @@ impl Jbig2Image {
         Ok(img_data)
     }
 }
-
 pub struct Jbig2Chunk {
     pub data: Vec<u8>,
     pub start: usize,

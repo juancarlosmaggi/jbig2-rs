@@ -273,15 +273,15 @@ pub fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) ->
     let end = segment.end;
     match header.segment_type {
         48 => { // PageInformation
-            let width = read_u32(data, start) as u32;
-            let height = read_u32(data, start + 4) as u32;
+            let width = read_u32(data, start);
+            let height = read_u32(data, start + 4);
             let resolution_x = read_u32(data, start + 8);
             let resolution_y = read_u32(data, start + 12);
             let page_segment_flags = data[start + 16];
             let lossless = (page_segment_flags & 1) != 0;
             let refinement = (page_segment_flags & 2) != 0;
-            let default_pixel_value = ((page_segment_flags >> 2) & 1) as u8;
-            let combination_operator = ((page_segment_flags >> 3) & 3) as u8;
+            let default_pixel_value = (page_segment_flags >> 2) & 1;
+            let combination_operator = (page_segment_flags >> 3) & 3;
             let requires_buffer = (page_segment_flags & 32) != 0;
             let combination_operator_override = (page_segment_flags & 64) != 0;
             let info = PageInfo {

@@ -1,13 +1,10 @@
 use crate::error::Jbig2Error;
 use crate::bitmap::ContextCache;
-
-
 // Annex A. Arithmetic Integer Decoding Procedure
 // A.2 Procedure for decoding values
-pub fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder: &mut crate::bitmap::ArithmeticDecoder) -> Result<i32, Jbig2Error> {
+pub fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder: &mut crate::bitmap::ArithmeticDecoder) -> Result<Option<i32>, Jbig2Error> {
     let contexts = context_cache.get_contexts(procedure);
     let mut prev = 1;
-
     let read_bits = |length: u32, contexts: &mut Vec<i8>, prev: &mut usize, decoder: &mut crate::bitmap::ArithmeticDecoder| -> Result<u32, Jbig2Error> {
         let mut v = 0;
         for _ in 0..length {
@@ -17,7 +14,6 @@ pub fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder
         }
         Ok(v)
     };
-
     let sign = read_bits(1, contexts, &mut prev, decoder)?;
     // The nested ternary from JS
     let value = if read_bits(1, contexts, &mut prev, decoder)? != 0 {
@@ -41,18 +37,21 @@ pub fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder
     } else {
         read_bits(2, contexts, &mut prev, decoder)?
     };
-
-    let signed_value = if sign == 0 { value as i32 } else if value > 0 { -(value as i32) } else { 0 };
-
-    Ok(signed_value)
+    let signed_value = if sign == 0 {
+        value as i32
+    } else if value > 0 {
+        -(value as i32)
+    } else {
+        return Ok(None); // invalid case
+    };
+    Ok(Some(signed_value))
 }
-
 // A.3 The IAID decoding procedure
 pub fn decode_iaid(context_cache: &mut ContextCache, decoder: &mut crate::bitmap::ArithmeticDecoder, code_length: usize) -> Result<u32, Jbig2Error> {
     let contexts = context_cache.get_contexts("IAID");
     let mut prev = 1;
     for _ in 0..code_length {
-        let bit = decoder.read_bit(contexts, prev);
+        let bit = decoder.read_bit(&mut *contexts, prev);
         prev = (prev << 1) | bit as usize;
     }
     if code_length < 31 {
