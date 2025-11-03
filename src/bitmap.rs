@@ -10,7 +10,12 @@ impl Bitmap {
     pub fn new(width: usize, height: usize) -> Self {
         let stride = (width + 7) >> 3;
         let data = vec![0; stride * height];
-        Bitmap { data, width, height, stride }
+        Bitmap {
+            data,
+            width,
+            height,
+            stride,
+        }
     }
 
     pub fn get_pixel(&self, x: usize, y: usize) -> u8 {
@@ -54,7 +59,11 @@ impl Bitmap {
                 if mask == 0 || buffer_index == 0 {
                     mask = 128;
                     let byte_index = y * self.stride + (x >> 3);
-                    buffer = if byte_index < self.data.len() { self.data[byte_index] } else { 0 };
+                    buffer = if byte_index < self.data.len() {
+                        self.data[byte_index]
+                    } else {
+                        0
+                    };
                     buffer_index = 8;
                 }
                 let pixel = if (buffer & mask) != 0 { 0 } else { 255 }; // 0 = black, 255 = white

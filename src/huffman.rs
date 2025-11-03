@@ -106,7 +106,12 @@ impl HuffmanTreeNode {
                 return Ok(-1); // OOB
             }
             let ht_offset = reader.read_bits(self.range_length)?;
-            Ok(self.range_low + if self.is_lower_range { -(ht_offset as i32) } else { ht_offset as i32 })
+            Ok(self.range_low
+                + if self.is_lower_range {
+                    -(ht_offset as i32)
+                } else {
+                    ht_offset as i32
+                })
         } else {
             let bit = reader.read_bit()? as usize;
             if let Some(ref child) = self.children[bit] {
@@ -123,12 +128,22 @@ pub struct HuffmanTable {
     pub root_node: HuffmanTreeNode,
 }
 
-pub fn decode_tables_segment(data: &[u8], start: usize, end: usize) -> Result<HuffmanTable, Jbig2Error> {
+pub fn decode_tables_segment(
+    data: &[u8],
+    start: usize,
+    end: usize,
+) -> Result<HuffmanTable, Jbig2Error> {
     // Decodes a Tables segment, i.e., a custom Huffman table.
     // Annex B.2 Code table structure.
     let flags = data[start];
-    let lowest_value = ((data[start + 1] as u32) << 24) | ((data[start + 2] as u32) << 16) | ((data[start + 3] as u32) << 8) | (data[start + 4] as u32);
-    let highest_value = ((data[start + 5] as u32) << 24) | ((data[start + 6] as u32) << 16) | ((data[start + 7] as u32) << 8) | (data[start + 8] as u32);
+    let lowest_value = ((data[start + 1] as u32) << 24)
+        | ((data[start + 2] as u32) << 16)
+        | ((data[start + 3] as u32) << 8)
+        | (data[start + 4] as u32);
+    let highest_value = ((data[start + 5] as u32) << 24)
+        | ((data[start + 6] as u32) << 16)
+        | ((data[start + 7] as u32) << 8)
+        | (data[start + 8] as u32);
     let mut reader = Reader::new(data.to_vec(), start + 9, end);
 
     let prefix_size_bits = (((flags >> 1) & 7) + 1) as u32;
@@ -141,17 +156,33 @@ pub fn decode_tables_segment(data: &[u8], start: usize, end: usize) -> Result<Hu
     while current_range_low < highest_value as i32 {
         let prefix_length = reader.read_bits(prefix_size_bits)?;
         let range_length = reader.read_bits(range_size_bits)?;
-        lines.push(HuffmanLine::new(vec![current_range_low, prefix_length as i32, range_length as i32, 0]));
+        lines.push(HuffmanLine::new(vec![
+            current_range_low,
+            prefix_length as i32,
+            range_length as i32,
+            0,
+        ]));
         current_range_low += 1i32 << range_length;
     }
 
     // Lower range table line
     let prefix_length = reader.read_bits(prefix_size_bits)?;
-    lines.push(HuffmanLine::new(vec![lowest_value as i32 - 1, prefix_length as i32, 32, 0, 1])); // "lower"
+    lines.push(HuffmanLine::new(vec![
+        lowest_value as i32 - 1,
+        prefix_length as i32,
+        32,
+        0,
+        1,
+    ])); // "lower"
 
     // Upper range table line
     let prefix_length = reader.read_bits(prefix_size_bits)?;
-    lines.push(HuffmanLine::new(vec![highest_value as i32, prefix_length as i32, 32, 0]));
+    lines.push(HuffmanLine::new(vec![
+        highest_value as i32,
+        prefix_length as i32,
+        32,
+        0,
+    ]));
 
     if (flags & 1) != 0 {
         // Out-of-band table line
@@ -180,7 +211,7 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![3, 4, 3, 0xe]),
             HuffmanLine::new(vec![11, 5, 6, 0x1e]),
             HuffmanLine::new(vec![75, 6, 32, 0x3e]), // upper
-            HuffmanLine::new(vec![6, 0x3f]), // OOB
+            HuffmanLine::new(vec![6, 0x3f]),         // OOB
         ],
         3 => vec![
             HuffmanLine::new(vec![-256, 8, 8, 0xfe]),
@@ -190,8 +221,8 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![3, 4, 3, 0xe]),
             HuffmanLine::new(vec![11, 5, 6, 0x1e]),
             HuffmanLine::new(vec![-257, 8, 32, 0xff, 1]), // lower
-            HuffmanLine::new(vec![75, 7, 32, 0x7e]), // upper
-            HuffmanLine::new(vec![6, 0x3e]), // OOB
+            HuffmanLine::new(vec![75, 7, 32, 0x7e]),      // upper
+            HuffmanLine::new(vec![6, 0x3e]),              // OOB
         ],
         4 => vec![
             HuffmanLine::new(vec![1, 1, 0, 0x0]),
@@ -209,7 +240,7 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![4, 4, 3, 0xe]),
             HuffmanLine::new(vec![12, 5, 6, 0x1e]),
             HuffmanLine::new(vec![-256, 7, 32, 0x7f, 1]), // lower
-            HuffmanLine::new(vec![76, 6, 32, 0x3e]), // upper
+            HuffmanLine::new(vec![76, 6, 32, 0x3e]),      // upper
         ],
         6 => vec![
             HuffmanLine::new(vec![-2048, 5, 10, 0x1c]),
@@ -225,7 +256,7 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![512, 4, 9, 0xc]),
             HuffmanLine::new(vec![1024, 4, 10, 0xd]),
             HuffmanLine::new(vec![-2049, 6, 32, 0x3e, 1]), // lower
-            HuffmanLine::new(vec![2048, 6, 32, 0x3f]), // upper
+            HuffmanLine::new(vec![2048, 6, 32, 0x3f]),     // upper
         ],
         7 => vec![
             HuffmanLine::new(vec![-1024, 4, 9, 0x8]),
@@ -242,7 +273,7 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![512, 3, 9, 0x2]),
             HuffmanLine::new(vec![1024, 3, 10, 0x3]),
             HuffmanLine::new(vec![-1025, 5, 32, 0x1e, 1]), // lower
-            HuffmanLine::new(vec![2048, 5, 32, 0x1f]), // upper
+            HuffmanLine::new(vec![2048, 5, 32, 0x1f]),     // upper
         ],
         8 => vec![
             HuffmanLine::new(vec![-15, 8, 3, 0xfc]),
@@ -264,8 +295,8 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![390, 7, 8, 0x7d]),
             HuffmanLine::new(vec![646, 6, 10, 0x3d]),
             HuffmanLine::new(vec![-16, 9, 32, 0x1fe, 1]), // lower
-            HuffmanLine::new(vec![1670, 9, 32, 0x1ff]), // upper
-            HuffmanLine::new(vec![2, 0x1]), // OOB
+            HuffmanLine::new(vec![1670, 9, 32, 0x1ff]),   // upper
+            HuffmanLine::new(vec![2, 0x1]),               // OOB
         ],
         9 => vec![
             HuffmanLine::new(vec![-31, 8, 4, 0xfc]),
@@ -288,8 +319,8 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![779, 7, 9, 0x7d]),
             HuffmanLine::new(vec![1291, 6, 11, 0x3d]),
             HuffmanLine::new(vec![-32, 9, 32, 0x1fe, 1]), // lower
-            HuffmanLine::new(vec![3339, 9, 32, 0x1ff]), // upper
-            HuffmanLine::new(vec![2, 0x0]), // OOB
+            HuffmanLine::new(vec![3339, 9, 32, 0x1ff]),   // upper
+            HuffmanLine::new(vec![2, 0x0]),               // OOB
         ],
         10 => vec![
             HuffmanLine::new(vec![-21, 7, 4, 0x7a]),
@@ -311,8 +342,8 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![1094, 6, 10, 0x3c]),
             HuffmanLine::new(vec![2118, 7, 11, 0x7d]),
             HuffmanLine::new(vec![-22, 8, 32, 0xfe, 1]), // lower
-            HuffmanLine::new(vec![4166, 8, 32, 0xff]), // upper
-            HuffmanLine::new(vec![2, 0x2]), // OOB
+            HuffmanLine::new(vec![4166, 8, 32, 0xff]),   // upper
+            HuffmanLine::new(vec![2, 0x2]),              // OOB
         ],
         11 => vec![
             HuffmanLine::new(vec![1, 1, 0, 0x0]),
@@ -379,9 +410,14 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![5, 6, 2, 0x3d]),
             HuffmanLine::new(vec![9, 7, 4, 0x7d]),
             HuffmanLine::new(vec![-25, 7, 32, 0x7e, 1]), // lower
-            HuffmanLine::new(vec![25, 7, 32, 0x7f]), // upper
+            HuffmanLine::new(vec![25, 7, 32, 0x7f]),     // upper
         ],
-        _ => return Err(Jbig2Error::new(&format!("standard table B.{} does not exist", number))),
+        _ => {
+            return Err(Jbig2Error::new(&format!(
+                "standard table B.{} does not exist",
+                number
+            )));
+        }
     };
     Ok(HuffmanTable::new(lines, true))
 }
@@ -514,11 +550,16 @@ pub fn get_text_region_huffman_tables(
                 _ => return Err(Jbig2Error::new("invalid code length in symbol ID table")),
             };
             for _ in 0..number_of_repeats {
-                codes.push(HuffmanLine::new(vec![i as i32, repeated_length as i32, 0, 0]));
+                codes.push(HuffmanLine::new(vec![
+                    i as i32,
+                    repeated_length as i32,
+                    0,
+                    0,
+                ]));
                 i += 1;
             }
         } else {
-        codes.push(HuffmanLine::new(vec![i as i32, code_length as i32, 0, 0]));
+            codes.push(HuffmanLine::new(vec![i as i32, code_length as i32, 0, 0]));
             i += 1;
         }
     }
@@ -561,7 +602,11 @@ pub fn get_text_region_huffman_tables(
         0..=2 => Some(get_standard_table(params.huffman_refinement_dw as u32 + 2)?),
         3 => {
             custom_index += 1;
-            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+            Some(get_custom_huffman_table(
+                custom_index - 1,
+                referred_to,
+                custom_tables,
+            )?)
         }
         _ => return Err(Jbig2Error::new("invalid Huffman refinement DW selector")),
     };
@@ -570,7 +615,11 @@ pub fn get_text_region_huffman_tables(
         0..=2 => Some(get_standard_table(params.huffman_refinement_dh as u32 + 2)?),
         3 => {
             custom_index += 1;
-            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+            Some(get_custom_huffman_table(
+                custom_index - 1,
+                referred_to,
+                custom_tables,
+            )?)
         }
         _ => return Err(Jbig2Error::new("invalid Huffman refinement DH selector")),
     };
@@ -579,7 +628,11 @@ pub fn get_text_region_huffman_tables(
         0..=2 => Some(get_standard_table(params.huffman_refinement_dx as u32 + 2)?),
         3 => {
             custom_index += 1;
-            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+            Some(get_custom_huffman_table(
+                custom_index - 1,
+                referred_to,
+                custom_tables,
+            )?)
         }
         _ => return Err(Jbig2Error::new("invalid Huffman refinement DX selector")),
     };
@@ -588,14 +641,22 @@ pub fn get_text_region_huffman_tables(
         0..=2 => Some(get_standard_table(params.huffman_refinement_dy as u32 + 2)?),
         3 => {
             custom_index += 1;
-            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+            Some(get_custom_huffman_table(
+                custom_index - 1,
+                referred_to,
+                custom_tables,
+            )?)
         }
         _ => return Err(Jbig2Error::new("invalid Huffman refinement DY selector")),
     };
 
     let table_refinement_size = if params.huffman_refinement_size_selector {
         custom_index += 1;
-        Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+        Some(get_custom_huffman_table(
+            custom_index - 1,
+            referred_to,
+            custom_tables,
+        )?)
     } else {
         Some(get_standard_table(1)?)
     };

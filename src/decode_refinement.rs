@@ -1,5 +1,5 @@
 use crate::bitmap::Bitmap;
-use crate::contexts::{DecodingContext};
+use crate::contexts::DecodingContext;
 use crate::error::Jbig2Error;
 
 const REFINEMENT_REUSED_CONTEXTS: [u16; 2] = [
@@ -17,7 +17,16 @@ pub fn get_refinement_template(index: usize) -> RefinementTemplate {
     match index {
         0 => RefinementTemplate {
             coding: vec![(0, -1), (1, -1), (-1, 0)],
-            reference: vec![(0, -1), (1, -1), (-1, 0), (0, 0), (1, 0), (-1, 1), (0, 1), (1, 1)],
+            reference: vec![
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (0, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ],
         },
         1 => RefinementTemplate {
             coding: vec![(-1, -1), (0, -1), (1, -1), (-1, 0)],
@@ -42,21 +51,36 @@ pub struct RefinementParams<'a> {
     pub at: Vec<(i8, i8)>,
 }
 
-pub fn decode_refinement<'a>(params: &RefinementParams<'a>, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
+pub fn decode_refinement<'a>(
+    params: &RefinementParams<'a>,
+    decoding_context: &mut DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
     let mut coding_template = get_refinement_template(params.template_index).coding;
     if params.template_index == 0 {
         coding_template.push(params.at[0]);
     }
     let coding_template_length = coding_template.len();
-    let coding_template_x = coding_template.iter().map(|&(x, _)| x as i32).collect::<Vec<_>>();
-    let coding_template_y = coding_template.iter().map(|&(_, y)| y as i32).collect::<Vec<_>>();
+    let coding_template_x = coding_template
+        .iter()
+        .map(|&(x, _)| x as i32)
+        .collect::<Vec<_>>();
+    let coding_template_y = coding_template
+        .iter()
+        .map(|&(_, y)| y as i32)
+        .collect::<Vec<_>>();
     let mut reference_template = get_refinement_template(params.template_index).reference;
     if params.template_index == 0 {
         reference_template.push(params.at[1]);
     }
     let reference_template_length = reference_template.len();
-    let reference_template_x = reference_template.iter().map(|&(x, _)| x as i32).collect::<Vec<_>>();
-    let reference_template_y = reference_template.iter().map(|&(_, y)| y as i32).collect::<Vec<_>>();
+    let reference_template_x = reference_template
+        .iter()
+        .map(|&(x, _)| x as i32)
+        .collect::<Vec<_>>();
+    let reference_template_y = reference_template
+        .iter()
+        .map(|&(_, y)| y as i32)
+        .collect::<Vec<_>>();
     let reference_width = params.reference_bitmap.width;
     let reference_height = params.reference_bitmap.height;
     let pseudo_pixel_context = REFINEMENT_REUSED_CONTEXTS[params.template_index];
@@ -85,16 +109,19 @@ pub fn decode_refinement<'a>(params: &RefinementParams<'a>, decoding_context: &m
                 if i0 < 0 || j0 < 0 || j0 >= params.width as i32 {
                     context_label <<= 1;
                 } else {
-                    context_label = (context_label << 1) | (bitmap.get_pixel(j0 as usize, i0 as usize) as u16);
+                    context_label =
+                        (context_label << 1) | (bitmap.get_pixel(j0 as usize, i0 as usize) as u16);
                 }
             }
             for k in 0..reference_template_length {
                 let i0 = i as i32 + reference_template_y[k] - params.offset_y;
                 let j0 = j as i32 + reference_template_x[k] - params.offset_x;
-                if i0 < 0 || i0 >= reference_height as i32 || j0 < 0 || j0 >= reference_width as i32 {
+                if i0 < 0 || i0 >= reference_height as i32 || j0 < 0 || j0 >= reference_width as i32
+                {
                     context_label <<= 1;
                 } else {
-                    context_label = (context_label << 1) | (params.reference_bitmap.get_pixel(j0 as usize, i0 as usize) as u16);
+                    context_label = (context_label << 1)
+                        | (params.reference_bitmap.get_pixel(j0 as usize, i0 as usize) as u16);
                 }
             }
             let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);

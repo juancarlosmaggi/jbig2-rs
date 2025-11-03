@@ -21,7 +21,9 @@ impl Reader {
     pub fn read_bit(&mut self) -> Result<u8, crate::error::Jbig2Error> {
         if self.shift < 0 {
             if self.position >= self.end {
-                return Err(crate::error::Jbig2Error::new("end of data while reading bit"));
+                return Err(crate::error::Jbig2Error::new(
+                    "end of data while reading bit",
+                ));
             }
             self.current_byte = self.data[self.position];
             self.position += 1;

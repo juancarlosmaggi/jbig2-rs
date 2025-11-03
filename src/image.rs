@@ -1,6 +1,6 @@
 use crate::error::Jbig2Error;
-use crate::segment::{read_segments, process_segments};
-use crate::visitor::{SimpleSegmentVisitor, Jbig2Page};
+use crate::segment::{process_segments, read_segments};
+use crate::visitor::{Jbig2Page, SimpleSegmentVisitor};
 
 #[derive(Clone)]
 pub struct Jbig2Document {
@@ -15,9 +15,7 @@ impl Default for Jbig2Document {
 
 impl Jbig2Document {
     pub fn new() -> Self {
-        Jbig2Document {
-            pages: Vec::new(),
-        }
+        Jbig2Document { pages: Vec::new() }
     }
 
     pub fn parse(data: &[u8]) -> Result<Self, Jbig2Error> {

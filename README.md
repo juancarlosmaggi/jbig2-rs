@@ -64,7 +64,3 @@ cargo build
 ```bash
 cargo test
 ```
-
-## Implementation Status
-
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed implementation status and roadmap.

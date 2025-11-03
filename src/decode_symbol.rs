@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decoder::{decode_integer_context, decode_iaid_context};
+use crate::decoder::{decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
 use crate::reader::Reader;
@@ -40,14 +40,17 @@ pub fn decode_symbol_dictionary(
 
     let mut new_symbols = Vec::new();
     let mut current_height = 0i32;
-    let symbol_code_length = crate::core_utils::log2((params.symbols.len() + params.number_of_new_symbols) as u32);
+    let symbol_code_length =
+        crate::core_utils::log2((params.symbols.len() + params.number_of_new_symbols) as u32);
 
     let huffman_tables = params.huffman_tables.as_ref();
 
     while new_symbols.len() < params.number_of_new_symbols {
         let delta_height = if params.huffman {
             let tables = huffman_tables.unwrap();
-            tables.table_delta_height.decode(huffman_input.as_mut().unwrap())?
+            tables
+                .table_delta_height
+                .decode(huffman_input.as_mut().unwrap())?
         } else {
             decode_integer_context(decoding_context, "IADH")?.unwrap_or(0)
         };
@@ -60,7 +63,9 @@ pub fn decode_symbol_dictionary(
         loop {
             let delta_width = if params.huffman {
                 let tables = huffman_tables.unwrap();
-                tables.table_delta_width.decode(huffman_input.as_mut().unwrap())?
+                tables
+                    .table_delta_width
+                    .decode(huffman_input.as_mut().unwrap())?
             } else {
                 match decode_integer_context(decoding_context, "IADW")? {
                     Some(dw) => dw,
@@ -75,7 +80,8 @@ pub fn decode_symbol_dictionary(
 
             if params.refinement {
                 // 6.5.8.2 Refinement/aggregate-coded symbol bitmap
-                let number_of_instances = decode_integer_context(decoding_context, "IAAI")?.unwrap_or(1);
+                let number_of_instances =
+                    decode_integer_context(decoding_context, "IAAI")?.unwrap_or(1);
                 if number_of_instances > 1 {
                     // Aggregate symbol - decode text region
                     let mut input_symbols = params.symbols.clone();
@@ -92,17 +98,22 @@ pub fn decode_symbol_dictionary(
                         symbol_code_length: symbol_code_length as usize,
                         transposed: false,
                         ds_offset: 0,
-                        reference_corner: 1, // top left
+                        reference_corner: 1,     // top left
                         combination_operator: 0, // OR
                         log_strip_size: 0,
                         huffman_tables: None,
                         refinement_template_index: params.refinement_template_index,
                         refinement_at: params.refinement_at.clone(),
                     };
-                    let bitmap = crate::decode_text::decode_text_region(&text_params, decoding_context, None)?;
+                    let bitmap = crate::decode_text::decode_text_region(
+                        &text_params,
+                        decoding_context,
+                        None,
+                    )?;
                     new_symbols.push(bitmap);
                 } else {
-                    let symbol_id = decode_iaid_context(decoding_context, symbol_code_length as usize)?;
+                    let symbol_id =
+                        decode_iaid_context(decoding_context, symbol_code_length as usize)?;
                     let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
                     let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
                     let symbol = if (symbol_id as usize) < params.symbols.len() {
@@ -150,17 +161,32 @@ pub fn decode_symbol_dictionary(
         if params.huffman && !params.refinement {
             // 6.5.9 Height class collective bitmap
             let tables = huffman_tables.unwrap();
-            let bitmap_size = tables.table_bitmap_size.decode(huffman_input.as_mut().unwrap())?;
+            let bitmap_size = tables
+                .table_bitmap_size
+                .decode(huffman_input.as_mut().unwrap())?;
             huffman_input.as_mut().unwrap().byte_align();
             let collective_bitmap = if bitmap_size == 0 {
                 // Uncompressed collective bitmap
-                read_uncompressed_bitmap(huffman_input.as_mut().unwrap(), total_width as usize, current_height as usize)?
+                read_uncompressed_bitmap(
+                    huffman_input.as_mut().unwrap(),
+                    total_width as usize,
+                    current_height as usize,
+                )?
             } else {
                 // MMR collective bitmap
                 let start_pos = huffman_input.as_ref().unwrap().get_position();
                 let bitmap_end = start_pos + bitmap_size as usize;
-                let mut mmr_reader = Reader::new(huffman_input.as_ref().unwrap().get_data().to_vec(), start_pos, bitmap_end);
-                let bitmap = crate::decode_mmr::decode_mmr_bitmap(&mut mmr_reader, total_width as usize, current_height as usize, false)?;
+                let mut mmr_reader = Reader::new(
+                    huffman_input.as_ref().unwrap().get_data().to_vec(),
+                    start_pos,
+                    bitmap_end,
+                );
+                let bitmap = crate::decode_mmr::decode_mmr_bitmap(
+                    &mut mmr_reader,
+                    total_width as usize,
+                    current_height as usize,
+                    false,
+                )?;
                 huffman_input.as_mut().unwrap().set_position(bitmap_end);
                 bitmap
             };
@@ -171,7 +197,11 @@ pub fn decode_symbol_dictionary(
             } else {
                 // Divide collectiveBitmap into symbols.
                 let mut x_min = 0;
-                for &bitmap_width in symbol_widths.iter().skip(first_symbol).take(number_of_symbols_decoded - first_symbol) {
+                for &bitmap_width in symbol_widths
+                    .iter()
+                    .skip(first_symbol)
+                    .take(number_of_symbols_decoded - first_symbol)
+                {
                     let x_max = x_min + bitmap_width;
                     let mut symbol_bitmap = Bitmap::new(bitmap_width, current_height as usize);
                     for y in 0..current_height as usize {
@@ -194,7 +224,9 @@ pub fn decode_symbol_dictionary(
     while flags.len() < total_symbols_length {
         let run_length = if params.huffman {
             let tables = huffman_tables.unwrap();
-            tables.table_aggregate_instances.decode(huffman_input.as_mut().unwrap())? as usize
+            tables
+                .table_aggregate_instances
+                .decode(huffman_input.as_mut().unwrap())? as usize
         } else {
             decode_integer_context(decoding_context, "IAEX")?.unwrap_or(0) as usize
         };
@@ -216,7 +248,11 @@ pub fn decode_symbol_dictionary(
     Ok(exported_symbols)
 }
 
-fn read_uncompressed_bitmap(reader: &mut Reader, width: usize, height: usize) -> Result<Bitmap, Jbig2Error> {
+fn read_uncompressed_bitmap(
+    reader: &mut Reader,
+    width: usize,
+    height: usize,
+) -> Result<Bitmap, Jbig2Error> {
     let mut bitmap = Bitmap::new(width, height);
     for y in 0..height {
         for x in 0..width {

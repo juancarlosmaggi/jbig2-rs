@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decoder::{decode_integer_context, decode_iaid_context};
+use crate::decoder::{decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::reader::Reader;
@@ -60,7 +60,9 @@ pub fn decode_text_region(
     let huffman_tables = params.huffman_tables.as_ref();
     let mut strip_t = if params.huffman {
         let tables = huffman_tables.unwrap();
-        -(tables.table_delta_t.decode(huffman_input.as_mut().unwrap())?)
+        -(tables
+            .table_delta_t
+            .decode(huffman_input.as_mut().unwrap())?)
     } else {
         -(decode_integer_context(decoding_context, "IADT")?.unwrap_or(0) as i32)
     };
@@ -69,14 +71,18 @@ pub fn decode_text_region(
     while i < params.number_of_symbol_instances {
         let delta_t = if params.huffman {
             let tables = huffman_tables.unwrap();
-            tables.table_delta_t.decode(huffman_input.as_mut().unwrap())?
+            tables
+                .table_delta_t
+                .decode(huffman_input.as_mut().unwrap())?
         } else {
             decode_integer_context(decoding_context, "IADT")?.unwrap_or(0) as i32
         };
         strip_t += delta_t;
         let delta_first_s = if params.huffman {
             let tables = huffman_tables.unwrap();
-            tables.table_first_s.decode(huffman_input.as_mut().unwrap())?
+            tables
+                .table_first_s
+                .decode(huffman_input.as_mut().unwrap())?
         } else {
             decode_integer_context(decoding_context, "IAFS")?.unwrap_or(0) as i32
         };
@@ -86,7 +92,10 @@ pub fn decode_text_region(
             let mut current_t = 0i32;
             if params.strip_size > 1 {
                 current_t = if params.huffman {
-                    huffman_input.as_mut().unwrap().read_bits(params.log_strip_size as u32)? as i32
+                    huffman_input
+                        .as_mut()
+                        .unwrap()
+                        .read_bits(params.log_strip_size as u32)? as i32
                 } else {
                     decode_integer_context(decoding_context, "IAIT")?.unwrap_or(0) as i32
                 };
@@ -94,7 +103,9 @@ pub fn decode_text_region(
             let t = (params.strip_size as i32) * strip_t + current_t;
             let symbol_id = if params.huffman {
                 let tables = huffman_tables.unwrap();
-                tables.symbol_id_table.decode(huffman_input.as_mut().unwrap())? as usize
+                tables
+                    .symbol_id_table
+                    .decode(huffman_input.as_mut().unwrap())? as usize
             } else {
                 decode_iaid_context(decoding_context, params.symbol_code_length)? as usize
             };
@@ -109,13 +120,30 @@ pub fn decode_text_region(
             } else {
                 false
             };
-            let (final_symbol_width, final_symbol_height, final_symbol_bitmap) = if apply_refinement {
+            let (final_symbol_width, final_symbol_height, final_symbol_bitmap) = if apply_refinement
+            {
                 let (rdw, rdh, rdx, rdy) = if let Some(ref huffman_tables) = params.huffman_tables {
                     // Use Huffman tables for refinement parameters
-                    let rdw = huffman_tables.table_refinement_dw.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
-                    let rdh = huffman_tables.table_refinement_dh.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
-                    let rdx = huffman_tables.table_refinement_dx.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
-                    let rdy = huffman_tables.table_refinement_dy.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
+                    let rdw = huffman_tables
+                        .table_refinement_dw
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
+                    let rdh = huffman_tables
+                        .table_refinement_dh
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
+                    let rdx = huffman_tables
+                        .table_refinement_dx
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
+                    let rdy = huffman_tables
+                        .table_refinement_dy
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
                     (rdw, rdh, rdx, rdy)
                 } else {
                     // Use arithmetic decoding
@@ -154,8 +182,17 @@ pub fn decode_text_region(
             } else {
                 final_symbol_height as i32 - 1
             };
-            let offset_t = t - if (params.reference_corner & 1) != 0 { 0 } else { final_symbol_height as i32 - 1 };
-            let offset_s = current_s - if (params.reference_corner & 2) != 0 { final_symbol_width as i32 - 1 } else { 0 };
+            let offset_t = t - if (params.reference_corner & 1) != 0 {
+                0
+            } else {
+                final_symbol_height as i32 - 1
+            };
+            let offset_s = current_s
+                - if (params.reference_corner & 2) != 0 {
+                    final_symbol_width as i32 - 1
+                } else {
+                    0
+                };
             // Draw the symbol
             if params.transposed {
                 for s2 in 0..final_symbol_height {
@@ -169,9 +206,11 @@ pub fn decode_text_region(
                             let src_pixel = final_symbol_bitmap.get_pixel(t2, s2);
                             let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
                             let new_pixel = match params.combination_operator {
-                                0 => src_pixel, // OR
+                                0 => src_pixel,             // OR
                                 2 => dst_pixel ^ src_pixel, // XOR
-                                _ => return Err(Jbig2Error::new("unsupported combination operator")),
+                                _ => {
+                                    return Err(Jbig2Error::new("unsupported combination operator"));
+                                }
                             };
                             bitmap.set_pixel(col as usize, row as usize, new_pixel);
                         }
@@ -189,9 +228,11 @@ pub fn decode_text_region(
                             let src_pixel = final_symbol_bitmap.get_pixel(s2, t2);
                             let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
                             let new_pixel = match params.combination_operator {
-                                0 => src_pixel, // OR
+                                0 => src_pixel,             // OR
                                 2 => dst_pixel ^ src_pixel, // XOR
-                                _ => return Err(Jbig2Error::new("unsupported combination operator")),
+                                _ => {
+                                    return Err(Jbig2Error::new("unsupported combination operator"));
+                                }
                             };
                             bitmap.set_pixel(col as usize, row as usize, new_pixel);
                         }
@@ -201,7 +242,11 @@ pub fn decode_text_region(
             i += 1;
             let delta_s = if params.huffman {
                 let tables = huffman_tables.unwrap();
-                Some(tables.table_delta_s.decode(huffman_input.as_mut().unwrap())?)
+                Some(
+                    tables
+                        .table_delta_s
+                        .decode(huffman_input.as_mut().unwrap())?,
+                )
             } else {
                 decode_integer_context(decoding_context, "IADS")?
             };

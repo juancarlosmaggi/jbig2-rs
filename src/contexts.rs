@@ -86,7 +86,11 @@ impl DecodingContext {
     pub fn get_decoder(&self) -> std::cell::RefMut<'_, crate::arithmetic::ArithmeticDecoder> {
         let mut opt = self.decoder.borrow_mut();
         if opt.is_none() {
-            *opt = Some(crate::arithmetic::ArithmeticDecoder::new(&self.data[self.start..self.end], 0, self.end - self.start));
+            *opt = Some(crate::arithmetic::ArithmeticDecoder::new(
+                &self.data[self.start..self.end],
+                0,
+                self.end - self.start,
+            ));
         }
         std::cell::RefMut::map(opt, |o| o.as_mut().unwrap())
     }

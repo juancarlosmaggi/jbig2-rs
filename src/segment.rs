@@ -141,7 +141,10 @@ pub struct FileHeader {
 const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
 
 pub fn read_u32(data: &[u8], pos: usize) -> u32 {
-    ((data[pos] as u32) << 24) | ((data[pos + 1] as u32) << 16) | ((data[pos + 2] as u32) << 8) | (data[pos + 3] as u32)
+    ((data[pos] as u32) << 24)
+        | ((data[pos + 1] as u32) << 16)
+        | ((data[pos + 2] as u32) << 8)
+        | (data[pos + 3] as u32)
 }
 
 pub fn read_u16(data: &[u8], pos: usize) -> u16 {
@@ -170,7 +173,9 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let mut retain_bits = vec![referred_flags & 31];
     if referred_flags == 7 {
         if pos + 3 > data.len() {
-            return Err(Jbig2Error::new("insufficient data for extended referred-to count"));
+            return Err(Jbig2Error::new(
+                "insufficient data for extended referred-to count",
+            ));
         }
         let extended_count = read_u32(data, pos - 1) & 0x1fffffff;
         referred_to_count = extended_count as usize;
@@ -193,7 +198,9 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let mut referred_to = vec![];
     for _ in 0..referred_to_count {
         if pos + referred_to_segment_number_size > data.len() {
-            return Err(Jbig2Error::new("insufficient data for referred-to segments"));
+            return Err(Jbig2Error::new(
+                "insufficient data for referred-to segments",
+            ));
         }
         let num = match referred_to_segment_number_size {
             1 => data[pos] as u32,
@@ -311,7 +318,11 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
     })
 }
 
-pub fn read_segments<'a>(data: &'a [u8], start: usize, end: usize) -> Result<Vec<Segment<'a>>, Jbig2Error> {
+pub fn read_segments<'a>(
+    data: &'a [u8],
+    start: usize,
+    end: usize,
+) -> Result<Vec<Segment<'a>>, Jbig2Error> {
     let mut segments = vec![];
     let mut position = start;
     while position < end {
@@ -329,23 +340,27 @@ pub fn read_segments<'a>(data: &'a [u8], start: usize, end: usize) -> Result<Vec
             start: segment_start,
             end: segment_end,
         });
-        if segments.last().unwrap().header.segment_type == 51 { // EndOfFile
+        if segments.last().unwrap().header.segment_type == 51 {
+            // EndOfFile
             break;
         }
     }
     Ok(segments)
 }
 
-pub fn process_segments<'a>(segments: &[Segment<'a>], visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+pub fn process_segments<'a>(
+    segments: &[Segment<'a>],
+    visitor: &mut SimpleSegmentVisitor,
+) -> Result<(), Jbig2Error> {
     let mut current_page = 0u32;
     for segment in segments {
         // Handle page association filtering
         let page_association = segment.header.page_association;
         let should_process = match page_association {
-            0xFFFFFFFF => true, // Global segment
-            0 => current_page > 0, // Current page (only if we have a current page)
+            0xFFFFFFFF => true,               // Global segment
+            0 => current_page > 0,            // Current page (only if we have a current page)
             pa if pa == current_page => true, // Specific page matches current
-            _ => false, // Skip other pages
+            _ => false,                       // Skip other pages
         };
 
         if !should_process {
@@ -355,14 +370,18 @@ pub fn process_segments<'a>(segments: &[Segment<'a>], visitor: &mut SimpleSegmen
         process_segment(segment, visitor)?;
 
         // Update current page when we encounter a PageInformation segment
-        if segment.header.segment_type == 48 { // PageInformation
+        if segment.header.segment_type == 48 {
+            // PageInformation
             current_page += 1;
         }
     }
     Ok(())
 }
 
-pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+pub fn process_segment<'a>(
+    segment: &Segment<'a>,
+    visitor: &mut SimpleSegmentVisitor,
+) -> Result<(), Jbig2Error> {
     let header = &segment.header;
     let data = segment.data;
     let start = segment.start;
@@ -382,7 +401,8 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
     }
 
     match header.segment_type {
-        0 => { // SymbolDictionary
+        0 => {
+            // SymbolDictionary
             let dictionary_flags = read_u16(data, start);
             let number_of_exported_symbols = read_u32(data, start + 2);
             let number_of_new_symbols = read_u32(data, start + 6);
@@ -398,10 +418,13 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
             };
             visitor.on_symbol_dictionary(&params)?;
         }
-        6 | 7 => { // ImmediateTextRegion / ImmediateLosslessTextRegion
+        6 | 7 => {
+            // ImmediateTextRegion / ImmediateLosslessTextRegion
             let region_info = read_region_segment_information(data, start);
-            let text_region_segment_flags = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH);
-            let number_of_symbol_instances = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2);
+            let text_region_segment_flags =
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH);
+            let number_of_symbol_instances =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2);
             visitor.on_immediate_text_region(
                 &region_info,
                 text_region_segment_flags,
@@ -412,7 +435,8 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
                 end,
             )?;
         }
-        48 => { // PageInformation
+        48 => {
+            // PageInformation
             let width = read_u32(data, start);
             let height = read_u32(data, start + 4);
             let resolution_x = read_u32(data, start + 8);
@@ -438,7 +462,8 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
             };
             visitor.on_page_information(info);
         }
-        16 => { // PatternDictionary
+        16 => {
+            // PatternDictionary
             let pattern_dictionary_flags = data[start];
             let mmr = (pattern_dictionary_flags & 1) != 0;
             let template = ((pattern_dictionary_flags >> 1) & 3) as usize;
@@ -457,7 +482,8 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
                 end,
             )?;
         }
-        22 | 23 => { // ImmediateHalftoneRegion / ImmediateLosslessHalftoneRegion
+        22 | 23 => {
+            // ImmediateHalftoneRegion / ImmediateLosslessHalftoneRegion
             let region_info = read_region_segment_information(data, start);
             let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
             let mmr = (halftone_region_flags & 1) != 0;
@@ -465,12 +491,18 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
             let enable_skip = (halftone_region_flags & 8) != 0;
             let combination_operator = ((halftone_region_flags >> 4) & 7) as usize;
             let default_pixel_value = (halftone_region_flags >> 7) & 1;
-            let grid_width = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
-            let grid_height = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
-            let grid_offset_x = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
-            let grid_offset_y = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
-            let grid_vector_x = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
-            let grid_vector_y = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
+            let grid_width =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
+            let grid_height =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
+            let grid_offset_x =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
+            let grid_offset_y =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
+            let grid_vector_x =
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
+            let grid_vector_y =
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
             visitor.on_immediate_halftone_region(
                 &region_info,
                 mmr,
@@ -490,18 +522,23 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
                 end,
             )?;
         }
-        38 | 39 => { // ImmediateGenericRegion (lossless)
+        38 | 39 => {
+            // ImmediateGenericRegion (lossless)
             let generic_region = read_generic_region(data, start)?;
             visitor.on_immediate_generic_region(&generic_region, data, start, end)?;
         }
-        42 | 43 => { // ImmediateGenericRefinementRegion / ImmediateLosslessGenericRefinementRegion
+        42 | 43 => {
+            // ImmediateGenericRefinementRegion / ImmediateLosslessGenericRefinementRegion
             let region_info = read_region_segment_information(data, start);
             visitor.on_immediate_generic_refinement_region(&region_info, data, start, end)?;
         }
-        4 => { // IntermediateTextRegion
+        4 => {
+            // IntermediateTextRegion
             let region_info = read_region_segment_information(data, start);
-            let text_region_segment_flags = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH);
-            let number_of_symbol_instances = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2);
+            let text_region_segment_flags =
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH);
+            let number_of_symbol_instances =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2);
             visitor.on_intermediate_text_region(
                 &region_info,
                 text_region_segment_flags,
@@ -512,7 +549,8 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
                 end,
             )?;
         }
-        20 => { // IntermediateHalftoneRegion
+        20 => {
+            // IntermediateHalftoneRegion
             let region_info = read_region_segment_information(data, start);
             let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
             let mmr = (halftone_region_flags & 1) != 0;
@@ -520,12 +558,18 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
             let enable_skip = (halftone_region_flags & 8) != 0;
             let combination_operator = ((halftone_region_flags >> 4) & 7) as usize;
             let default_pixel_value = (halftone_region_flags >> 7) & 1;
-            let grid_width = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
-            let grid_height = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
-            let grid_offset_x = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
-            let grid_offset_y = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
-            let grid_vector_x = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
-            let grid_vector_y = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
+            let grid_width =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
+            let grid_height =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
+            let grid_offset_x =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
+            let grid_offset_y =
+                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
+            let grid_vector_x =
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
+            let grid_vector_y =
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
             visitor.on_intermediate_halftone_region(
                 &region_info,
                 mmr,
@@ -545,13 +589,27 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
                 end,
             )?;
         }
-        36 => { // IntermediateGenericRegion
+        36 => {
+            // IntermediateGenericRegion
             let generic_region = read_generic_region(data, start)?;
-            visitor.on_intermediate_generic_region(&generic_region, &header.referred_to, data, start, end)?;
+            visitor.on_intermediate_generic_region(
+                &generic_region,
+                &header.referred_to,
+                data,
+                start,
+                end,
+            )?;
         }
-        40 => { // IntermediateGenericRefinementRegion
+        40 => {
+            // IntermediateGenericRefinementRegion
             let region_info = read_region_segment_information(data, start);
-            visitor.on_intermediate_generic_refinement_region(&region_info, &header.referred_to, data, start, end)?;
+            visitor.on_intermediate_generic_refinement_region(
+                &region_info,
+                &header.referred_to,
+                data,
+                start,
+                end,
+            )?;
         }
         49 => { // EndOfPage
             // No action needed
@@ -565,7 +623,8 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
         52 => { // Profiles
             // Profile information - can be ignored for basic decoding
         }
-        53 => { // Tables
+        53 => {
+            // Tables
             visitor.on_tables(header.number, data, start, end)?;
         }
         62 => { // Extension

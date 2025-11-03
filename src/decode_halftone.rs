@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode_generic::{decode_bitmap, DecodeBitmapParams};
+use crate::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
 
 #[derive(Clone)]
@@ -51,11 +51,7 @@ pub fn decode_halftone_region(
     let at = if !params.mmr {
         let mut at_vec = vec![(if params.template <= 1 { 3i8 } else { 2i8 }, -1i8)];
         if params.template == 0 {
-            at_vec.extend(vec![
-                (-3i8, -1i8),
-                (2i8, -2i8),
-                (-2i8, -2i8),
-            ]);
+            at_vec.extend(vec![(-3i8, -1i8), (2i8, -2i8), (-2i8, -2i8)]);
         }
         at_vec
     } else {
@@ -90,17 +86,30 @@ pub fn decode_halftone_region(
                 continue;
             }
             let pattern_bitmap = &params.patterns[pattern_index];
-            let x = (params.grid_offset_x + mg as i32 * params.grid_vector_y as i32 + ng as i32 * params.grid_vector_x as i32) >> 8;
-            let y = (params.grid_offset_y + mg as i32 * params.grid_vector_x as i32 - ng as i32 * params.grid_vector_y as i32) >> 8;
+            let x = (params.grid_offset_x
+                + mg as i32 * params.grid_vector_y as i32
+                + ng as i32 * params.grid_vector_x as i32)
+                >> 8;
+            let y = (params.grid_offset_y + mg as i32 * params.grid_vector_x as i32
+                - ng as i32 * params.grid_vector_y as i32)
+                >> 8;
             // Draw pattern
-            if x >= 0 && x + pattern_bitmap.width as i32 <= params.region_width as i32 &&
-               y >= 0 && y + pattern_bitmap.height as i32 <= params.region_height as i32 {
+            if x >= 0
+                && x + pattern_bitmap.width as i32 <= params.region_width as i32
+                && y >= 0
+                && y + pattern_bitmap.height as i32 <= params.region_height as i32
+            {
                 for i in 0..pattern_bitmap.height {
                     for j in 0..pattern_bitmap.width {
                         let src_pixel = pattern_bitmap.get_pixel(j, i);
-                        let dst_pixel = region_bitmap.get_pixel((x + j as i32) as usize, (y + i as i32) as usize);
+                        let dst_pixel = region_bitmap
+                            .get_pixel((x + j as i32) as usize, (y + i as i32) as usize);
                         let new_pixel = src_pixel | dst_pixel; // OR
-                        region_bitmap.set_pixel((x + j as i32) as usize, (y + i as i32) as usize, new_pixel);
+                        region_bitmap.set_pixel(
+                            (x + j as i32) as usize,
+                            (y + i as i32) as usize,
+                            new_pixel,
+                        );
                     }
                 }
             } else {
@@ -114,9 +123,14 @@ pub fn decode_halftone_region(
                         let region_x = x + j as i32;
                         if region_x >= 0 && region_x < params.region_width as i32 {
                             let src_pixel = pattern_bitmap.get_pixel(j, i);
-                            let dst_pixel = region_bitmap.get_pixel(region_x as usize, region_y as usize);
+                            let dst_pixel =
+                                region_bitmap.get_pixel(region_x as usize, region_y as usize);
                             let new_pixel = src_pixel | dst_pixel; // OR
-                            region_bitmap.set_pixel(region_x as usize, region_y as usize, new_pixel);
+                            region_bitmap.set_pixel(
+                                region_x as usize,
+                                region_y as usize,
+                                new_pixel,
+                            );
                         }
                     }
                 }

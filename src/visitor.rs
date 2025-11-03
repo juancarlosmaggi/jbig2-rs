@@ -1,12 +1,12 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode_generic::{decode_bitmap, DecodeBitmapParams};
+use crate::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::decode_halftone::decode_halftone_region;
 use crate::decode_pattern::decode_pattern_dictionary;
 use crate::decode_symbol::decode_symbol_dictionary;
 use crate::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
-use crate::huffman::{decode_tables_segment, HuffmanTable, TextRegionHuffmanParams};
+use crate::huffman::{HuffmanTable, TextRegionHuffmanParams, decode_tables_segment};
 use crate::reader::Reader;
 use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, read_u16};
 use std::collections::HashMap;
@@ -35,7 +35,9 @@ impl SimpleSegmentVisitor {
 
     pub fn on_page_information(&mut self, info: PageInfo) {
         // If we have a previous page, finalize it
-        if let (Some(page_info), Some(bitmap)) = (self.current_page_info.take(), self.current_bitmap.take()) {
+        if let (Some(page_info), Some(bitmap)) =
+            (self.current_page_info.take(), self.current_bitmap.take())
+        {
             self.pages.push(Jbig2Page { page_info, bitmap });
         }
 
@@ -53,8 +55,15 @@ impl SimpleSegmentVisitor {
         self.current_bitmap = Some(bitmap);
     }
 
-    pub fn draw_bitmap(&mut self, region_info: &RegionInfo, src_bitmap: &Bitmap) -> Result<(), Jbig2Error> {
-        let page_info = self.current_page_info.as_ref().ok_or(Jbig2Error::new("no current page info"))?;
+    pub fn draw_bitmap(
+        &mut self,
+        region_info: &RegionInfo,
+        src_bitmap: &Bitmap,
+    ) -> Result<(), Jbig2Error> {
+        let page_info = self
+            .current_page_info
+            .as_ref()
+            .ok_or(Jbig2Error::new("no current page info"))?;
         let page_width = page_info.width as usize;
         let page_height = page_info.height as usize;
         let combo_op = if page_info.combination_operator_override {
@@ -62,7 +71,10 @@ impl SimpleSegmentVisitor {
         } else {
             page_info.combination_operator
         };
-        let dst = self.current_bitmap.as_mut().ok_or(Jbig2Error::new("no current bitmap"))?;
+        let dst = self
+            .current_bitmap
+            .as_mut()
+            .ok_or(Jbig2Error::new("no current bitmap"))?;
 
         // Region coordinates are validated by checking bounds below
 
@@ -89,12 +101,12 @@ impl SimpleSegmentVisitor {
                 let dy = reg_y + i;
                 let old_dst = dst.get_pixel(dx, dy);
                 let new_val = match combo_op {
-                    0 => src, // replace
-                    1 => old_dst | src, // OR
-                    2 => old_dst & src, // AND
-                    3 => old_dst ^ src, // XOR
+                    0 => src,                  // replace
+                    1 => old_dst | src,        // OR
+                    2 => old_dst & src,        // AND
+                    3 => old_dst ^ src,        // XOR
                     4 => !(old_dst ^ src) & 1, // XNOR (bi-level)
-                    _ => old_dst, // undefined: no-op
+                    _ => old_dst,              // undefined: no-op
                 };
                 dst.set_pixel(dx, dy, new_val);
             }
@@ -102,7 +114,13 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 
-    pub fn on_immediate_generic_region(&mut self, region: &GenericRegion, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+    pub fn on_immediate_generic_region(
+        &mut self,
+        region: &GenericRegion,
+        data: &[u8],
+        start: usize,
+        end: usize,
+    ) -> Result<(), Jbig2Error> {
         let region_info = &region.info;
         let at_bytes = region.at.len() * 2;
         let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
@@ -125,7 +143,13 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 
-    pub fn on_immediate_generic_refinement_region(&mut self, region_info: &RegionInfo, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+    pub fn on_immediate_generic_refinement_region(
+        &mut self,
+        region_info: &RegionInfo,
+        data: &[u8],
+        start: usize,
+        end: usize,
+    ) -> Result<(), Jbig2Error> {
         // Parse refinement region parameters
         let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
         let generic_region_segment_flags = data[pos];
@@ -162,7 +186,10 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 
-    pub fn on_symbol_dictionary(&mut self, params: &SymbolDictionaryParams) -> Result<(), Jbig2Error> {
+    pub fn on_symbol_dictionary(
+        &mut self,
+        params: &SymbolDictionaryParams,
+    ) -> Result<(), Jbig2Error> {
         let huffman = (params.dictionary_flags & 1) != 0;
         let refinement = (params.dictionary_flags & 2) != 0;
         let template = ((params.dictionary_flags >> 10) & 3) as usize;
@@ -206,8 +233,8 @@ impl SimpleSegmentVisitor {
             Some(crate::huffman::get_symbol_dictionary_huffman_tables(
                 ((params.dictionary_flags >> 2) & 3) as u8, // huffmanDHSelector
                 ((params.dictionary_flags >> 4) & 3) as u8, // huffmanDWSelector
-                ((params.dictionary_flags >> 6) & 1) != 0, // bitmapSizeSelector
-                ((params.dictionary_flags >> 7) & 1) != 0, // aggregationInstancesSelector
+                ((params.dictionary_flags >> 6) & 1) != 0,  // bitmapSizeSelector
+                ((params.dictionary_flags >> 7) & 1) != 0,  // aggregationInstancesSelector
                 params.referred_segments,
                 &self.custom_tables,
             )?)
@@ -234,8 +261,13 @@ impl SimpleSegmentVisitor {
             None
         };
 
-        let exported_symbols = decode_symbol_dictionary(&symbol_params, &mut decoding_context, huffman_input.as_mut())?;
-        self.symbols.insert(params.current_segment, exported_symbols);
+        let exported_symbols = decode_symbol_dictionary(
+            &symbol_params,
+            &mut decoding_context,
+            huffman_input.as_mut(),
+        )?;
+        self.symbols
+            .insert(params.current_segment, exported_symbols);
         Ok(())
     }
 
@@ -432,13 +464,17 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 
-    pub fn on_tables(&mut self, segment_number: u32, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+    pub fn on_tables(
+        &mut self,
+        segment_number: u32,
+        data: &[u8],
+        start: usize,
+        end: usize,
+    ) -> Result<(), Jbig2Error> {
         let table = decode_tables_segment(data, start, end)?;
         self.custom_tables.insert(segment_number, table);
         Ok(())
     }
-
-
 
     pub fn on_intermediate_generic_region(
         &mut self,
@@ -538,12 +574,12 @@ impl SimpleSegmentVisitor {
 
     // Finalize the current page and add it to the pages vector
     pub fn finalize_current_page(&mut self) {
-        if let (Some(page_info), Some(bitmap)) = (self.current_page_info.take(), self.current_bitmap.take()) {
+        if let (Some(page_info), Some(bitmap)) =
+            (self.current_page_info.take(), self.current_bitmap.take())
+        {
             self.pages.push(Jbig2Page { page_info, bitmap });
         }
     }
-
-
 }
 
 const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;

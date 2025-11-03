@@ -1,18 +1,30 @@
 use crate::arithmetic::ArithmeticDecoder;
 use crate::contexts::ContextCache;
-use crate::error::Jbig2Error;
 use crate::contexts::DecodingContext;
+use crate::error::Jbig2Error;
 
 // Annex A. Arithmetic Integer Decoding Procedure
 // A.2 Procedure for decoding values
-pub fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder: &mut ArithmeticDecoder) -> Result<Option<i32>, Jbig2Error> {
+pub fn decode_integer(
+    context_cache: &mut ContextCache,
+    procedure: &str,
+    decoder: &mut ArithmeticDecoder,
+) -> Result<Option<i32>, Jbig2Error> {
     let contexts = context_cache.get_contexts(procedure);
     let mut prev = 1;
-    let read_bits = |length: u32, contexts: &mut Vec<i8>, prev: &mut usize, decoder: &mut ArithmeticDecoder| -> Result<u32, Jbig2Error> {
+    let read_bits = |length: u32,
+                     contexts: &mut Vec<i8>,
+                     prev: &mut usize,
+                     decoder: &mut ArithmeticDecoder|
+     -> Result<u32, Jbig2Error> {
         let mut v = 0;
         for _ in 0..length {
             let bit = decoder.read_bit(contexts, *prev) as usize;
-            *prev = if *prev < 256 { (*prev << 1) | bit } else { (((*prev << 1) | bit) & 511) | 256 };
+            *prev = if *prev < 256 {
+                (*prev << 1) | bit
+            } else {
+                (((*prev << 1) | bit) & 511) | 256
+            };
             v = (v << 1) | bit as u32;
         }
         Ok(v)
@@ -50,7 +62,11 @@ pub fn decode_integer(context_cache: &mut ContextCache, procedure: &str, decoder
     Ok(Some(signed_value))
 }
 // A.3 The IAID decoding procedure
-pub fn decode_iaid(context_cache: &mut ContextCache, decoder: &mut ArithmeticDecoder, code_length: usize) -> Result<u32, Jbig2Error> {
+pub fn decode_iaid(
+    context_cache: &mut ContextCache,
+    decoder: &mut ArithmeticDecoder,
+    code_length: usize,
+) -> Result<u32, Jbig2Error> {
     let contexts = context_cache.get_contexts("IAID");
     let mut prev = 1;
     for _ in 0..code_length {
@@ -63,13 +79,19 @@ pub fn decode_iaid(context_cache: &mut ContextCache, decoder: &mut ArithmeticDec
         Ok((prev & 0x7fffffff) as u32)
     }
 }
-pub fn decode_integer_context(decoding_context: &mut DecodingContext, procedure: &str) -> Result<Option<i32>, Jbig2Error> {
+pub fn decode_integer_context(
+    decoding_context: &mut DecodingContext,
+    procedure: &str,
+) -> Result<Option<i32>, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
     let mut decoder = decoding_context.decoder.borrow_mut();
     let decoder = decoder.as_mut().unwrap();
     decode_integer(&mut context_cache, procedure, decoder)
 }
-pub fn decode_iaid_context(decoding_context: &mut DecodingContext, code_length: usize) -> Result<u32, Jbig2Error> {
+pub fn decode_iaid_context(
+    decoding_context: &mut DecodingContext,
+    code_length: usize,
+) -> Result<u32, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
     let mut decoder = decoding_context.decoder.borrow_mut();
     let decoder = decoder.as_mut().unwrap();

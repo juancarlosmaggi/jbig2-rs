@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode_generic::{decode_bitmap, DecodeBitmapParams};
+use crate::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
 
 #[derive(Clone)]
@@ -19,11 +19,7 @@ pub fn decode_pattern_dictionary(
     let at = if !params.mmr {
         let mut at_vec = vec![(-(params.pattern_width as i8), 0i8)];
         if params.template == 0 {
-            at_vec.extend(vec![
-                (-3i8, -1i8),
-                (2i8, -2i8),
-                (-2i8, -2i8),
-            ]);
+            at_vec.extend(vec![(-3i8, -1i8), (2i8, -2i8), (-2i8, -2i8)]);
         }
         at_vec
     } else {
@@ -58,11 +54,14 @@ pub fn decode_pattern_dictionary(
                 let collective_bit_idx = 7 - (collective_x & 7);
                 let byte_idx_in_row = collective_byte_idx - (x_start >> 3);
 
-                let pixel = if byte_idx_in_row < collective_bitmap.data[collective_byte_offset..].len() {
-                    (collective_bitmap.data[collective_byte_offset + byte_idx_in_row] >> collective_bit_idx) & 1
-                } else {
-                    0
-                };
+                let pixel =
+                    if byte_idx_in_row < collective_bitmap.data[collective_byte_offset..].len() {
+                        (collective_bitmap.data[collective_byte_offset + byte_idx_in_row]
+                            >> collective_bit_idx)
+                            & 1
+                    } else {
+                        0
+                    };
                 pattern.set_pixel(px, y, pixel);
             }
         }

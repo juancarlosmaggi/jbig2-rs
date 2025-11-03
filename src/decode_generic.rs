@@ -13,21 +13,63 @@ const REUSED_CONTEXTS: [u16; 4] = [
 pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
     match index {
         0 => &[
-            (-1, -2), (0, -2), (1, -2), (-2, -1), (-1, -1), (0, -1), (1, -1), (2, -1), (-4, 0), (-3, 0), (-2, 0), (-1, 0),
+            (-1, -2),
+            (0, -2),
+            (1, -2),
+            (-2, -1),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (2, -1),
+            (-4, 0),
+            (-3, 0),
+            (-2, 0),
+            (-1, 0),
         ],
         1 => &[
-            (-1, -2), (0, -2), (1, -2), (2, -2), (-2, -1), (-1, -1), (0, -1), (1, -1), (2, -1), (-3, 0), (-2, 0), (-1, 0),
+            (-1, -2),
+            (0, -2),
+            (1, -2),
+            (2, -2),
+            (-2, -1),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (2, -1),
+            (-3, 0),
+            (-2, 0),
+            (-1, 0),
         ],
         2 => &[
-            (-1, -2), (0, -2), (1, -2), (-2, -1), (-1, -1), (0, -1), (1, -1), (-2, 0), (-1, 0),
+            (-1, -2),
+            (0, -2),
+            (1, -2),
+            (-2, -1),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-2, 0),
+            (-1, 0),
         ],
         3 => &[
-            (-3, -1), (-2, -1), (-1, -1), (0, -1), (1, -1), (-4, 0), (-3, 0), (-2, 0), (-1, 0),
+            (-3, -1),
+            (-2, -1),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-4, 0),
+            (-3, 0),
+            (-2, 0),
+            (-1, 0),
         ],
         _ => &[],
     }
 }
-fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
+fn decode_bitmap_template0(
+    width: usize,
+    height: usize,
+    decoding_context: &mut DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
     let mut decoder = decoding_context.get_decoder();
     let mut contexts = decoding_context.get_contexts("GB");
     let mut bitmap = Bitmap::new(width, height);
@@ -49,9 +91,20 @@ fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut D
         for j in 0..width {
             let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);
             bitmap.set_pixel(j, i, pixel);
-            let row2_contrib = if i >= 2 && j + 3 < width { (bitmap.get_pixel(j + 3, i - 2) as u16) << 11 } else { 0 };
-            let row1_contrib = if i >= 1 && j + 4 < width { (bitmap.get_pixel(j + 4, i - 1) as u16) << 4 } else { 0 };
-            context_label = ((context_label & OLD_PIXEL_MASK) << 1) | row2_contrib | row1_contrib | (pixel as u16);
+            let row2_contrib = if i >= 2 && j + 3 < width {
+                (bitmap.get_pixel(j + 3, i - 2) as u16) << 11
+            } else {
+                0
+            };
+            let row1_contrib = if i >= 1 && j + 4 < width {
+                (bitmap.get_pixel(j + 4, i - 1) as u16) << 4
+            } else {
+                0
+            };
+            context_label = ((context_label & OLD_PIXEL_MASK) << 1)
+                | row2_contrib
+                | row1_contrib
+                | (pixel as u16);
         }
     }
     Ok(bitmap)
@@ -66,10 +119,15 @@ pub struct DecodeBitmapParams<'a> {
     pub skip: Option<&'a Bitmap>,
     pub at: Vec<(i8, i8)>,
 }
-pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
+pub fn decode_bitmap(
+    params: &DecodeBitmapParams,
+    decoding_context: &mut DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
     // Validate bitmap dimensions
     if params.width == 0 || params.height == 0 {
-        return Err(Jbig2Error::new("invalid bitmap dimensions: width and height must be positive"));
+        return Err(Jbig2Error::new(
+            "invalid bitmap dimensions: width and height must be positive",
+        ));
     }
     if params.width > 65535 || params.height > 65535 {
         return Err(Jbig2Error::new("bitmap dimensions too large"));
@@ -84,15 +142,27 @@ pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut Decodin
         return decode_mmr_bitmap(&mut reader, params.width, params.height, false);
     }
     // Use optimized version for the most common case
-    if params.template_index == 0 && params.skip.is_none() && !params.prediction && params.at.len() == 4 &&
-        params.at[0].0 == 3 && params.at[0].1 == -1 &&
-        params.at[1].0 == -3 && params.at[1].1 == -1 &&
-        params.at[2].0 == 2 && params.at[2].1 == -2 &&
-        params.at[3].0 == -2 && params.at[3].1 == -2 {
+    if params.template_index == 0
+        && params.skip.is_none()
+        && !params.prediction
+        && params.at.len() == 4
+        && params.at[0].0 == 3
+        && params.at[0].1 == -1
+        && params.at[1].0 == -3
+        && params.at[1].1 == -1
+        && params.at[2].0 == 2
+        && params.at[2].1 == -2
+        && params.at[3].0 == -2
+        && params.at[3].1 == -2
+    {
         return decode_bitmap_template0(params.width, params.height, decoding_context);
     }
     let useskip = params.skip.is_some();
-    let template = get_coding_template(params.template_index).iter().cloned().chain(params.at.clone()).collect::<Vec<_>>();
+    let template = get_coding_template(params.template_index)
+        .iter()
+        .cloned()
+        .chain(params.at.clone())
+        .collect::<Vec<_>>();
     let mut template = template;
     template.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
     let template_length = template.len();
@@ -109,7 +179,10 @@ pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut Decodin
         min_x = min_x.min(template[k].0);
         max_x = max_x.max(template[k].0);
         min_y = min_y.min(template[k].1);
-        if k < template_length - 1 && template[k].1 == template[k + 1].1 && template[k].0 == template[k + 1].0 - 1 {
+        if k < template_length - 1
+            && template[k].1 == template[k + 1].1
+            && template[k].0 == template[k + 1].0 - 1
+        {
             reuse_mask |= 1 << (template_length - 1 - k);
         } else {
             changing_template_entries.push(k);
@@ -157,7 +230,12 @@ pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut Decodin
                 for k in 0..changing_entries_length {
                     let i0 = i as i32 + changing_template_y[k] as i32;
                     let j0 = j as i32 + changing_template_x[k] as i32;
-                    if i0 >= 0 && i0 < params.height as i32 && j0 >= 0 && j0 < params.width as i32 && bitmap.get_pixel(j0 as usize, i0 as usize) != 0 {
+                    if i0 >= 0
+                        && i0 < params.height as i32
+                        && j0 >= 0
+                        && j0 < params.width as i32
+                        && bitmap.get_pixel(j0 as usize, i0 as usize) != 0
+                    {
                         context_label |= changing_template_bit[k];
                     }
                 }
@@ -169,7 +247,10 @@ pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut Decodin
                     let j0 = j as i32 + template_x[k] as i32;
                     if j0 >= 0 && j0 < params.width as i32 {
                         let i0 = i as i32 + template_y[k] as i32;
-                        if i0 >= 0 && i0 < params.height as i32 && bitmap.get_pixel(j0 as usize, i0 as usize) != 0 {
+                        if i0 >= 0
+                            && i0 < params.height as i32
+                            && bitmap.get_pixel(j0 as usize, i0 as usize) != 0
+                        {
                             context_label |= 1 << shift;
                         }
                     }

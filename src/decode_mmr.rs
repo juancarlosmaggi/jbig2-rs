@@ -42,11 +42,16 @@ impl CCITTFaxDecoder {
             // Read mode code
             let mode = self.read_mode_code()?;
             match mode {
-                0 => { // Pass mode
+                0 => {
+                    // Pass mode
                     // Find b2
                     b2 = self.find_changing_element(&self.ref_line, a0 as usize + 1, self.width);
                     // Set pixels from a0+1 to b2-1 to the color of a0
-                    let color = if a0 >= 0 { self.ref_line[a0 as usize] } else { 0 };
+                    let color = if a0 >= 0 {
+                        self.ref_line[a0 as usize]
+                    } else {
+                        0
+                    };
                     while x < b2 {
                         self.curr_line[x] = color;
                         x += 1;
@@ -54,22 +59,26 @@ impl CCITTFaxDecoder {
                     // Update a0
                     a0 = b2 as i32 - 1;
                 }
-                1 => { // Vertical mode (-1)
+                1 => {
+                    // Vertical mode (-1)
                     self.write_run(x, a0, -1);
                     x = self.find_changing_element(&self.curr_line, x, self.width);
                     a0 = x as i32 - 1;
                 }
-                2 => { // Vertical mode (0)
+                2 => {
+                    // Vertical mode (0)
                     self.write_run(x, a0, 0);
                     x = self.find_changing_element(&self.curr_line, x, self.width);
                     a0 = x as i32 - 1;
                 }
-                3 => { // Vertical mode (+1)
+                3 => {
+                    // Vertical mode (+1)
                     self.write_run(x, a0, 1);
                     x = self.find_changing_element(&self.curr_line, x, self.width);
                     a0 = x as i32 - 1;
                 }
-                4 => { // Horizontal mode
+                4 => {
+                    // Horizontal mode
                     // Read two run lengths
                     let run1 = self.decode_run_length(true)? as usize; // White run
                     let run2 = self.decode_run_length(false)? as usize; // Black run
@@ -108,12 +117,12 @@ impl CCITTFaxDecoder {
             let bit = self.read_bit()? as u32;
             code |= bit << i;
             match code {
-                0b0001 => return Ok(0), // Pass mode
-                0b1 => return Ok(1), // Vertical -1
-                0b011 => return Ok(2), // Vertical 0
-                0b000011 => return Ok(3), // Vertical +1
+                0b0001 => return Ok(0),    // Pass mode
+                0b1 => return Ok(1),       // Vertical -1
+                0b011 => return Ok(2),     // Vertical 0
+                0b000011 => return Ok(3),  // Vertical +1
                 0b0000010 => return Ok(4), // Horizontal
-                _ => {} // Continue reading
+                _ => {}                    // Continue reading
             }
         }
         Err(Jbig2Error::new("invalid MMR mode code"))
@@ -130,10 +139,16 @@ impl CCITTFaxDecoder {
     }
     fn write_run(&mut self, x: usize, a0: i32, offset: i32) {
         let a1 = if a0 >= 0 { a0 + offset } else { offset - 1 };
-        let color = if a1 >= 0 { self.ref_line[a1 as usize] } else { 0 };
+        let color = if a1 >= 0 {
+            self.ref_line[a1 as usize]
+        } else {
+            0
+        };
         // Find the next changing element in reference line
         let mut a1_pos = if a1 >= 0 { a1 as usize } else { 0 };
-        while a1_pos < self.width && (a1_pos == 0 || self.ref_line[a1_pos] == self.ref_line[a1_pos - 1]) {
+        while a1_pos < self.width
+            && (a1_pos == 0 || self.ref_line[a1_pos] == self.ref_line[a1_pos - 1])
+        {
             a1_pos += 1;
         }
         // Write pixels
@@ -445,8 +460,17 @@ impl CCITTFaxDecoder {
         Ok(bitmap)
     }
 }
-pub fn decode_mmr_bitmap(input: &mut Reader, width: usize, height: usize, end_of_block: bool) -> Result<Bitmap, Jbig2Error> {
-    let reader_clone = Reader::new(input.get_data().to_vec(), input.get_position(), input.get_end());
+pub fn decode_mmr_bitmap(
+    input: &mut Reader,
+    width: usize,
+    height: usize,
+    end_of_block: bool,
+) -> Result<Bitmap, Jbig2Error> {
+    let reader_clone = Reader::new(
+        input.get_data().to_vec(),
+        input.get_position(),
+        input.get_end(),
+    );
     let mut decoder = CCITTFaxDecoder::new(reader_clone, width, height, end_of_block);
     let result = decoder.decode()?;
     input.set_position(decoder.reader.get_position());
