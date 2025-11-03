@@ -6,7 +6,6 @@ use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
 use crate::reader::Reader;
 use crate::validation;
-
 #[derive(Clone)]
 pub struct SymbolDictionaryParams {
     pub huffman: bool,
@@ -20,27 +19,21 @@ pub struct SymbolDictionaryParams {
     pub refinement_at: Vec<(i8, i8)>,
     pub huffman_tables: Option<SymbolDictionaryHuffmanTables>,
 }
-
 pub fn decode_symbol_dictionary(
     params: &SymbolDictionaryParams,
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
-    // Symbol refinement with Huffman is now supported
-
     // Validate parameters
     if params.number_of_new_symbols == 0 {
         return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
     validation::validate_symbol_decode_params(params.template_index, params.number_of_new_symbols)?;
-
     let mut new_symbols = Vec::new();
     let mut current_height = 0i32;
     let symbol_code_length =
         crate::core_utils::log2((params.symbols.len() + params.number_of_new_symbols) as u32);
-
     let huffman_tables = params.huffman_tables.as_ref();
-
     while new_symbols.len() < params.number_of_new_symbols {
         let delta_height = decode_i32_huffman_or_arith(
             params.huffman,
@@ -58,7 +51,6 @@ pub fn decode_symbol_dictionary(
         let mut total_width = 0i32;
         let first_symbol = if params.huffman { new_symbols.len() } else { 0 };
         let mut symbol_widths = Vec::new();
-
         loop {
             let delta_width = if params.huffman {
                 let tables = huffman_tables.unwrap();
@@ -76,7 +68,6 @@ pub fn decode_symbol_dictionary(
             }
             current_width += delta_width;
             total_width += current_width;
-
             if params.refinement {
                 // 6.5.8.2 Refinement/aggregate-coded symbol bitmap
                 let number_of_instances =
@@ -97,7 +88,7 @@ pub fn decode_symbol_dictionary(
                         symbol_code_length: symbol_code_length as usize,
                         transposed: false,
                         ds_offset: 0,
-                        reference_corner: 1,     // top left
+                        reference_corner: 1, // top left
                         combination_operator: 0, // OR
                         log_strip_size: 0,
                         huffman_tables: None,
@@ -113,22 +104,25 @@ pub fn decode_symbol_dictionary(
                 } else {
                     let symbol_id =
                         decode_iaid_context(decoding_context, symbol_code_length as usize)?;
-                    let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
-                    let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
                     let symbol = if (symbol_id as usize) < params.symbols.len() {
                         &params.symbols[symbol_id as usize]
                     } else {
                         &new_symbols[symbol_id as usize - params.symbols.len()]
                     };
+                    // Decode refinement parameters using arithmetic coding (always, even in Huffman mode)
+                    let rdw = decode_integer_context(decoding_context, "IARDW")?.unwrap_or(0);
+                    let rdh = decode_integer_context(decoding_context, "IARDH")?.unwrap_or(0);
+                    let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
+                    let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
                     // Use decode_refinement here
                     let bitmap = crate::decode::decode_refinement::decode_refinement(
                         &crate::decode::decode_refinement::RefinementParams {
-                            width: current_width as usize,
-                            height: current_height as usize,
+                            width: (symbol.width as i32 + rdw) as usize,
+                            height: (symbol.height as i32 + rdh) as usize,
                             template_index: params.refinement_template_index,
                             reference_bitmap: symbol,
-                            offset_x: rdx,
-                            offset_y: rdy,
+                            offset_x: (rdw >> 1) + rdx,
+                            offset_y: (rdh >> 1) + rdy,
                             prediction: false,
                             at: params.refinement_at.clone(),
                         },
@@ -156,7 +150,6 @@ pub fn decode_symbol_dictionary(
                 new_symbols.push(bitmap);
             }
         }
-
         if params.huffman && !params.refinement {
             // 6.5.9 Height class collective bitmap
             let tables = huffman_tables.unwrap();
@@ -215,7 +208,6 @@ pub fn decode_symbol_dictionary(
             }
         }
     }
-
     // 6.5.10 Exported symbols
     let mut flags = Vec::new();
     let total_symbols_length = params.symbols.len() + params.number_of_new_symbols;
