@@ -1,6 +1,7 @@
 use crate::error::Jbig2Error;
 use crate::bitmap::Bitmap;
-use crate::segment::{read_segments, process_segments, SimpleSegmentVisitor, FileHeader};
+use crate::segment::{read_segments, process_segments};
+use crate::visitor::SimpleSegmentVisitor;
 
 #[derive(Clone)]
 pub struct Jbig2Image {
@@ -29,21 +30,8 @@ impl Jbig2Image {
             return Err(Jbig2Error::new("invalid header"));
         }
         let mut pos = 8;
-        let flags = data[pos];
         pos += 1;
-        let random_access = (flags & 1) == 0;
-        let number_of_pages = if (flags & 2) == 0 {
-            let np = crate::segment::read_u32(data, pos);
-            pos += 4;
-            Some(np)
-        } else {
-            None
-        };
-        let header = FileHeader {
-            random_access,
-            number_of_pages,
-        };
-        let segments = read_segments(&header, data, pos, data.len())?;
+        let segments = read_segments(data, pos, data.len())?;
         let mut visitor = SimpleSegmentVisitor::new();
         process_segments(&segments, &mut visitor)?;
         let page_info = visitor.current_page_info.ok_or(Jbig2Error::new("no page info"))?;

@@ -7,6 +7,7 @@ pub mod decoder;
 pub mod arithmetic;
 pub mod contexts;
 pub mod segment;
+pub mod visitor;
 pub mod image;
 pub mod decode_generic;
 pub mod decode_text;
@@ -14,7 +15,6 @@ pub mod decode_symbol;
 pub mod decode_pattern;
 pub mod decode_halftone;
 pub mod decode_refinement;
-
 pub use error::Jbig2Error;
 pub use image::Jbig2Image;
 
