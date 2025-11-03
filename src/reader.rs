@@ -51,4 +51,20 @@ impl Reader {
         self.position += 1;
         byte as i32
     }
+
+    pub fn get_data(&self) -> &[u8] {
+        &self.data
+    }
+
+    pub fn get_position(&self) -> usize {
+        self.position
+    }
+
+    pub fn set_position(&mut self, pos: usize) {
+        self.position = pos;
+    }
+
+    pub fn get_end(&self) -> usize {
+        self.end
+    }
 }

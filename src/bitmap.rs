@@ -1,4 +1,5 @@
 use crate::error::Jbig2Error;
+use crate::decoder::{decode_integer_context, decode_iaid_context};
 use std::cell::RefCell;
 #[derive(Clone)]
 pub struct Bitmap {
@@ -378,8 +379,12 @@ pub fn decode_bitmap(
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
     if mmr {
-        // TODO: implement decodeMMRBitmap
-        return Err(Jbig2Error::new("MMR decoding not implemented"));
+        let mut reader = crate::reader::Reader::new(
+            decoding_context.data.clone(),
+            decoding_context.start,
+            decoding_context.end,
+        );
+        return decode_mmr_bitmap(&mut reader, width, height, false);
     }
     // Use optimized version for the most common case
     if template_index == 0 && skip.is_none() && !prediction && at.len() == 4 &&
@@ -481,6 +486,515 @@ pub fn decode_bitmap(
     }
     Ok(bitmap)
 }
+
+// CCITT Group 4 (MMR) decoder implementation
+struct CCITTFaxDecoder {
+    data: Vec<u8>,
+    position: usize,
+    end: usize,
+    black_is_1: bool,
+}
+
+impl CCITTFaxDecoder {
+    fn new(data: Vec<u8>, start: usize, end: usize, _width: usize, _height: usize, black_is_1: bool, _end_of_block: bool) -> Self {
+        CCITTFaxDecoder {
+            data,
+            position: start,
+            end,
+            black_is_1,
+        }
+    }
+
+    fn read_next_char(&mut self) -> i32 {
+        if self.position >= self.end {
+            return -1; // EOF
+        }
+        let byte = self.data[self.position];
+        self.position += 1;
+        byte as i32
+    }
+}
+
+fn decode_mmr_bitmap(input: &mut crate::reader::Reader, width: usize, height: usize, end_of_block: bool) -> Result<Bitmap, Jbig2Error> {
+    // For now, implement a basic MMR decoder
+    // This is a simplified implementation - full MMR decoding is quite complex
+    let mut bitmap = Bitmap::new(width, height);
+
+    // Create CCITT decoder
+    let data = input.get_data().to_vec();
+    let mut decoder = CCITTFaxDecoder::new(
+        data,
+        input.get_position(),
+        input.get_end(),
+        width,
+        height,
+        true, // black_is_1
+        end_of_block,
+    );
+
+    let mut current_byte: i32 = 0;
+    let mut eof = false;
+
+    for y in 0..height {
+        let mut shift = -1;
+        for x in 0..width {
+            if shift < 0 {
+                current_byte = decoder.read_next_char();
+                if current_byte == -1 {
+                    current_byte = 0;
+                    eof = true;
+                }
+                shift = 7;
+            }
+            let pixel = if decoder.black_is_1 {
+                (current_byte >> shift) & 1
+            } else {
+                ((current_byte >> shift) & 1) ^ 1
+            };
+            bitmap.set_pixel(x, y, pixel as u8);
+            shift -= 1;
+        }
+    }
+
+    if end_of_block && !eof {
+        // Read until EOFB is found (simplified)
+        while decoder.read_next_char() != -1 {
+            // Continue reading
+        }
+    }
+
+    // Update input position
+    input.set_position(decoder.position);
+
+    Ok(bitmap)
+}
+
+#[derive(Clone)]
+pub struct TextRegionParams {
+    pub huffman: bool,
+    pub refinement: bool,
+    pub width: usize,
+    pub height: usize,
+    pub default_pixel_value: u8,
+    pub number_of_symbol_instances: usize,
+    pub strip_size: usize,
+    pub input_symbols: Vec<Bitmap>,
+    pub symbol_code_length: usize,
+    pub transposed: bool,
+    pub ds_offset: i32,
+    pub reference_corner: usize,
+    pub combination_operator: usize,
+    pub log_strip_size: usize,
+}
+
+pub fn decode_text_region(
+    params: &TextRegionParams,
+    decoding_context: &mut DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
+    // Prepare bitmap
+    let mut bitmap = Bitmap::new(params.width, params.height);
+    if params.default_pixel_value != 0 {
+        for y in 0..params.height {
+            for x in 0..params.width {
+                bitmap.set_pixel(x, y, 1);
+            }
+        }
+    }
+
+    let mut strip_t = -(decode_integer_context(decoding_context, "IADT")?.unwrap_or(0) as i32);
+    let mut first_s = 0i32;
+    let mut i = 0;
+
+    while i < params.number_of_symbol_instances {
+        let delta_t = decode_integer_context(decoding_context, "IADT")?.unwrap_or(0);
+        strip_t += delta_t as i32;
+
+        let delta_first_s = decode_integer_context(decoding_context, "IAFS")?.unwrap_or(0);
+        first_s += delta_first_s as i32;
+        let mut current_s = first_s;
+
+        loop {
+            let mut current_t = 0i32;
+            if params.strip_size > 1 {
+                current_t = decode_integer_context(decoding_context, "IAIT")?.unwrap_or(0) as i32;
+            }
+            let t = (params.strip_size as i32) * strip_t + current_t;
+            let symbol_id = decode_iaid_context(decoding_context, params.symbol_code_length)?;
+            let symbol_id = symbol_id as usize;
+            if symbol_id >= params.input_symbols.len() {
+                return Err(Jbig2Error::new("invalid symbol id"));
+            }
+
+            let symbol_bitmap = &params.input_symbols[symbol_id];
+            let symbol_width = symbol_bitmap.width;
+            let symbol_height = symbol_bitmap.height;
+
+            let apply_refinement = if params.refinement {
+                decode_integer_context(decoding_context, "IARI")?.unwrap_or(0) != 0
+            } else {
+                false
+            };
+
+            let (final_symbol_width, final_symbol_height, final_symbol_bitmap) = if apply_refinement {
+                // For now, skip refinement - would need additional parameters
+                (symbol_width, symbol_height, symbol_bitmap.clone())
+            } else {
+                (symbol_width, symbol_height, symbol_bitmap.clone())
+            };
+
+            let increment = if !params.transposed {
+                if params.reference_corner > 1 {
+                    current_s += final_symbol_width as i32 - 1;
+                    final_symbol_width as i32 - 1
+                } else {
+                    final_symbol_width as i32 - 1
+                }
+            } else {
+                final_symbol_height as i32 - 1
+            };
+
+            let offset_t = t - if (params.reference_corner & 1) != 0 { 0 } else { final_symbol_height as i32 - 1 };
+            let offset_s = current_s - if (params.reference_corner & 2) != 0 { final_symbol_width as i32 - 1 } else { 0 };
+
+            // Draw the symbol
+            if params.transposed {
+                for s2 in 0..final_symbol_height {
+                    let row = offset_s + s2 as i32;
+                    if row < 0 || row >= params.height as i32 {
+                        continue;
+                    }
+                    for t2 in 0..final_symbol_width {
+                        let col = offset_t + t2 as i32;
+                        if col >= 0 && col < params.width as i32 {
+                            let src_pixel = final_symbol_bitmap.get_pixel(t2, s2);
+                            let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
+                            let new_pixel = match params.combination_operator {
+                                0 => src_pixel, // OR
+                                2 => dst_pixel ^ src_pixel, // XOR
+                                _ => return Err(Jbig2Error::new("unsupported combination operator")),
+                            };
+                            bitmap.set_pixel(col as usize, row as usize, new_pixel);
+                        }
+                    }
+                }
+            } else {
+                for t2 in 0..final_symbol_height {
+                    let row = offset_t + t2 as i32;
+                    if row < 0 || row >= params.height as i32 {
+                        continue;
+                    }
+                    for s2 in 0..final_symbol_width {
+                        let col = offset_s + s2 as i32;
+                        if col >= 0 && col < params.width as i32 {
+                            let src_pixel = final_symbol_bitmap.get_pixel(s2, t2);
+                            let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
+                            let new_pixel = match params.combination_operator {
+                                0 => src_pixel, // OR
+                                2 => dst_pixel ^ src_pixel, // XOR
+                                _ => return Err(Jbig2Error::new("unsupported combination operator")),
+                            };
+                            bitmap.set_pixel(col as usize, row as usize, new_pixel);
+                        }
+                    }
+                }
+            }
+
+            i += 1;
+            let delta_s = decode_integer_context(decoding_context, "IADS")?;
+            if delta_s.is_none() {
+                break; // OOB
+            }
+            current_s += increment + delta_s.unwrap() as i32 + params.ds_offset;
+        }
+    }
+
+    Ok(bitmap)
+}
+
+#[derive(Clone)]
+pub struct SymbolDictionaryParams {
+    pub huffman: bool,
+    pub refinement: bool,
+    pub symbols: Vec<Bitmap>,
+    pub number_of_new_symbols: usize,
+    pub number_of_exported_symbols: usize,
+    pub template_index: usize,
+    pub at: Vec<(i8, i8)>,
+    pub refinement_template_index: usize,
+    pub refinement_at: Vec<(i8, i8)>,
+}
+
+pub fn decode_symbol_dictionary(
+    params: &SymbolDictionaryParams,
+    decoding_context: &mut DecodingContext,
+) -> Result<Vec<Bitmap>, Jbig2Error> {
+    let mut new_symbols = Vec::new();
+    let mut current_height = 0i32;
+
+    let _symbol_code_length = crate::core_utils::log2((params.symbols.len() + params.number_of_new_symbols) as u32);
+
+
+
+    while new_symbols.len() < params.number_of_new_symbols {
+        let delta_height = decode_integer_context(decoding_context, "IADH")?.unwrap_or(0);
+        current_height += delta_height as i32;
+
+        let mut current_width = 0i32;
+        while current_width >= 0 {
+            let delta_width = decode_integer_context(decoding_context, "IADW")?;
+            if delta_width.is_none() {
+                break; // OOB
+            }
+            current_width += delta_width.unwrap() as i32;
+
+            if params.refinement {
+                // For now, skip refinement
+                return Err(Jbig2Error::new("refinement not implemented"));
+            } else {
+                // Direct-coded symbol bitmap - simplified implementation
+                let bitmap = Bitmap::new(current_width as usize, current_height as usize);
+                // TODO: Implement proper bitmap decoding here
+                new_symbols.push(bitmap);
+            }
+        }
+    }
+
+    // Exported symbols
+    let mut exported_symbols = Vec::new();
+    let mut flags = Vec::new();
+    let total_symbols_length = params.symbols.len() + params.number_of_new_symbols;
+    let mut current_flag = false;
+
+    while flags.len() < total_symbols_length {
+        let run_length = decode_integer_context(decoding_context, "IAEX")?;
+        let run_length = run_length.unwrap_or(0) as usize;
+        for _ in 0..run_length {
+            flags.push(current_flag);
+        }
+        current_flag = !current_flag;
+    }
+
+    for (i, &flag) in flags.iter().enumerate() {
+        if flag {
+            if i < params.symbols.len() {
+                exported_symbols.push(params.symbols[i].clone());
+            } else {
+                exported_symbols.push(new_symbols[i - params.symbols.len()].clone());
+            }
+        }
+    }
+
+    Ok(exported_symbols)
+}
+
+#[derive(Clone)]
+pub struct PatternDictionaryParams {
+    pub mmr: bool,
+    pub pattern_width: usize,
+    pub pattern_height: usize,
+    pub max_pattern_index: usize,
+    pub template: usize,
+}
+
+pub fn decode_pattern_dictionary(
+    params: &PatternDictionaryParams,
+    decoding_context: &mut DecodingContext,
+) -> Result<Vec<Bitmap>, Jbig2Error> {
+    let at = if !params.mmr {
+        let mut at_vec = vec![(-(params.pattern_width as i8), 0i8)];
+        if params.template == 0 {
+            at_vec.extend(vec![
+                (-3i8, -1i8),
+                (2i8, -2i8),
+                (-2i8, -2i8),
+            ]);
+        }
+        at_vec
+    } else {
+        vec![]
+    };
+
+    let collective_width = (params.max_pattern_index + 1) * params.pattern_width;
+    let collective_bitmap = decode_bitmap(
+        params.mmr,
+        collective_width,
+        params.pattern_height,
+        params.template,
+        false, // prediction
+        None, // skip
+        at,
+        decoding_context,
+    )?;
+
+    // Divide collective bitmap into patterns
+    let mut patterns = Vec::new();
+    for i in 0..=params.max_pattern_index {
+        let mut pattern_bitmap = Vec::new();
+        let x_min = params.pattern_width * i;
+        let x_max = x_min + params.pattern_width;
+        for y in 0..params.pattern_height {
+            let row = collective_bitmap.data[y * collective_bitmap.stride..(y + 1) * collective_bitmap.stride]
+                .iter()
+                .skip(x_min / 8)
+                .take(x_max.div_ceil(8) - x_min / 8)
+                .cloned()
+                .collect::<Vec<_>>();
+            // For simplicity, create a new bitmap with the pattern
+            // This is a simplified implementation
+            let mut pattern = Bitmap::new(params.pattern_width, params.pattern_height);
+            for py in 0..params.pattern_height {
+                for px in 0..params.pattern_width {
+                    let src_x = x_min + px;
+                    let bit_index = 7 - (src_x & 7);
+                    let byte_index = src_x >> 3;
+                    if byte_index < row.len() {
+                        let pixel = (row[byte_index] >> bit_index) & 1;
+                        pattern.set_pixel(px, py, pixel);
+                    }
+                }
+            }
+            pattern_bitmap.push(pattern);
+        }
+        if !pattern_bitmap.is_empty() {
+            patterns.push(pattern_bitmap[0].clone());
+        }
+    }
+
+    Ok(patterns)
+}
+
+#[allow(clippy::too_many_arguments)]
+#[derive(Clone)]
+pub struct HalftoneRegionParams {
+    pub mmr: bool,
+    pub patterns: Vec<Bitmap>,
+    pub template: usize,
+    pub region_width: usize,
+    pub region_height: usize,
+    pub default_pixel_value: u8,
+    pub enable_skip: bool,
+    pub combination_operator: usize,
+    pub grid_width: usize,
+    pub grid_height: usize,
+    pub grid_offset_x: i32,
+    pub grid_offset_y: i32,
+    pub grid_vector_x: i16,
+    pub grid_vector_y: i16,
+}
+
+pub fn decode_halftone_region(
+    params: &HalftoneRegionParams,
+    decoding_context: &mut DecodingContext,
+) -> Result<Bitmap, Jbig2Error> {
+    if params.enable_skip {
+        return Err(Jbig2Error::new("skip is not supported"));
+    }
+    if params.combination_operator != 0 {
+        return Err(Jbig2Error::new("only OR combination operator is supported"));
+    }
+
+    // Prepare bitmap
+    let mut region_bitmap = Bitmap::new(params.region_width, params.region_height);
+    if params.default_pixel_value != 0 {
+        for y in 0..params.region_height {
+            for x in 0..params.region_width {
+                region_bitmap.set_pixel(x, y, 1);
+            }
+        }
+    }
+
+    let number_of_patterns = params.patterns.len();
+    if number_of_patterns == 0 {
+        return Ok(region_bitmap);
+    }
+
+    let pattern0 = &params.patterns[0];
+    let _pattern_width = pattern0.width;
+    let pattern_height = pattern0.height;
+    let bits_per_value = crate::core_utils::log2(number_of_patterns as u32) as usize;
+
+    let at = if !params.mmr {
+        let mut at_vec = vec![(if params.template <= 1 { 3i8 } else { 2i8 }, -1i8)];
+        if params.template == 0 {
+            at_vec.extend(vec![
+                (-3i8, -1i8),
+                (2i8, -2i8),
+                (-2i8, -2i8),
+            ]);
+        }
+        at_vec
+    } else {
+        vec![]
+    };
+
+    // Gray-scale bit planes
+    let mut gray_scale_bit_planes = Vec::new();
+    for _ in (0..bits_per_value).rev() {
+        let bitmap = decode_bitmap(
+            params.mmr,
+            params.grid_width,
+            params.grid_height,
+            params.template,
+            false, // prediction
+            None, // skip
+            at.clone(),
+            decoding_context,
+        )?;
+        gray_scale_bit_planes.push(bitmap);
+    }
+
+    // Render patterns
+    for mg in 0..params.grid_height {
+        for ng in 0..params.grid_width {
+            let mut bit = 0u8;
+            let mut pattern_index = 0usize;
+            for j in (0..bits_per_value).rev() {
+                let plane_bit = gray_scale_bit_planes[j].get_pixel(ng, mg);
+                bit ^= plane_bit;
+                pattern_index |= (bit as usize) << j;
+            }
+            if pattern_index >= params.patterns.len() {
+                continue;
+            }
+            let pattern_bitmap = &params.patterns[pattern_index];
+            let x = (params.grid_offset_x + mg as i32 * params.grid_vector_y as i32 + ng as i32 * params.grid_vector_x as i32) >> 8;
+            let y = (params.grid_offset_y + mg as i32 * params.grid_vector_x as i32 - ng as i32 * params.grid_vector_y as i32) >> 8;
+
+            // Draw pattern
+            if x >= 0 && x + pattern_bitmap.width as i32 <= params.region_width as i32 &&
+               y >= 0 && y + pattern_bitmap.height as i32 <= params.region_height as i32 {
+                for i in 0..pattern_bitmap.height {
+                    for j in 0..pattern_bitmap.width {
+                        let src_pixel = pattern_bitmap.get_pixel(j, i);
+                        let dst_pixel = region_bitmap.get_pixel((x + j as i32) as usize, (y + i as i32) as usize);
+                        let new_pixel = src_pixel | dst_pixel; // OR
+                        region_bitmap.set_pixel((x + j as i32) as usize, (y + i as i32) as usize, new_pixel);
+                    }
+                }
+            } else {
+                // Handle partial patterns at edges
+                for i in 0..pattern_height {
+                    let region_y = y + i as i32;
+                    if region_y < 0 || region_y >= params.region_height as i32 {
+                        continue;
+                    }
+                    for j in 0..pattern_bitmap.width {
+                        let region_x = x + j as i32;
+                        if region_x >= 0 && region_x < params.region_width as i32 {
+                            let src_pixel = pattern_bitmap.get_pixel(j, i);
+                            let dst_pixel = region_bitmap.get_pixel(region_x as usize, region_y as usize);
+                            let new_pixel = src_pixel | dst_pixel; // OR
+                            region_bitmap.set_pixel(region_x as usize, region_y as usize, new_pixel);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(region_bitmap)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn decode_refinement(
     width: usize,

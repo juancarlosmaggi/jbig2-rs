@@ -51,7 +51,7 @@ pub fn decode_iaid(context_cache: &mut ContextCache, decoder: &mut crate::bitmap
     let contexts = context_cache.get_contexts("IAID");
     let mut prev = 1;
     for _ in 0..code_length {
-        let bit = decoder.read_bit(&mut *contexts, prev);
+        let bit = decoder.read_bit(contexts.as_mut(), prev);
         prev = (prev << 1) | bit as usize;
     }
     if code_length < 31 {
@@ -59,4 +59,18 @@ pub fn decode_iaid(context_cache: &mut ContextCache, decoder: &mut crate::bitmap
     } else {
         Ok((prev & 0x7fffffff) as u32)
     }
+}
+
+pub fn decode_integer_context(decoding_context: &mut crate::bitmap::DecodingContext, procedure: &str) -> Result<Option<i32>, Jbig2Error> {
+    let mut context_cache = decoding_context.context_cache.borrow_mut();
+    let mut decoder = decoding_context.decoder.borrow_mut();
+    let decoder = decoder.as_mut().unwrap();
+    decode_integer(&mut context_cache, procedure, decoder)
+}
+
+pub fn decode_iaid_context(decoding_context: &mut crate::bitmap::DecodingContext, code_length: usize) -> Result<u32, Jbig2Error> {
+    let mut context_cache = decoding_context.context_cache.borrow_mut();
+    let mut decoder = decoding_context.decoder.borrow_mut();
+    let decoder = decoder.as_mut().unwrap();
+    decode_iaid(&mut context_cache, decoder, code_length)
 }
