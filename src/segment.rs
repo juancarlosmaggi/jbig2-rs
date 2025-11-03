@@ -1,7 +1,7 @@
 use crate::error::Jbig2Error;
-use crate::bitmap::Bitmap;
+use crate::bitmap::{Bitmap, decode_bitmap, DecodingContext};
+use std::collections::HashMap;
 
-// Segment types from the JS
 pub const SEGMENT_TYPES: [&str; 63] = [
     "SymbolDictionary",
     "",
@@ -68,7 +68,7 @@ pub const SEGMENT_TYPES: [&str; 63] = [
     "Extension",
 ];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SegmentHeader {
     pub number: u32,
     pub segment_type: usize,
@@ -81,25 +81,18 @@ pub struct SegmentHeader {
     pub header_end: usize,
 }
 
-pub struct Segment {
+#[derive(Clone)]
+pub struct Segment<'a> {
     pub header: SegmentHeader,
-    pub data: Vec<u8>,
+    pub data: &'a [u8],
     pub start: usize,
     pub end: usize,
 }
 
-pub struct SimpleSegmentVisitor {
-    pub current_page_info: Option<PageInfo>,
-    pub buffer: Option<Vec<u8>>,
-    pub symbols: std::collections::HashMap<u32, Vec<Bitmap>>,
-    pub patterns: std::collections::HashMap<u32, Vec<Bitmap>>,
-    pub custom_tables: std::collections::HashMap<u32, crate::huffman::HuffmanTable>,
-}
-
 #[derive(Debug, Clone)]
 pub struct PageInfo {
-    pub width: Option<u32>,
-    pub height: Option<u32>,
+    pub width: u32,
+    pub height: u32,
     pub resolution_x: u32,
     pub resolution_y: u32,
     pub lossless: bool,
@@ -108,6 +101,38 @@ pub struct PageInfo {
     pub combination_operator: u8,
     pub requires_buffer: bool,
     pub combination_operator_override: bool,
+}
+
+#[derive(Debug)]
+pub struct RegionInfo {
+    pub width: u32,
+    pub height: u32,
+    pub x: u32,
+    pub y: u32,
+    pub combination_operator: u8,
+}
+
+#[derive(Debug)]
+pub struct GenericRegion {
+    pub info: RegionInfo,
+    pub mmr: bool,
+    pub template: usize,
+    pub prediction: bool,
+    pub at: Vec<(i8, i8)>,
+}
+
+pub struct SimpleSegmentVisitor {
+    pub current_page_info: Option<PageInfo>,
+    pub bitmap: Option<Bitmap>,
+    pub symbols: HashMap<u32, Vec<Bitmap>>,
+    pub patterns: HashMap<u32, Vec<Bitmap>>,
+    pub custom_tables: HashMap<u32, crate::huffman::HuffmanTable>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileHeader {
+    pub random_access: bool,
+    pub number_of_pages: Option<u32>,
 }
 
 impl Default for SimpleSegmentVisitor {
@@ -120,47 +145,88 @@ impl SimpleSegmentVisitor {
     pub fn new() -> Self {
         SimpleSegmentVisitor {
             current_page_info: None,
-            buffer: None,
-            symbols: std::collections::HashMap::new(),
-            patterns: std::collections::HashMap::new(),
-            custom_tables: std::collections::HashMap::new(),
+            bitmap: None,
+            symbols: HashMap::new(),
+            patterns: HashMap::new(),
+            custom_tables: HashMap::new(),
         }
     }
 
     pub fn on_page_information(&mut self, info: PageInfo) {
         self.current_page_info = Some(info.clone());
-        if let Some(height) = info.height {
-            let row_size = ((info.width.unwrap_or(0) + 7) >> 3) as usize;
-            let buffer = vec![if info.default_pixel_value != 0 { 0xff } else { 0 }; row_size * height as usize];
-            self.buffer = Some(buffer);
+        let width = info.width as usize;
+        let height = info.height as usize;
+        let mut bitmap = Bitmap::new(width, height);
+        if info.default_pixel_value != 0 {
+            for y in 0..height {
+                for x in 0..width {
+                    bitmap.set_pixel(x, y, 1);
+                }
+            }
+        }
+        self.bitmap = Some(bitmap);
+    }
+
+    pub fn draw_bitmap(&mut self, region_info: &RegionInfo, src_bitmap: &Bitmap) {
+        let page_info = self.current_page_info.as_ref().unwrap();
+        let page_width = page_info.width as usize;
+        let page_height = page_info.height as usize;
+        let combo_op = if page_info.combination_operator_override {
+            region_info.combination_operator
+        } else {
+            page_info.combination_operator
+        };
+        let dst = self.bitmap.as_mut().unwrap();
+        let reg_x = region_info.x as usize;
+        let reg_y = region_info.y as usize;
+        let width = region_info.width.min((page_width as u32 - reg_x as u32) as u32) as usize;
+        let height = region_info.height.min((page_height as u32 - reg_y as u32) as u32) as usize;
+        for i in 0..height {
+            for j in 0..width {
+                let src = src_bitmap.get_pixel(j, i);
+                let dx = reg_x + j;
+                let dy = reg_y + i;
+                let old_dst = dst.get_pixel(dx, dy);
+                let new_val = match combo_op {
+                    0 => src, // replace
+                    1 => old_dst | src, // OR
+                    2 => old_dst & src, // AND
+                    3 => old_dst ^ src, // XOR
+                    4 => !(old_dst ^ src) & 1, // XNOR (bi-level)
+                    _ => old_dst, // undefined: no-op
+                };
+                dst.set_pixel(dx, dy, new_val);
+            }
         }
     }
 
-    // Placeholder for other on_* methods
-    pub fn on_immediate_generic_region(&mut self, _region: GenericRegion, _data: &[u8], _start: usize, _end: usize) {
-        // TODO: implement
+    pub fn on_immediate_generic_region(&mut self, region: &GenericRegion, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        let region_info = &region.info;
+        let at_bytes = region.at.len() * 2;
+        let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
+        if decoding_start >= end {
+            return Err(Jbig2Error::new("insufficient data for generic region"));
+        }
+        let slice = &data[decoding_start..end];
+        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+        let bitmap = decode_bitmap(
+            region.mmr,
+            region_info.width as usize,
+            region_info.height as usize,
+            region.template,
+            region.prediction,
+            None,
+            region.at.clone(),
+            &mut decoding_context,
+        )?;
+        self.draw_bitmap(region_info, &bitmap);
+        Ok(())
     }
 }
 
-#[derive(Debug)]
-pub struct GenericRegion {
-    pub info: RegionInfo,
-    pub mmr: bool,
-    pub template: usize,
-    pub prediction: bool,
-    pub at: Vec<(i8, i8)>,
-}
+const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
 
-#[derive(Debug)]
-pub struct RegionInfo {
-    pub width: u32,
-    pub height: u32,
-    pub x: u32,
-    pub y: u32,
-    pub combination_operator: u8,
-}
-
-fn read_u32(data: &[u8], pos: usize) -> u32 {
+pub fn read_u32(data: &[u8], pos: usize) -> u32 {
     ((data[pos] as u32) << 24) | ((data[pos + 1] as u32) << 16) | ((data[pos + 2] as u32) << 8) | (data[pos + 3] as u32)
 }
 
@@ -170,8 +236,8 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     pos += 4;
     let flags = data[pos];
     pos += 1;
-    let segment_type = flags & 0x3f;
-    let type_name = SEGMENT_TYPES[segment_type as usize].to_string();
+    let segment_type = (flags & 0x3f) as usize;
+    let type_name = SEGMENT_TYPES[segment_type].to_string();
     let deferred_non_retain = (flags & 0x80) != 0;
     let page_association_field_size = (flags & 0x40) != 0;
     let referred_flags = data[pos];
@@ -179,10 +245,11 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let mut referred_to_count = ((referred_flags >> 5) & 7) as usize;
     let mut retain_bits = vec![referred_flags & 31];
     if referred_flags == 7 {
-        referred_to_count = (read_u32(data, pos - 1) & 0x1fffffff) as usize;
+        let extended_count = read_u32(data, pos - 1) & 0x1fffffff;
+        referred_to_count = extended_count as usize;
         pos += 3;
         let bytes = (referred_to_count + 7) >> 3;
-        retain_bits = data[pos..pos + bytes].to_vec();
+        retain_bits = data[pos..pos + bytes.min(data.len() - pos)].to_vec();
         pos += bytes;
     } else if referred_flags == 5 || referred_flags == 6 {
         return Err(Jbig2Error::new("invalid referred-to flags"));
@@ -219,7 +286,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     }
     Ok(SegmentHeader {
         number,
-        segment_type: segment_type as usize,
+        segment_type,
         type_name,
         deferred_non_retain,
         retain_bits,
@@ -240,9 +307,7 @@ fn read_region_segment_information(data: &[u8], start: usize) -> RegionInfo {
     }
 }
 
-const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
-
-fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2Error> {
+pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2Error> {
     let info = read_region_segment_information(data, start);
     let generic_region_segment_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
     let mmr = (generic_region_segment_flags & 1) != 0;
@@ -252,6 +317,9 @@ fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2
     let mut at = vec![];
     let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1;
     for _ in 0..at_length {
+        if pos + 1 >= data.len() {
+            return Err(Jbig2Error::new("insufficient data for AT flags"));
+        }
         let x = data[pos] as i8;
         let y = data[pos + 1] as i8;
         at.push((x, y));
@@ -266,9 +334,34 @@ fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2
     })
 }
 
-pub fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+pub fn read_segments<'a>(_header: &'a FileHeader, data: &'a [u8], start: usize, end: usize) -> Result<Vec<Segment<'a>>, Jbig2Error> {
+    let mut segments = vec![];
+    let mut position = start;
+    while position < end {
+        let segment_header = read_segment_header(data, position)?;
+        position = segment_header.header_end;
+        let segment_start = position;
+        position += segment_header.length;
+        if position > end {
+            return Err(Jbig2Error::new("segment overruns data"));
+        }
+        let segment_end = position;
+        segments.push(Segment {
+            header: segment_header,
+            data,
+            start: segment_start,
+            end: segment_end,
+        });
+        if segments.last().unwrap().header.segment_type == 51 { // EndOfFile
+            break;
+        }
+    }
+    Ok(segments)
+}
+
+pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
     let header = &segment.header;
-    let data = &segment.data;
+    let data = segment.data;
     let start = segment.start;
     let end = segment.end;
     match header.segment_type {
@@ -285,8 +378,8 @@ pub fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) ->
             let requires_buffer = (page_segment_flags & 32) != 0;
             let combination_operator_override = (page_segment_flags & 64) != 0;
             let info = PageInfo {
-                width: Some(width),
-                height: Some(height),
+                width,
+                height,
                 resolution_x,
                 resolution_y,
                 lossless,
@@ -298,12 +391,18 @@ pub fn process_segment(segment: &Segment, visitor: &mut SimpleSegmentVisitor) ->
             };
             visitor.on_page_information(info);
         }
-        38 | 39 => { // ImmediateGenericRegion
+        38 | 39 => { // ImmediateGenericRegion (lossless)
             let generic_region = read_generic_region(data, start)?;
-            let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + generic_region.at.len() * 2;
-            visitor.on_immediate_generic_region(generic_region, data, decoding_start, end);
+            visitor.on_immediate_generic_region(&generic_region, data, start, end)?;
         }
-        _ => {}
+        _ => {} // TODO: Add text, halftone, etc.
+    }
+    Ok(())
+}
+
+pub fn process_segments<'a>(segments: &[Segment<'a>], visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+    for segment in segments {
+        process_segment(segment, visitor)?;
     }
     Ok(())
 }
