@@ -88,7 +88,7 @@ impl ArithmeticDecoder {
         if self.bp >= self.data_end {
             return;
         }
-        let b = unsafe { *self.data.add(self.bp) as u8 };
+        let b = unsafe { *self.data.add(self.bp) };
         self.bp += 1;
         if b == 0xff {
             if self.bp < self.data_end {

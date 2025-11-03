@@ -1,8 +1,8 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
+use crate::decode_mmr::decode_mmr_bitmap;
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
-
 const OLD_PIXEL_MASK: u16 = 0x7bf7;
 const REUSED_CONTEXTS: [u16; 4] = [
     0x9b25, // 10011 0110010 0101
@@ -10,7 +10,6 @@ const REUSED_CONTEXTS: [u16; 4] = [
     0x00e5, // 001 11001 01
     0x0195, // 011001 0101
 ];
-
 pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
     match index {
         0 => &[
@@ -28,7 +27,6 @@ pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
         _ => &[],
     }
 }
-
 fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
     let mut decoder = decoding_context.get_decoder();
     let mut contexts = decoding_context.get_contexts("GB");
@@ -58,7 +56,6 @@ fn decode_bitmap_template0(width: usize, height: usize, decoding_context: &mut D
     }
     Ok(bitmap)
 }
-
 #[derive(Clone)]
 pub struct DecodeBitmapParams<'a> {
     pub mmr: bool,
@@ -69,7 +66,6 @@ pub struct DecodeBitmapParams<'a> {
     pub skip: Option<&'a Bitmap>,
     pub at: Vec<(i8, i8)>,
 }
-
 pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
     if params.mmr {
         let mut reader = Reader::new(
@@ -177,81 +173,5 @@ pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut Decodin
             bitmap.set_pixel(j, i, pixel);
         }
     }
-    Ok(bitmap)
-}
-
-// CCITT Group 4 (MMR) decoder implementation
-struct CCITTFaxDecoder {
-    data: Vec<u8>,
-    position: usize,
-    end: usize,
-    black_is_1: bool,
-}
-
-impl CCITTFaxDecoder {
-    fn new(data: Vec<u8>, start: usize, end: usize, _width: usize, _height: usize, black_is_1: bool, _end_of_block: bool) -> Self {
-        CCITTFaxDecoder {
-            data,
-            position: start,
-            end,
-            black_is_1,
-        }
-    }
-
-    fn read_next_char(&mut self) -> i32 {
-        if self.position >= self.end {
-            return -1; // EOF
-        }
-        let byte = self.data[self.position];
-        self.position += 1;
-        byte as i32
-    }
-}
-
-fn decode_mmr_bitmap(input: &mut Reader, width: usize, height: usize, end_of_block: bool) -> Result<Bitmap, Jbig2Error> {
-    // For now, implement a basic MMR decoder
-    // This is a simplified implementation - full MMR decoding is quite complex
-    let mut bitmap = Bitmap::new(width, height);
-    // Create CCITT decoder
-    let data = input.get_data().to_vec();
-    let mut decoder = CCITTFaxDecoder::new(
-        data,
-        input.get_position(),
-        input.get_end(),
-        width,
-        height,
-        true, // black_is_1
-        end_of_block,
-    );
-    let mut current_byte: i32 = 0;
-    let mut eof = false;
-    for y in 0..height {
-        let mut shift = -1;
-        for x in 0..width {
-            if shift < 0 {
-                current_byte = decoder.read_next_char();
-                if current_byte == -1 {
-                    current_byte = 0;
-                    eof = true;
-                }
-                shift = 7;
-            }
-            let pixel = if decoder.black_is_1 {
-                (current_byte >> shift) & 1
-            } else {
-                ((current_byte >> shift) & 1) ^ 1
-            };
-            bitmap.set_pixel(x, y, pixel as u8);
-            shift -= 1;
-        }
-    }
-    if end_of_block && !eof {
-        // Read until EOFB is found (simplified)
-        while decoder.read_next_char() != -1 {
-            // Continue reading
-        }
-    }
-    // Update input position
-    input.set_position(decoder.position);
     Ok(bitmap)
 }
