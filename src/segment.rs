@@ -402,10 +402,26 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
             let generic_region = read_generic_region(data, start)?;
             visitor.on_immediate_generic_region(&generic_region, data, start, end)?;
         }
+        42 | 43 => { // ImmediateGenericRefinementRegion / ImmediateLosslessGenericRefinementRegion
+            let region_info = read_region_segment_information(data, start);
+            visitor.on_immediate_generic_refinement_region(&region_info, data, start, end)?;
+        }
+        49 => { // EndOfPage
+            // No action needed
+        }
+        50 => { // EndOfStripe
+            // No action needed
+        }
+        51 => { // EndOfFile
+            // No action needed
+        }
         53 => { // Tables
             visitor.on_tables(header.number, data, start, end)?;
         }
-        _ => {} // TODO: Add refinement regions, etc.
+        62 => { // Extension
+            // Extensions are comments and can be ignored
+        }
+        _ => {} // Unknown segment types
     }
     Ok(())
 }

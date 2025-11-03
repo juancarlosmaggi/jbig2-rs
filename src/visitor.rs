@@ -7,7 +7,8 @@ use crate::decode_symbol::decode_symbol_dictionary;
 use crate::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
 use crate::huffman::{decode_tables_segment, HuffmanTable};
-use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams};
+use crate::reader::Reader;
+use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, read_u16};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -96,6 +97,43 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 
+    pub fn on_immediate_generic_refinement_region(&mut self, region_info: &RegionInfo, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        // Parse refinement region parameters
+        let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+        let generic_region_segment_flags = data[pos];
+        pos += 1;
+        let template = ((generic_region_segment_flags >> 1) & 3) as usize;
+        let mut at = Vec::new();
+        if template == 0 {
+            at.push((data[pos] as i8, data[pos + 1] as i8));
+            at.push((data[pos + 2] as i8, data[pos + 3] as i8));
+            pos += 4;
+        }
+        // Get reference bitmap from referred segment
+        let reference_bitmap = if let Some(ref_bitmap) = self.bitmap.as_ref() {
+            ref_bitmap
+        } else {
+            return Err(Jbig2Error::new("no reference bitmap for refinement region"));
+        };
+        let slice = &data[pos..end];
+        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+        let bitmap = crate::decode_refinement::decode_refinement(
+            &crate::decode_refinement::RefinementParams {
+                width: region_info.width as usize,
+                height: region_info.height as usize,
+                template_index: template,
+                reference_bitmap,
+                offset_x: 0, // Default offset
+                offset_y: 0,
+                prediction: false,
+                at,
+            },
+            &mut decoding_context,
+        )?;
+        self.draw_bitmap(region_info, &bitmap);
+        Ok(())
+    }
+
     pub fn on_symbol_dictionary(&mut self, params: &SymbolDictionaryParams) -> Result<(), Jbig2Error> {
         let huffman = (params.dictionary_flags & 1) != 0;
         let refinement = (params.dictionary_flags & 2) != 0;
@@ -134,6 +172,21 @@ impl SimpleSegmentVisitor {
         }
         let slice = &params.data[pos..params.end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
+        // Get Huffman tables if needed
+        let huffman_tables = if huffman {
+            Some(crate::huffman::get_symbol_dictionary_huffman_tables(
+                ((params.dictionary_flags >> 2) & 3) as u8, // huffmanDHSelector
+                ((params.dictionary_flags >> 4) & 3) as u8, // huffmanDWSelector
+                ((params.dictionary_flags >> 6) & 1) != 0, // bitmapSizeSelector
+                ((params.dictionary_flags >> 7) & 1) != 0, // aggregationInstancesSelector
+                params.referred_segments,
+                &self.custom_tables,
+            )?)
+        } else {
+            None
+        };
+
         let symbol_params = crate::decode_symbol::SymbolDictionaryParams {
             huffman,
             refinement,
@@ -144,8 +197,16 @@ impl SimpleSegmentVisitor {
             at,
             refinement_template_index: refinement_template,
             refinement_at,
+            huffman_tables,
         };
-        let exported_symbols = decode_symbol_dictionary(&symbol_params, &mut decoding_context)?;
+
+        let mut huffman_input = if huffman {
+            Some(Reader::new(slice.to_vec(), 0, slice.len()))
+        } else {
+            None
+        };
+
+        let exported_symbols = decode_symbol_dictionary(&symbol_params, &mut decoding_context, huffman_input.as_mut())?;
         self.symbols.insert(params.current_segment, exported_symbols);
         Ok(())
     }
@@ -179,12 +240,19 @@ impl SimpleSegmentVisitor {
             }
         }
         let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
-        // Parse refinement AT if needed
+        // Parse Huffman flags and refinement AT
         let mut refinement_at = Vec::new();
         let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
+        let mut huffman_fs = 0u8;
+        let mut huffman_ds = 0u8;
+        let mut huffman_dt = 0u8;
         if huffman {
-            // Skip Huffman flags for now
+            let huffman_flags = read_u16(data, pos);
             pos += 2;
+            huffman_fs = (huffman_flags & 3) as u8;
+            huffman_ds = ((huffman_flags >> 2) & 3) as u8;
+            huffman_dt = ((huffman_flags >> 4) & 3) as u8;
+            // Skip refinement flags for now
         }
         if refinement && refinement_template == 0 {
             for _ in 0..2 {
@@ -196,6 +264,28 @@ impl SimpleSegmentVisitor {
         }
         let slice = &data[pos..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
+        // Get Huffman tables if needed
+        let mut huffman_reader = if huffman {
+            Some(Reader::new(slice.to_vec(), 0, slice.len()))
+        } else {
+            None
+        };
+
+        let huffman_tables = if let Some(ref mut reader) = huffman_reader {
+            Some(crate::huffman::get_text_region_huffman_tables(
+                huffman_fs,
+                huffman_ds,
+                huffman_dt,
+                referred_segments,
+                &self.custom_tables,
+                input_symbols.len(),
+                reader,
+            )?)
+        } else {
+            None
+        };
+
         let params = crate::decode_text::TextRegionParams {
             huffman,
             refinement,
@@ -211,8 +301,12 @@ impl SimpleSegmentVisitor {
             reference_corner,
             combination_operator,
             log_strip_size,
+            huffman_tables,
+            refinement_template_index: refinement_template,
+            refinement_at,
         };
-        let bitmap = decode_text_region(&params, &mut decoding_context)?;
+
+        let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
         self.draw_bitmap(region_info, &bitmap);
         Ok(())
     }

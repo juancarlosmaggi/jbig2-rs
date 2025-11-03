@@ -2,6 +2,8 @@ use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
 use crate::decoder::{decode_integer_context, decode_iaid_context};
 use crate::error::Jbig2Error;
+use crate::huffman::TextRegionHuffmanTables;
+use crate::reader::Reader;
 
 #[derive(Clone)]
 pub struct TextRegionParams {
@@ -19,11 +21,15 @@ pub struct TextRegionParams {
     pub reference_corner: usize,
     pub combination_operator: usize,
     pub log_strip_size: usize,
+    pub huffman_tables: Option<TextRegionHuffmanTables>,
+    pub refinement_template_index: usize,
+    pub refinement_at: Vec<(i8, i8)>,
 }
 
 pub fn decode_text_region(
     params: &TextRegionParams,
     decoding_context: &mut DecodingContext,
+    mut huffman_input: Option<&mut Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
     // Prepare bitmap
     let mut bitmap = Bitmap::new(params.width, params.height);
@@ -34,23 +40,47 @@ pub fn decode_text_region(
             }
         }
     }
-    let mut strip_t = -(decode_integer_context(decoding_context, "IADT")?.unwrap_or(0) as i32);
+    let huffman_tables = params.huffman_tables.as_ref();
+    let mut strip_t = if params.huffman {
+        let tables = huffman_tables.unwrap();
+        -(tables.table_delta_t.decode(huffman_input.as_mut().unwrap())?)
+    } else {
+        -(decode_integer_context(decoding_context, "IADT")?.unwrap_or(0) as i32)
+    };
     let mut first_s = 0i32;
     let mut i = 0;
     while i < params.number_of_symbol_instances {
-        let delta_t = decode_integer_context(decoding_context, "IADT")?.unwrap_or(0);
-        strip_t += delta_t as i32;
-        let delta_first_s = decode_integer_context(decoding_context, "IAFS")?.unwrap_or(0);
-        first_s += delta_first_s as i32;
+        let delta_t = if params.huffman {
+            let tables = huffman_tables.unwrap();
+            tables.table_delta_t.decode(huffman_input.as_mut().unwrap())?
+        } else {
+            decode_integer_context(decoding_context, "IADT")?.unwrap_or(0) as i32
+        };
+        strip_t += delta_t;
+        let delta_first_s = if params.huffman {
+            let tables = huffman_tables.unwrap();
+            tables.table_first_s.decode(huffman_input.as_mut().unwrap())?
+        } else {
+            decode_integer_context(decoding_context, "IAFS")?.unwrap_or(0) as i32
+        };
+        first_s += delta_first_s;
         let mut current_s = first_s;
         loop {
             let mut current_t = 0i32;
             if params.strip_size > 1 {
-                current_t = decode_integer_context(decoding_context, "IAIT")?.unwrap_or(0) as i32;
+                current_t = if params.huffman {
+                    huffman_input.as_mut().unwrap().read_bits(params.log_strip_size as u32)? as i32
+                } else {
+                    decode_integer_context(decoding_context, "IAIT")?.unwrap_or(0) as i32
+                };
             }
             let t = (params.strip_size as i32) * strip_t + current_t;
-            let symbol_id = decode_iaid_context(decoding_context, params.symbol_code_length)?;
-            let symbol_id = symbol_id as usize;
+            let symbol_id = if params.huffman {
+                let tables = huffman_tables.unwrap();
+                tables.symbol_id_table.decode(huffman_input.as_mut().unwrap())? as usize
+            } else {
+                decode_iaid_context(decoding_context, params.symbol_code_length)? as usize
+            };
             if symbol_id >= params.input_symbols.len() {
                 return Err(Jbig2Error::new("invalid symbol id"));
             }
@@ -63,8 +93,26 @@ pub fn decode_text_region(
                 false
             };
             let (final_symbol_width, final_symbol_height, final_symbol_bitmap) = if apply_refinement {
-                // For now, skip refinement - would need additional parameters
-                (symbol_width, symbol_height, symbol_bitmap.clone())
+                let rdw = decode_integer_context(decoding_context, "IARDW")?.unwrap_or(0);
+                let rdh = decode_integer_context(decoding_context, "IARDH")?.unwrap_or(0);
+                let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
+                let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
+                let refined_width = symbol_width + rdw as usize;
+                let refined_height = symbol_height + rdh as usize;
+                let refined_bitmap = crate::decode_refinement::decode_refinement(
+                    &crate::decode_refinement::RefinementParams {
+                        width: refined_width,
+                        height: refined_height,
+                        template_index: params.refinement_template_index,
+                        reference_bitmap: symbol_bitmap,
+                        offset_x: (rdw >> 1) + rdx,
+                        offset_y: (rdh >> 1) + rdy,
+                        prediction: false,
+                        at: params.refinement_at.clone(),
+                    },
+                    decoding_context,
+                )?;
+                (refined_width, refined_height, refined_bitmap)
             } else {
                 (symbol_width, symbol_height, symbol_bitmap.clone())
             };
@@ -123,11 +171,16 @@ pub fn decode_text_region(
                 }
             }
             i += 1;
-            let delta_s = decode_integer_context(decoding_context, "IADS")?;
+            let delta_s = if params.huffman {
+                let tables = huffman_tables.unwrap();
+                Some(tables.table_delta_s.decode(huffman_input.as_mut().unwrap())?)
+            } else {
+                decode_integer_context(decoding_context, "IADS")?
+            };
             if delta_s.is_none() {
                 break; // OOB
             }
-            current_s += increment + delta_s.unwrap() as i32 + params.ds_offset;
+            current_s += increment + delta_s.unwrap() + params.ds_offset;
         }
     }
     Ok(bitmap)

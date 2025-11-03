@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct Reader {
     data: Vec<u8>,
     end: usize,

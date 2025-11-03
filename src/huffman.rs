@@ -383,6 +383,7 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
     Ok(HuffmanTable::new(lines, true))
 }
 
+#[derive(Clone)]
 pub struct SymbolDictionaryHuffmanTables {
     pub table_delta_height: HuffmanTable,
     pub table_delta_width: HuffmanTable,
@@ -431,12 +432,114 @@ pub fn get_symbol_dictionary_huffman_tables(
     } else {
         get_standard_table(1)?
     };
+    // No need to increment custom_index as it's the last use
 
     Ok(SymbolDictionaryHuffmanTables {
         table_delta_height,
         table_delta_width,
         table_bitmap_size,
         table_aggregate_instances,
+    })
+}
+
+#[derive(Clone)]
+pub struct TextRegionHuffmanTables {
+    pub symbol_id_table: HuffmanTable,
+    pub table_first_s: HuffmanTable,
+    pub table_delta_s: HuffmanTable,
+    pub table_delta_t: HuffmanTable,
+}
+
+pub fn get_text_region_huffman_tables(
+    huffman_fs: u8,
+    huffman_ds: u8,
+    huffman_dt: u8,
+    referred_to: &[u32],
+    custom_tables: &HashMap<u32, HuffmanTable>,
+    number_of_symbols: usize,
+    reader: &mut Reader,
+) -> Result<TextRegionHuffmanTables, Jbig2Error> {
+    // 7.4.3.1.7 Symbol ID Huffman table decoding
+    // Read code lengths for RUNCODEs 0...34.
+    let mut codes = Vec::new();
+    for i in 0..=34 {
+        let code_length = reader.read_bits(4)?;
+        codes.push(HuffmanLine::new(vec![i, code_length as i32, 0, 0]));
+    }
+    // Assign Huffman codes for RUNCODEs.
+    let run_codes_table = HuffmanTable::new(codes, false);
+
+    // Read a Huffman code using the assignment above.
+    // Interpret the RUNCODE codes and the additional bits (if any).
+    codes = Vec::new();
+    let mut i = 0;
+    while i < number_of_symbols {
+        let code_length = run_codes_table.decode(reader)? as u32;
+        if code_length >= 32 {
+            let repeated_length;
+            let number_of_repeats = match code_length {
+                32 => {
+                    if i == 0 {
+                        return Err(Jbig2Error::new("no previous value in symbol ID table"));
+                    }
+                    repeated_length = codes[i - 1].prefix_length;
+                    (reader.read_bits(2)? + 3) as usize
+                }
+                33 => {
+                    repeated_length = 0;
+                    (reader.read_bits(3)? + 3) as usize
+                }
+                34 => {
+                    repeated_length = 0;
+                    (reader.read_bits(7)? + 11) as usize
+                }
+                _ => return Err(Jbig2Error::new("invalid code length in symbol ID table")),
+            };
+            for _ in 0..number_of_repeats {
+                codes.push(HuffmanLine::new(vec![i as i32, repeated_length as i32, 0, 0]));
+                i += 1;
+            }
+        } else {
+        codes.push(HuffmanLine::new(vec![i as i32, code_length as i32, 0, 0]));
+            i += 1;
+        }
+    }
+    reader.byte_align();
+    let symbol_id_table = HuffmanTable::new(codes, false);
+
+    // 7.4.3.1.6 Text region segment Huffman table selection
+    let mut custom_index = 0;
+    let table_first_s = match huffman_fs {
+        0 | 1 => get_standard_table(huffman_fs as u32 + 6)?,
+        3 => {
+            let table = get_custom_huffman_table(custom_index, referred_to, custom_tables)?;
+            custom_index += 1;
+            table
+        }
+        _ => return Err(Jbig2Error::new("invalid Huffman FS selector")),
+    };
+
+    let table_delta_s = match huffman_ds {
+        0..=2 => get_standard_table(huffman_ds as u32 + 8)?,
+        3 => {
+            let table = get_custom_huffman_table(custom_index, referred_to, custom_tables)?;
+            custom_index += 1;
+            table
+        }
+        _ => return Err(Jbig2Error::new("invalid Huffman DS selector")),
+    };
+
+    let table_delta_t = match huffman_dt {
+        0..=2 => get_standard_table(huffman_dt as u32 + 11)?,
+        3 => get_custom_huffman_table(custom_index, referred_to, custom_tables)?,
+        _ => return Err(Jbig2Error::new("invalid Huffman DT selector")),
+    };
+
+    Ok(TextRegionHuffmanTables {
+        symbol_id_table,
+        table_first_s,
+        table_delta_s,
+        table_delta_t,
     })
 }
 
