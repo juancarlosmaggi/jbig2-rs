@@ -37,3 +37,22 @@ pub fn validate_combination_operator(operator: usize) -> Result<(), Jbig2Error> 
     }
     Ok(())
 }
+
+pub fn validate_generic_decode_params(width: usize, height: usize, template_index: usize) -> Result<(), Jbig2Error> {
+    validate_bitmap_dimensions(width, height)?;
+    validate_template_index(template_index)?;
+    Ok(())
+}
+
+pub fn validate_text_decode_params(width: usize, height: usize, reference_corner: usize, combination_operator: usize) -> Result<(), Jbig2Error> {
+    validate_bitmap_dimensions(width, height)?;
+    validate_reference_corner(reference_corner)?;
+    validate_combination_operator(combination_operator)?;
+    Ok(())
+}
+
+pub fn validate_symbol_decode_params(template_index: usize, number_of_new_symbols: usize) -> Result<(), Jbig2Error> {
+    validate_template_index(template_index)?;
+    validate_symbol_count(number_of_new_symbols)?;
+    Ok(())
+}

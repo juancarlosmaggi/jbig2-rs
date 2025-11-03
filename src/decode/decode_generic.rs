@@ -125,8 +125,7 @@ pub fn decode_bitmap(
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
     // Validate parameters
-    validation::validate_bitmap_dimensions(params.width, params.height)?;
-    validation::validate_template_index(params.template_index)?;
+    validation::validate_generic_decode_params(params.width, params.height, params.template_index)?;
 
     if params.mmr {
         let mut reader = Reader::new(

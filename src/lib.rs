@@ -74,4 +74,16 @@ mod tests {
         assert_eq!(header.segment_type, 0);
         assert_eq!(header.number, 1);
     }
+
+    #[test]
+    fn test_draw_symbol_at_position() {
+        let mut bitmap = crate::bitmap::Bitmap::new(10, 10);
+        let mut symbol = crate::bitmap::Bitmap::new(2, 2);
+        symbol.set_pixel(0, 0, 1);
+        symbol.set_pixel(1, 1, 1);
+        crate::bitmap_utils::draw_symbol_at_position(&mut bitmap, &symbol, 1, 1, false, 0);
+        assert_eq!(bitmap.get_pixel(1, 1), 1);
+        assert_eq!(bitmap.get_pixel(2, 2), 1);
+        assert_eq!(bitmap.get_pixel(0, 0), 0);
+    }
 }

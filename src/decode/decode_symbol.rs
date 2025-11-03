@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decoder::{decode_iaid_context, decode_integer_context};
+use crate::decoder::{decode_i32_huffman_or_arith, decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
 use crate::reader::Reader;
@@ -50,8 +50,7 @@ pub fn decode_symbol_dictionary(
     if params.number_of_new_symbols == 0 {
         return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
-    validation::validate_symbol_count(params.number_of_new_symbols)?;
-    validation::validate_template_index(params.template_index)?;
+    validation::validate_symbol_decode_params(params.template_index, params.number_of_new_symbols)?;
 
     let mut new_symbols = Vec::new();
     let mut current_height = 0i32;
@@ -61,14 +60,15 @@ pub fn decode_symbol_dictionary(
     let huffman_tables = params.huffman_tables.as_ref();
 
     while new_symbols.len() < params.number_of_new_symbols {
-        let delta_height = if params.huffman {
-            let tables = huffman_tables.unwrap();
-            tables
-                .table_delta_height
-                .decode(huffman_input.as_mut().unwrap())?
-        } else {
-            decode_integer_context(decoding_context, "IADH")?.unwrap_or(0)
-        };
+        let delta_height = decode_i32_huffman_or_arith(
+            params.huffman,
+            || {
+                let tables = huffman_tables.unwrap();
+                tables.table_delta_height.decode(huffman_input.as_mut().unwrap())
+            },
+            "IADH",
+            decoding_context,
+        )?;
         current_height += delta_height;
         let mut current_width = 0i32;
         let mut total_width = 0i32;

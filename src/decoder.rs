@@ -97,3 +97,51 @@ pub fn decode_iaid_context(
     let decoder = decoder.as_mut().unwrap();
     decode_iaid(&mut context_cache, decoder, code_length)
 }
+
+pub fn decode_i32_huffman_or_arith<F>(
+    huffman: bool,
+    huffman_decode: F,
+    arith_proc: &str,
+    decoding_context: &mut DecodingContext,
+) -> Result<i32, Jbig2Error>
+where
+    F: FnOnce() -> Result<i32, Jbig2Error>,
+{
+    if huffman {
+        huffman_decode()
+    } else {
+        decode_integer_context(decoding_context, arith_proc).map(|opt| opt.unwrap_or(0))
+    }
+}
+
+pub fn decode_option_i32_huffman_or_arith<F>(
+    huffman: bool,
+    huffman_decode: F,
+    arith_proc: &str,
+    decoding_context: &mut DecodingContext,
+) -> Result<Option<i32>, Jbig2Error>
+where
+    F: FnOnce() -> Result<i32, Jbig2Error>,
+{
+    if huffman {
+        huffman_decode().map(Some)
+    } else {
+        decode_integer_context(decoding_context, arith_proc)
+    }
+}
+
+pub fn decode_u32_huffman_or_arith<F>(
+    huffman: bool,
+    huffman_decode: F,
+    arith_code_length: usize,
+    decoding_context: &mut DecodingContext,
+) -> Result<u32, Jbig2Error>
+where
+    F: FnOnce() -> Result<i32, Jbig2Error>,
+{
+    if huffman {
+        huffman_decode().map(|v| v as u32)
+    } else {
+        decode_iaid_context(decoding_context, arith_code_length)
+    }
+}
