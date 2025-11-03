@@ -155,8 +155,8 @@ pub fn decode_text_region(
                 };
                 let refined_width = symbol_width + rdw as usize;
                 let refined_height = symbol_height + rdh as usize;
-                let refined_bitmap = crate::decode_refinement::decode_refinement(
-                    &crate::decode_refinement::RefinementParams {
+                let refined_bitmap = crate::decode::decode_refinement::decode_refinement(
+                    &crate::decode::decode_refinement::RefinementParams {
                         width: refined_width,
                         height: refined_height,
                         template_index: params.refinement_template_index,
@@ -209,7 +209,9 @@ pub fn decode_text_region(
                                 0 => src_pixel,             // OR
                                 2 => dst_pixel ^ src_pixel, // XOR
                                 _ => {
-                                    return Err(Jbig2Error::new("unsupported combination operator"));
+                                    return Err(Jbig2Error::new(
+                                        "unsupported combination operator",
+                                    ));
                                 }
                             };
                             bitmap.set_pixel(col as usize, row as usize, new_pixel);
@@ -231,7 +233,9 @@ pub fn decode_text_region(
                                 0 => src_pixel,             // OR
                                 2 => dst_pixel ^ src_pixel, // XOR
                                 _ => {
-                                    return Err(Jbig2Error::new("unsupported combination operator"));
+                                    return Err(Jbig2Error::new(
+                                        "unsupported combination operator",
+                                    ));
                                 }
                             };
                             bitmap.set_pixel(col as usize, row as usize, new_pixel);

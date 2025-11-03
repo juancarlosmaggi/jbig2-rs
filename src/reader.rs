@@ -46,15 +46,6 @@ impl Reader {
         self.shift = -1;
     }
 
-    pub fn read_byte(&mut self) -> i32 {
-        if self.position >= self.end {
-            return -1;
-        }
-        let byte = self.data[self.position];
-        self.position += 1;
-        byte as i32
-    }
-
     pub fn get_data(&self) -> &[u8] {
         &self.data
     }

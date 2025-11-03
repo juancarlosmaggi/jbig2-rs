@@ -45,33 +45,4 @@ impl Bitmap {
             self.data[byte_index] &= !(1 << bit_index);
         }
     }
-
-    /// Convert the bit-packed bitmap to an 8-bit grayscale image
-    /// Returns a Vec<u8> where 0 = black (255 in image terms), 1 = white (0 in image terms)
-    /// This matches the JS implementation's bit unpacking logic
-    pub fn to_grayscale_image(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.width * self.height);
-        for y in 0..self.height {
-            let mut mask = 128u8;
-            let mut buffer = 0u8;
-            let mut buffer_index = 0;
-            for x in 0..self.width {
-                if mask == 0 || buffer_index == 0 {
-                    mask = 128;
-                    let byte_index = y * self.stride + (x >> 3);
-                    buffer = if byte_index < self.data.len() {
-                        self.data[byte_index]
-                    } else {
-                        0
-                    };
-                    buffer_index = 8;
-                }
-                let pixel = if (buffer & mask) != 0 { 0 } else { 255 }; // 0 = black, 255 = white
-                result.push(pixel);
-                mask >>= 1;
-                buffer_index -= 1;
-            }
-        }
-        result
-    }
 }

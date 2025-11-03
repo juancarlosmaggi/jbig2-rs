@@ -132,12 +132,6 @@ pub struct SymbolDictionaryParams<'a> {
     pub end: usize,
 }
 
-#[derive(Debug, Clone)]
-pub struct FileHeader {
-    pub random_access: bool,
-    pub number_of_pages: Option<u32>,
-}
-
 const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
 
 pub fn read_u32(data: &[u8], pos: usize) -> u32 {

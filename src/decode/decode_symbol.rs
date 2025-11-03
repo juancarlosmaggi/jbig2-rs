@@ -86,7 +86,7 @@ pub fn decode_symbol_dictionary(
                     // Aggregate symbol - decode text region
                     let mut input_symbols = params.symbols.clone();
                     input_symbols.extend(new_symbols.clone());
-                    let text_params = crate::decode_text::TextRegionParams {
+                    let text_params = crate::decode::decode_text::TextRegionParams {
                         huffman: false, // Aggregate doesn't use Huffman
                         refinement: params.refinement,
                         width: current_width as usize,
@@ -105,7 +105,7 @@ pub fn decode_symbol_dictionary(
                         refinement_template_index: params.refinement_template_index,
                         refinement_at: params.refinement_at.clone(),
                     };
-                    let bitmap = crate::decode_text::decode_text_region(
+                    let bitmap = crate::decode::decode_text::decode_text_region(
                         &text_params,
                         decoding_context,
                         None,
@@ -122,8 +122,8 @@ pub fn decode_symbol_dictionary(
                         &new_symbols[symbol_id as usize - params.symbols.len()]
                     };
                     // Use decode_refinement here
-                    let bitmap = crate::decode_refinement::decode_refinement(
-                        &crate::decode_refinement::RefinementParams {
+                    let bitmap = crate::decode::decode_refinement::decode_refinement(
+                        &crate::decode::decode_refinement::RefinementParams {
                             width: current_width as usize,
                             height: current_height as usize,
                             template_index: params.refinement_template_index,
@@ -142,8 +142,8 @@ pub fn decode_symbol_dictionary(
                 symbol_widths.push(current_width as usize);
             } else {
                 // 6.5.8.1 Direct-coded symbol bitmap
-                let bitmap = crate::decode_generic::decode_bitmap(
-                    &crate::decode_generic::DecodeBitmapParams {
+                let bitmap = crate::decode::decode_generic::decode_bitmap(
+                    &crate::decode::decode_generic::DecodeBitmapParams {
                         mmr: false,
                         width: current_width as usize,
                         height: current_height as usize,
@@ -181,7 +181,7 @@ pub fn decode_symbol_dictionary(
                     start_pos,
                     bitmap_end,
                 );
-                let bitmap = crate::decode_mmr::decode_mmr_bitmap(
+                let bitmap = crate::decode::decode_mmr::decode_mmr_bitmap(
                     &mut mmr_reader,
                     total_width as usize,
                     current_height as usize,

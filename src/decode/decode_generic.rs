@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode_mmr::decode_mmr_bitmap;
+use crate::decode::decode_mmr::decode_mmr_bitmap;
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
 const OLD_PIXEL_MASK: u16 = 0x7bf7;

@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode_generic::{DecodeBitmapParams, decode_bitmap};
+use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
 
 #[derive(Clone)]

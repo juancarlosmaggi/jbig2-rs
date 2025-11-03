@@ -1,10 +1,10 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode_generic::{DecodeBitmapParams, decode_bitmap};
-use crate::decode_halftone::decode_halftone_region;
-use crate::decode_pattern::decode_pattern_dictionary;
-use crate::decode_symbol::decode_symbol_dictionary;
-use crate::decode_text::decode_text_region;
+use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
+use crate::decode::decode_halftone::decode_halftone_region;
+use crate::decode::decode_pattern::decode_pattern_dictionary;
+use crate::decode::decode_symbol::decode_symbol_dictionary;
+use crate::decode::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
 use crate::huffman::{HuffmanTable, TextRegionHuffmanParams, decode_tables_segment};
 use crate::reader::Reader;
@@ -169,8 +169,8 @@ impl SimpleSegmentVisitor {
         };
         let slice = &data[pos..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-        let bitmap = crate::decode_refinement::decode_refinement(
-            &crate::decode_refinement::RefinementParams {
+        let bitmap = crate::decode::decode_refinement::decode_refinement(
+            &crate::decode::decode_refinement::RefinementParams {
                 width: region_info.width as usize,
                 height: region_info.height as usize,
                 template_index: template,
@@ -242,7 +242,7 @@ impl SimpleSegmentVisitor {
             None
         };
 
-        let symbol_params = crate::decode_symbol::SymbolDictionaryParams {
+        let symbol_params = crate::decode::decode_symbol::SymbolDictionaryParams {
             huffman,
             refinement,
             symbols: input_symbols,
@@ -363,7 +363,7 @@ impl SimpleSegmentVisitor {
             None
         };
 
-        let params = crate::decode_text::TextRegionParams {
+        let params = crate::decode::decode_text::TextRegionParams {
             huffman,
             refinement,
             width: region_info.width as usize,
@@ -403,7 +403,7 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         let slice = &data[start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-        let params = crate::decode_pattern::PatternDictionaryParams {
+        let params = crate::decode::decode_pattern::PatternDictionaryParams {
             mmr,
             pattern_width,
             pattern_height,
@@ -443,7 +443,7 @@ impl SimpleSegmentVisitor {
         };
         let slice = &data[start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-        let params = crate::decode_halftone::HalftoneRegionParams {
+        let params = crate::decode::decode_halftone::HalftoneRegionParams {
             mmr,
             patterns: patterns.clone(),
             template,
