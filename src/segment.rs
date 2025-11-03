@@ -1,6 +1,5 @@
 use crate::error::Jbig2Error;
 use crate::visitor::SimpleSegmentVisitor;
-
 pub const SEGMENT_TYPES: [&str; 63] = [
     "SymbolDictionary",
     "",
@@ -66,7 +65,6 @@ pub const SEGMENT_TYPES: [&str; 63] = [
     "",
     "Extension",
 ];
-
 #[derive(Debug, Clone)]
 pub struct SegmentHeader {
     pub number: u32,
@@ -79,7 +77,6 @@ pub struct SegmentHeader {
     pub length: usize,
     pub header_end: usize,
 }
-
 #[derive(Clone)]
 pub struct Segment<'a> {
     pub header: SegmentHeader,
@@ -87,7 +84,6 @@ pub struct Segment<'a> {
     pub start: usize,
     pub end: usize,
 }
-
 #[derive(Debug, Clone)]
 pub struct PageInfo {
     pub width: u32,
@@ -101,7 +97,6 @@ pub struct PageInfo {
     pub requires_buffer: bool,
     pub combination_operator_override: bool,
 }
-
 #[derive(Debug)]
 pub struct RegionInfo {
     pub width: u32,
@@ -110,7 +105,6 @@ pub struct RegionInfo {
     pub y: u32,
     pub combination_operator: u8,
 }
-
 #[derive(Debug)]
 pub struct GenericRegion {
     pub info: RegionInfo,
@@ -119,7 +113,6 @@ pub struct GenericRegion {
     pub prediction: bool,
     pub at: Vec<(i8, i8)>,
 }
-
 #[derive(Clone)]
 pub struct SymbolDictionaryParams<'a> {
     pub dictionary_flags: u16,
@@ -131,16 +124,13 @@ pub struct SymbolDictionaryParams<'a> {
     pub start: usize,
     pub end: usize,
 }
-
 const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
-
 pub fn read_u32(data: &[u8], pos: usize) -> u32 {
     ((data[pos] as u32) << 24)
         | ((data[pos + 1] as u32) << 16)
         | ((data[pos + 2] as u32) << 8)
         | (data[pos + 3] as u32)
 }
-
 pub fn parse_at_parameters(
     data: &[u8],
     mut pos: usize,
@@ -158,11 +148,9 @@ pub fn parse_at_parameters(
     }
     Ok(at)
 }
-
 pub fn read_u16(data: &[u8], pos: usize) -> u16 {
     ((data[pos] as u16) << 8) | (data[pos + 1] as u16)
 }
-
 pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
     if start + 11 > data.len() {
         return Err(Jbig2Error::new("segment header too short"));
@@ -258,7 +246,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
                 search_pattern[0] = 0xff;
                 search_pattern[1] = 0xac;
             }
-            search_pattern[2] = ((region_info.height >> 24) & 0xff) as u8;
+            search_pattern[2] = ((region_info.height >> 24) >> 24) as u8;
             search_pattern[3] = ((region_info.height >> 16) & 0xff) as u8;
             search_pattern[4] = ((region_info.height >> 8) & 0xff) as u8;
             search_pattern[5] = (region_info.height & 0xff) as u8;
@@ -292,7 +280,6 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
         header_end: pos,
     })
 }
-
 fn read_region_segment_information(data: &[u8], start: usize) -> RegionInfo {
     RegionInfo {
         width: read_u32(data, start),
@@ -302,7 +289,6 @@ fn read_region_segment_information(data: &[u8], start: usize) -> RegionInfo {
         combination_operator: data[start + 16] & 7,
     }
 }
-
 pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2Error> {
     let info = read_region_segment_information(data, start);
     let generic_region_segment_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
@@ -320,7 +306,6 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
         at,
     })
 }
-
 pub fn read_segments<'a>(
     data: &'a [u8],
     start: usize,
@@ -350,7 +335,6 @@ pub fn read_segments<'a>(
     }
     Ok(segments)
 }
-
 pub fn process_segments<'a>(
     segments: &[Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
@@ -366,13 +350,10 @@ pub fn process_segments<'a>(
             pa if pa == current_page => true, // Specific page matches current
             _ => false,                       // Skip other pages
         };
-
         if !should_process {
             continue;
         }
-
         page_segments.push(segment);
-
         // Update current page when we encounter a PageInformation segment
         if segment.header.segment_type == 48 {
             // PageInformation
@@ -388,7 +369,6 @@ pub fn process_segments<'a>(
     }
     Ok(())
 }
-
 fn process_page_segments<'a>(
     segments: &[&Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
@@ -413,7 +393,6 @@ fn process_page_segments<'a>(
     }
     Ok(())
 }
-
 pub fn process_segment<'a>(
     segment: &Segment<'a>,
     visitor: &mut SimpleSegmentVisitor,
@@ -422,7 +401,6 @@ pub fn process_segment<'a>(
     let data = segment.data;
     let start = segment.start;
     let end = segment.end;
-
     // Validate segment data bounds
     if start > end || end > data.len() {
         return Err(Jbig2Error::new("invalid segment data bounds"));
@@ -430,10 +408,8 @@ pub fn process_segment<'a>(
     if end - start < header.length {
         return Err(Jbig2Error::new("segment data shorter than expected"));
     }
-
     // Note: Deferred non-retain segments are processed normally for now
     // Full implementation would require ordering based on retain bits
-
     match header.segment_type {
         0 => {
             // SymbolDictionary
@@ -648,8 +624,10 @@ pub fn process_segment<'a>(
         49 => { // EndOfPage
             // No action needed
         }
-        50 => { // EndOfStripe
-            // No action needed
+        50 => {
+            // EndOfStripe
+            let height = read_u32(data, start) as usize;
+            visitor.on_end_of_stripe(height);
         }
         51 => { // EndOfFile
             // No action needed

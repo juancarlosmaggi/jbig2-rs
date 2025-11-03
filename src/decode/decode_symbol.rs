@@ -88,7 +88,7 @@ pub fn decode_symbol_dictionary(
                         symbol_code_length: symbol_code_length as usize,
                         transposed: false,
                         ds_offset: 0,
-                        reference_corner: 1, // top left
+                        reference_corner: 1,     // top left
                         combination_operator: 0, // OR
                         log_strip_size: 0,
                         huffman_tables: None,
