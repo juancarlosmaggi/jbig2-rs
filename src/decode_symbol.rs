@@ -27,6 +27,17 @@ pub fn decode_symbol_dictionary(
     // Note: Symbol refinement with Huffman is not fully implemented in reference JS
     // but we allow it to fall back to arithmetic decoding for now
 
+    // Validate parameters
+    if params.number_of_new_symbols == 0 {
+        return Err(Jbig2Error::new("number of new symbols must be positive"));
+    }
+    if params.number_of_new_symbols > 65535 {
+        return Err(Jbig2Error::new("too many new symbols"));
+    }
+    if params.template_index > 3 {
+        return Err(Jbig2Error::new("invalid template index"));
+    }
+
     let mut new_symbols = Vec::new();
     let mut current_height = 0i32;
     let symbol_code_length = crate::core_utils::log2((params.symbols.len() + params.number_of_new_symbols) as u32);

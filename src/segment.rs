@@ -337,8 +337,27 @@ pub fn read_segments<'a>(data: &'a [u8], start: usize, end: usize) -> Result<Vec
 }
 
 pub fn process_segments<'a>(segments: &[Segment<'a>], visitor: &mut SimpleSegmentVisitor) -> Result<(), Jbig2Error> {
+    let mut current_page = 0u32;
     for segment in segments {
+        // Handle page association filtering
+        let page_association = segment.header.page_association;
+        let should_process = match page_association {
+            0xFFFFFFFF => true, // Global segment
+            0 => current_page > 0, // Current page (only if we have a current page)
+            pa if pa == current_page => true, // Specific page matches current
+            _ => false, // Skip other pages
+        };
+
+        if !should_process {
+            continue;
+        }
+
         process_segment(segment, visitor)?;
+
+        // Update current page when we encounter a PageInformation segment
+        if segment.header.segment_type == 48 { // PageInformation
+            current_page += 1;
+        }
     }
     Ok(())
 }
@@ -349,13 +368,18 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
     let start = segment.start;
     let end = segment.end;
 
+    // Validate segment data bounds
+    if start > end || end > data.len() {
+        return Err(Jbig2Error::new("invalid segment data bounds"));
+    }
+    if end - start < header.length {
+        return Err(Jbig2Error::new("segment data shorter than expected"));
+    }
+
     // Skip deferred non-retain segments for now (not implemented)
     if header.deferred_non_retain {
         return Ok(());
     }
-
-    // For now, process all segments regardless of page association
-    // Full page association support would require tracking current page context
 
     match header.segment_type {
         0 => { // SymbolDictionary

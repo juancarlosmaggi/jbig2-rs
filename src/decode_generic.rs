@@ -67,6 +67,14 @@ pub struct DecodeBitmapParams<'a> {
     pub at: Vec<(i8, i8)>,
 }
 pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
+    // Validate bitmap dimensions
+    if params.width == 0 || params.height == 0 {
+        return Err(Jbig2Error::new("invalid bitmap dimensions: width and height must be positive"));
+    }
+    if params.width > 65535 || params.height > 65535 {
+        return Err(Jbig2Error::new("bitmap dimensions too large"));
+    }
+
     if params.mmr {
         let mut reader = Reader::new(
             decoding_context.data.clone(),

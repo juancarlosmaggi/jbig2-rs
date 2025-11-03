@@ -438,30 +438,55 @@ impl SimpleSegmentVisitor {
         Ok(())
     }
 
+
+
+    pub fn on_intermediate_generic_region(
+        &mut self,
+        region: &GenericRegion,
+        _referred_segments: &[u32],
+        data: &[u8],
+        start: usize,
+        end: usize,
+    ) -> Result<(), Jbig2Error> {
+        // For intermediate generic regions, we need to use context from referred segments
+        // This is more complex - for now, treat as immediate (simplified)
+        // TODO: Implement proper intermediate region context handling
+        self.on_immediate_generic_region(region, data, start, end)
+    }
+
+    pub fn on_intermediate_generic_refinement_region(
+        &mut self,
+        region_info: &RegionInfo,
+        _referred_segments: &[u32],
+        data: &[u8],
+        start: usize,
+        end: usize,
+    ) -> Result<(), Jbig2Error> {
+        // For intermediate refinement regions, we need to use reference bitmap from referred segments
+        // This is more complex - for now, treat as immediate (simplified)
+        // TODO: Implement proper intermediate region context handling
+        self.on_immediate_generic_refinement_region(region_info, data, start, end)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn on_intermediate_text_region(
         &mut self,
         region_info: &RegionInfo,
         text_region_segment_flags: u16,
         number_of_symbol_instances: u32,
-        referred_segments: &[u32],
+        _referred_segments: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        // Collect input symbols from referred segments (same as immediate)
-        let mut input_symbols = Vec::new();
-        for &segment_id in referred_segments {
-            if let Some(symbols) = self.symbols.get(&segment_id) {
-                input_symbols.extend(symbols.clone());
-            }
-        }
-        // The rest is identical to immediate text region
-        self.process_text_region_common(
+        // For intermediate text regions, we need to use context from referred segments
+        // This is more complex - for now, treat as immediate (simplified)
+        // TODO: Implement proper intermediate region context handling
+        self.on_immediate_text_region(
             region_info,
             text_region_segment_flags,
             number_of_symbol_instances,
-            input_symbols,
+            _referred_segments,
             data,
             start,
             end,
@@ -483,65 +508,32 @@ impl SimpleSegmentVisitor {
         grid_offset_y: i32,
         grid_vector_x: i16,
         grid_vector_y: i16,
-        referred_segments: &[u32],
+        _referred_segments: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        // Get patterns from referred segment (same as immediate)
-        let patterns = if let Some(patterns) = self.patterns.get(&referred_segments[0]) {
-            patterns
-        } else {
-            return Err(Jbig2Error::new("pattern dictionary not found"));
-        };
-        // The rest is identical to immediate halftone region
-        let slice = &data[start..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-        let params = crate::decode_halftone::HalftoneRegionParams {
+        // For intermediate halftone regions, we need to use context from referred segments
+        // This is more complex - for now, treat as immediate (simplified)
+        // TODO: Implement proper intermediate region context handling
+        self.on_immediate_halftone_region(
+            region_info,
             mmr,
-            patterns: patterns.clone(),
             template,
-            region_width: region_info.width as usize,
-            region_height: region_info.height as usize,
-            default_pixel_value,
             enable_skip,
             combination_operator,
+            default_pixel_value,
             grid_width,
             grid_height,
             grid_offset_x,
             grid_offset_y,
             grid_vector_x,
             grid_vector_y,
-        };
-        let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
-        self.draw_bitmap(region_info, &bitmap)?;
-        Ok(())
-    }
-
-    pub fn on_intermediate_generic_region(
-        &mut self,
-        region: &GenericRegion,
-        _referred_segments: &[u32],
-        data: &[u8],
-        start: usize,
-        end: usize,
-    ) -> Result<(), Jbig2Error> {
-        // For intermediate generic regions, we need to use context from referred segments
-        // This is more complex - for now, treat as immediate (simplified)
-        self.on_immediate_generic_region(region, data, start, end)
-    }
-
-    pub fn on_intermediate_generic_refinement_region(
-        &mut self,
-        region_info: &RegionInfo,
-        _referred_segments: &[u32],
-        data: &[u8],
-        start: usize,
-        end: usize,
-    ) -> Result<(), Jbig2Error> {
-        // For intermediate refinement regions, we need to use reference bitmap from referred segments
-        // This is more complex - for now, treat as immediate (simplified)
-        self.on_immediate_generic_refinement_region(region_info, data, start, end)
+            _referred_segments,
+            data,
+            start,
+            end,
+        )
     }
 
     // Finalize the current page and add it to the pages vector
@@ -551,117 +543,7 @@ impl SimpleSegmentVisitor {
         }
     }
 
-    // Helper method for text region processing
-    #[allow(clippy::too_many_arguments)]
-    fn process_text_region_common(
-        &mut self,
-        region_info: &RegionInfo,
-        text_region_segment_flags: u16,
-        number_of_symbol_instances: u32,
-        input_symbols: Vec<Bitmap>,
-        data: &[u8],
-        start: usize,
-        end: usize,
-    ) -> Result<(), Jbig2Error> {
-        let huffman = (text_region_segment_flags & 1) != 0;
-        let refinement = (text_region_segment_flags & 2) != 0;
-        let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
-        let strip_size = 1 << log_strip_size;
-        let reference_corner = ((text_region_segment_flags >> 4) & 3) as usize;
-        let transposed = (text_region_segment_flags & 64) != 0;
-        let combination_operator = ((text_region_segment_flags >> 7) & 3) as usize;
-        let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
-        let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
-        let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
-        let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
 
-        // Parse Huffman flags and refinement AT
-        let mut refinement_at = Vec::new();
-        let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
-        let mut huffman_fs = 0u8;
-        let mut huffman_ds = 0u8;
-        let mut huffman_dt = 0u8;
-        let mut huffman_refinement_dw = 0u8;
-        let mut huffman_refinement_dh = 0u8;
-        let mut huffman_refinement_dx = 0u8;
-        let mut huffman_refinement_dy = 0u8;
-        let mut huffman_refinement_size_selector = false;
-        if huffman {
-            let huffman_flags = read_u16(data, pos);
-            pos += 2;
-            huffman_fs = (huffman_flags & 3) as u8;
-            huffman_ds = ((huffman_flags >> 2) & 3) as u8;
-            huffman_dt = ((huffman_flags >> 4) & 3) as u8;
-            huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
-            huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
-            huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
-            huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
-            huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
-        }
-        if refinement && refinement_template == 0 {
-            for _ in 0..2 {
-                let x = data[pos] as i8;
-                let y = data[pos + 1] as i8;
-                refinement_at.push((x, y));
-                pos += 2;
-            }
-        }
-        let slice = &data[pos..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        // Get Huffman tables if needed
-        let mut huffman_reader = if huffman {
-            Some(Reader::new(slice.to_vec(), 0, slice.len()))
-        } else {
-            None
-        };
-
-        let huffman_tables = if let Some(ref mut reader) = huffman_reader {
-            let params = TextRegionHuffmanParams {
-                huffman_fs,
-                huffman_ds,
-                huffman_dt,
-                huffman_refinement_dw,
-                huffman_refinement_dh,
-                huffman_refinement_dx,
-                huffman_refinement_dy,
-                huffman_refinement_size_selector,
-            };
-            Some(crate::huffman::get_text_region_huffman_tables(
-                &params,
-                &[], // referred_segments - empty for intermediate as symbols are already collected
-                &self.custom_tables,
-                input_symbols.len(),
-                reader,
-            )?)
-        } else {
-            None
-        };
-
-        let params = crate::decode_text::TextRegionParams {
-            huffman,
-            refinement,
-            width: region_info.width as usize,
-            height: region_info.height as usize,
-            default_pixel_value,
-            number_of_symbol_instances: number_of_symbol_instances as usize,
-            strip_size,
-            input_symbols,
-            symbol_code_length: symbol_code_length as usize,
-            transposed,
-            ds_offset,
-            reference_corner,
-            combination_operator,
-            log_strip_size,
-            huffman_tables,
-            refinement_template_index: refinement_template,
-            refinement_at,
-        };
-
-        let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
-        self.draw_bitmap(region_info, &bitmap)?;
-        Ok(())
-    }
 }
 
 const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;

@@ -163,6 +163,9 @@ pub fn decode_tables_segment(data: &[u8], start: usize, end: usize) -> Result<Hu
 }
 
 pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
+    if number == 0 || number > 15 {
+        return Err(Jbig2Error::new("invalid standard Huffman table number"));
+    }
     let lines = match number {
         1 => vec![
             HuffmanLine::new(vec![0, 1, 4, 0x0]),

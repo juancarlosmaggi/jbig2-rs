@@ -117,7 +117,13 @@ impl ArithmeticDecoder {
         }
     }
     pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
+        if pos >= contexts.len() {
+            return 0; // Invalid context position
+        }
         let cx_index = (contexts[pos] >> 1) as usize;
+        if cx_index >= QE_TABLE.len() {
+            return 0; // Invalid context index
+        }
         let mut cx_mps = (contexts[pos] & 1) as u8;
         let qe_entry = &QE_TABLE[cx_index];
         let qe_icx = qe_entry.qe;

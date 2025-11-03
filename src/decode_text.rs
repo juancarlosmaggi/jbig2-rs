@@ -31,6 +31,23 @@ pub fn decode_text_region(
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
+    // Validate parameters
+    if params.width == 0 || params.height == 0 {
+        return Err(Jbig2Error::new("invalid text region dimensions"));
+    }
+    if params.width > 65535 || params.height > 65535 {
+        return Err(Jbig2Error::new("text region dimensions too large"));
+    }
+    if params.input_symbols.is_empty() {
+        return Err(Jbig2Error::new("no input symbols for text region"));
+    }
+    if params.reference_corner > 3 {
+        return Err(Jbig2Error::new("invalid reference corner"));
+    }
+    if params.combination_operator > 7 {
+        return Err(Jbig2Error::new("invalid combination operator"));
+    }
+
     // Prepare bitmap
     let mut bitmap = Bitmap::new(params.width, params.height);
     if params.default_pixel_value != 0 {
