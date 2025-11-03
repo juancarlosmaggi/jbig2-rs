@@ -6,7 +6,7 @@ use crate::decode_pattern::decode_pattern_dictionary;
 use crate::decode_symbol::decode_symbol_dictionary;
 use crate::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
-use crate::huffman::HuffmanTable;
+use crate::huffman::{decode_tables_segment, HuffmanTable};
 use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams};
 use std::collections::HashMap;
 
@@ -105,6 +105,9 @@ impl SimpleSegmentVisitor {
         let mut at = Vec::new();
         let mut refinement_at = Vec::new();
         let mut pos = params.start;
+        if huffman {
+            pos = params.start + 4;
+        }
         if !huffman {
             let at_length = if template == 0 { 4 } else { 1 };
             for _ in 0..at_length {
@@ -151,23 +154,23 @@ impl SimpleSegmentVisitor {
     pub fn on_immediate_text_region(
         &mut self,
         region_info: &RegionInfo,
-        text_region_flags: u16,
+        text_region_segment_flags: u16,
         number_of_symbol_instances: u32,
         referred_segments: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        let huffman = (text_region_flags & 1) != 0;
-        let refinement = (text_region_flags & 2) != 0;
-        let log_strip_size = ((text_region_flags >> 2) & 3) as usize;
+        let huffman = (text_region_segment_flags & 1) != 0;
+        let refinement = (text_region_segment_flags & 2) != 0;
+        let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
         let strip_size = 1 << log_strip_size;
-        let reference_corner = ((text_region_flags >> 4) & 3) as usize;
-        let transposed = (text_region_flags & 64) != 0;
-        let combination_operator = ((text_region_flags >> 7) & 3) as usize;
-        let default_pixel_value = ((text_region_flags >> 9) & 1) as u8;
-        let ds_offset = ((text_region_flags as i32) << 17) >> 27;
-        let refinement_template = ((text_region_flags >> 15) & 1) as usize;
+        let reference_corner = ((text_region_segment_flags >> 4) & 3) as usize;
+        let transposed = (text_region_segment_flags & 64) != 0;
+        let combination_operator = ((text_region_segment_flags >> 7) & 3) as usize;
+        let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
+        let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
+        let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
         // Collect input symbols from referred segments
         let mut input_symbols = Vec::new();
         for &segment_id in referred_segments {
@@ -287,6 +290,12 @@ impl SimpleSegmentVisitor {
         };
         let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
         self.draw_bitmap(region_info, &bitmap);
+        Ok(())
+    }
+
+    pub fn on_tables(&mut self, segment_number: u32, data: &[u8], start: usize, end: usize) -> Result<(), Jbig2Error> {
+        let table = decode_tables_segment(data, start, end)?;
+        self.custom_tables.insert(segment_number, table);
         Ok(())
     }
 }

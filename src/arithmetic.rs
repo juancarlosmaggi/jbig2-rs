@@ -5,7 +5,6 @@ struct QeEntry {
     nlps: u8,
     switch_flag: u8,
 }
-
 const QE_TABLE: [QeEntry; 47] = [
     QeEntry { qe: 0x5601, nmps: 1, nlps: 1, switch_flag: 1 },
     QeEntry { qe: 0x3401, nmps: 2, nlps: 6, switch_flag: 0 },
@@ -55,64 +54,68 @@ const QE_TABLE: [QeEntry; 47] = [
     QeEntry { qe: 0x0001, nmps: 45, nlps: 43, switch_flag: 0 },
     QeEntry { qe: 0x5601, nmps: 46, nlps: 46, switch_flag: 0 },
 ];
-
 pub struct ArithmeticDecoder {
     data: *const u8,
-    len: usize,
     bp: usize,
     data_end: usize,
     chigh: u32,
     clow: u32,
-    ct: u8,
+    ct: i8,
     a: u16,
 }
-
 impl ArithmeticDecoder {
     pub fn new(data: &[u8], start: usize, end: usize) -> Self {
         let data_ptr = data.as_ptr();
-        let len = data.len();
         let mut decoder = ArithmeticDecoder {
             data: data_ptr,
-            len,
             bp: start,
             data_end: end,
             chigh: unsafe { *data_ptr.add(start) as u32 },
             clow: 0,
-            ct: 0,
-            a: 0,
+            ct: -24,
+            a: 0x8000,
         };
-        decoder.byte_in();
+        for _ in 0..7 {
+            decoder.byte_in();
+        }
         decoder.chigh = ((decoder.chigh << 7) & 0xffff) | ((decoder.clow >> 9) & 0x7f);
         decoder.clow = (decoder.clow << 7) & 0xffff;
-        decoder.ct = decoder.ct.wrapping_sub(7);
+        decoder.ct -= 7;
         decoder.a = 0x8000;
         decoder
     }
-
     fn byte_in(&mut self) {
-        let bp = self.bp;
-        unsafe {
-            if *self.data.add(bp) == 0xff {
-                if bp + 1 < self.len && *self.data.add(bp + 1) > 0x8f {
-                    self.clow = self.clow.wrapping_add(0xff00);
+        if self.bp >= self.data_end {
+            return;
+        }
+        let b = unsafe { *self.data.add(self.bp) as u8 };
+        self.bp += 1;
+        if b == 0xff {
+            if self.bp < self.data_end {
+                let next_byte = unsafe { *self.data.add(self.bp) };
+                if next_byte > 0x8f {
+                    self.clow = self.clow.wrapping_add(0xff00u32);
                     self.ct = 8;
-                } else {
-                    self.bp = bp + 1;
-                    self.clow = self.clow.wrapping_add((*self.data.add(bp + 1) as u32) << 9);
-                    self.ct = 7;
+                    return;
                 }
-            } else {
-                self.bp = bp + 1;
-                self.clow = self.clow.wrapping_add(if self.bp < self.data_end { (*self.data.add(self.bp) as u32) << 8 } else { 0xff00 });
-                self.ct = 8;
             }
+            // Stuffed byte case
+            let logical_b = if self.bp < self.data_end {
+                unsafe { *self.data.add(self.bp) as u32 }
+            } else {
+                0xff
+            };
+            self.clow = self.clow.wrapping_add(logical_b << 9);
+            self.ct = 7;
+        } else {
+            self.clow = self.clow.wrapping_add((b as u32) << 8);
+            self.ct = 8;
         }
         if self.clow > 0xffff {
             self.chigh = self.chigh.wrapping_add(self.clow >> 16);
             self.clow &= 0xffff;
         }
     }
-
     pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
         let cx_index = (contexts[pos] >> 1) as usize;
         let mut cx_mps = (contexts[pos] & 1) as u8;
@@ -155,13 +158,13 @@ impl ArithmeticDecoder {
         }
         // renormD
         loop {
-            if self.ct == 0 {
+            if self.ct <= 0 {
                 self.byte_in();
             }
             a <<= 1;
             self.chigh = ((self.chigh << 1) & 0xffff) | ((self.clow >> 15) & 1);
             self.clow = (self.clow << 1) & 0xffff;
-            self.ct = self.ct.wrapping_sub(1);
+            self.ct -= 1;
             if (a & 0x8000) != 0 {
                 break;
             }

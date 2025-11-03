@@ -402,6 +402,9 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
             let generic_region = read_generic_region(data, start)?;
             visitor.on_immediate_generic_region(&generic_region, data, start, end)?;
         }
+        53 => { // Tables
+            visitor.on_tables(header.number, data, start, end)?;
+        }
         _ => {} // TODO: Add refinement regions, etc.
     }
     Ok(())

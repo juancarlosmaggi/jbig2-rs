@@ -29,8 +29,7 @@ impl Jbig2Image {
         if data.len() < 8 || &data[0..8] != b"\x97\x4a\x42\x32\x0d\x0a\x1a\x0a" {
             return Err(Jbig2Error::new("invalid header"));
         }
-        let mut pos = 8;
-        pos += 1;
+        let pos = 8;
         let segments = read_segments(data, pos, data.len())?;
         let mut visitor = SimpleSegmentVisitor::new();
         process_segments(&segments, &mut visitor)?;
