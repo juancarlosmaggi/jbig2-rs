@@ -93,10 +93,21 @@ pub fn decode_text_region(
                 false
             };
             let (final_symbol_width, final_symbol_height, final_symbol_bitmap) = if apply_refinement {
-                let rdw = decode_integer_context(decoding_context, "IARDW")?.unwrap_or(0);
-                let rdh = decode_integer_context(decoding_context, "IARDH")?.unwrap_or(0);
-                let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
-                let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
+                let (rdw, rdh, rdx, rdy) = if let Some(ref huffman_tables) = params.huffman_tables {
+                    // Use Huffman tables for refinement parameters
+                    let rdw = huffman_tables.table_refinement_dw.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
+                    let rdh = huffman_tables.table_refinement_dh.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
+                    let rdx = huffman_tables.table_refinement_dx.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
+                    let rdy = huffman_tables.table_refinement_dy.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
+                    (rdw, rdh, rdx, rdy)
+                } else {
+                    // Use arithmetic decoding
+                    let rdw = decode_integer_context(decoding_context, "IARDW")?.unwrap_or(0);
+                    let rdh = decode_integer_context(decoding_context, "IARDH")?.unwrap_or(0);
+                    let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
+                    let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
+                    (rdw, rdh, rdx, rdy)
+                };
                 let refined_width = symbol_width + rdw as usize;
                 let refined_height = symbol_height + rdh as usize;
                 let refined_bitmap = crate::decode_refinement::decode_refinement(

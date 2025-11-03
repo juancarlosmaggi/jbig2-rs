@@ -6,7 +6,7 @@ use crate::decode_pattern::decode_pattern_dictionary;
 use crate::decode_symbol::decode_symbol_dictionary;
 use crate::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
-use crate::huffman::{decode_tables_segment, HuffmanTable};
+use crate::huffman::{decode_tables_segment, HuffmanTable, TextRegionHuffmanParams};
 use crate::reader::Reader;
 use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, read_u16};
 use std::collections::HashMap;
@@ -274,13 +274,22 @@ impl SimpleSegmentVisitor {
         let mut huffman_fs = 0u8;
         let mut huffman_ds = 0u8;
         let mut huffman_dt = 0u8;
+        let mut huffman_refinement_dw = 0u8;
+        let mut huffman_refinement_dh = 0u8;
+        let mut huffman_refinement_dx = 0u8;
+        let mut huffman_refinement_dy = 0u8;
+        let mut huffman_refinement_size_selector = false;
         if huffman {
             let huffman_flags = read_u16(data, pos);
             pos += 2;
             huffman_fs = (huffman_flags & 3) as u8;
             huffman_ds = ((huffman_flags >> 2) & 3) as u8;
             huffman_dt = ((huffman_flags >> 4) & 3) as u8;
-            // Skip refinement flags for now
+            huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
+            huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
+            huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
+            huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
+            huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
         }
         if refinement && refinement_template == 0 {
             for _ in 0..2 {
@@ -301,10 +310,18 @@ impl SimpleSegmentVisitor {
         };
 
         let huffman_tables = if let Some(ref mut reader) = huffman_reader {
-            Some(crate::huffman::get_text_region_huffman_tables(
+            let params = TextRegionHuffmanParams {
                 huffman_fs,
                 huffman_ds,
                 huffman_dt,
+                huffman_refinement_dw,
+                huffman_refinement_dh,
+                huffman_refinement_dx,
+                huffman_refinement_dy,
+                huffman_refinement_size_selector,
+            };
+            Some(crate::huffman::get_text_region_huffman_tables(
+                &params,
                 referred_segments,
                 &self.custom_tables,
                 input_symbols.len(),
@@ -564,12 +581,22 @@ impl SimpleSegmentVisitor {
         let mut huffman_fs = 0u8;
         let mut huffman_ds = 0u8;
         let mut huffman_dt = 0u8;
+        let mut huffman_refinement_dw = 0u8;
+        let mut huffman_refinement_dh = 0u8;
+        let mut huffman_refinement_dx = 0u8;
+        let mut huffman_refinement_dy = 0u8;
+        let mut huffman_refinement_size_selector = false;
         if huffman {
             let huffman_flags = read_u16(data, pos);
             pos += 2;
             huffman_fs = (huffman_flags & 3) as u8;
             huffman_ds = ((huffman_flags >> 2) & 3) as u8;
             huffman_dt = ((huffman_flags >> 4) & 3) as u8;
+            huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
+            huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
+            huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
+            huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
+            huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
         }
         if refinement && refinement_template == 0 {
             for _ in 0..2 {
@@ -590,10 +617,18 @@ impl SimpleSegmentVisitor {
         };
 
         let huffman_tables = if let Some(ref mut reader) = huffman_reader {
-            Some(crate::huffman::get_text_region_huffman_tables(
+            let params = TextRegionHuffmanParams {
                 huffman_fs,
                 huffman_ds,
                 huffman_dt,
+                huffman_refinement_dw,
+                huffman_refinement_dh,
+                huffman_refinement_dx,
+                huffman_refinement_dy,
+                huffman_refinement_size_selector,
+            };
+            Some(crate::huffman::get_text_region_huffman_tables(
+                &params,
                 &[], // referred_segments - empty for intermediate as symbols are already collected
                 &self.custom_tables,
                 input_symbols.len(),

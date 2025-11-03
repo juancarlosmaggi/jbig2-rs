@@ -538,6 +538,9 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
         51 => { // EndOfFile
             // No action needed
         }
+        52 => { // Profiles
+            // Profile information - can be ignored for basic decoding
+        }
         53 => { // Tables
             visitor.on_tables(header.number, data, start, end)?;
         }

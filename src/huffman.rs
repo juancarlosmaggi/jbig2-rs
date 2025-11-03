@@ -443,17 +443,32 @@ pub fn get_symbol_dictionary_huffman_tables(
 }
 
 #[derive(Clone)]
+pub struct TextRegionHuffmanParams {
+    pub huffman_fs: u8,
+    pub huffman_ds: u8,
+    pub huffman_dt: u8,
+    pub huffman_refinement_dw: u8,
+    pub huffman_refinement_dh: u8,
+    pub huffman_refinement_dx: u8,
+    pub huffman_refinement_dy: u8,
+    pub huffman_refinement_size_selector: bool,
+}
+
+#[derive(Clone)]
 pub struct TextRegionHuffmanTables {
     pub symbol_id_table: HuffmanTable,
     pub table_first_s: HuffmanTable,
     pub table_delta_s: HuffmanTable,
     pub table_delta_t: HuffmanTable,
+    pub table_refinement_dw: Option<HuffmanTable>,
+    pub table_refinement_dh: Option<HuffmanTable>,
+    pub table_refinement_dx: Option<HuffmanTable>,
+    pub table_refinement_dy: Option<HuffmanTable>,
+    pub table_refinement_size: Option<HuffmanTable>,
 }
 
 pub fn get_text_region_huffman_tables(
-    huffman_fs: u8,
-    huffman_ds: u8,
-    huffman_dt: u8,
+    params: &TextRegionHuffmanParams,
     referred_to: &[u32],
     custom_tables: &HashMap<u32, HuffmanTable>,
     number_of_symbols: usize,
@@ -509,8 +524,8 @@ pub fn get_text_region_huffman_tables(
 
     // 7.4.3.1.6 Text region segment Huffman table selection
     let mut custom_index = 0;
-    let table_first_s = match huffman_fs {
-        0 | 1 => get_standard_table(huffman_fs as u32 + 6)?,
+    let table_first_s = match params.huffman_fs {
+        0 | 1 => get_standard_table(params.huffman_fs as u32 + 6)?,
         3 => {
             let table = get_custom_huffman_table(custom_index, referred_to, custom_tables)?;
             custom_index += 1;
@@ -519,8 +534,8 @@ pub fn get_text_region_huffman_tables(
         _ => return Err(Jbig2Error::new("invalid Huffman FS selector")),
     };
 
-    let table_delta_s = match huffman_ds {
-        0..=2 => get_standard_table(huffman_ds as u32 + 8)?,
+    let table_delta_s = match params.huffman_ds {
+        0..=2 => get_standard_table(params.huffman_ds as u32 + 8)?,
         3 => {
             let table = get_custom_huffman_table(custom_index, referred_to, custom_tables)?;
             custom_index += 1;
@@ -529,10 +544,57 @@ pub fn get_text_region_huffman_tables(
         _ => return Err(Jbig2Error::new("invalid Huffman DS selector")),
     };
 
-    let table_delta_t = match huffman_dt {
-        0..=2 => get_standard_table(huffman_dt as u32 + 11)?,
-        3 => get_custom_huffman_table(custom_index, referred_to, custom_tables)?,
+    let table_delta_t = match params.huffman_dt {
+        0..=2 => get_standard_table(params.huffman_dt as u32 + 11)?,
+        3 => {
+            custom_index += 1;
+            get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?
+        }
         _ => return Err(Jbig2Error::new("invalid Huffman DT selector")),
+    };
+
+    // Refinement tables
+    let table_refinement_dw = match params.huffman_refinement_dw {
+        0..=2 => Some(get_standard_table(params.huffman_refinement_dw as u32 + 2)?),
+        3 => {
+            custom_index += 1;
+            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+        }
+        _ => return Err(Jbig2Error::new("invalid Huffman refinement DW selector")),
+    };
+
+    let table_refinement_dh = match params.huffman_refinement_dh {
+        0..=2 => Some(get_standard_table(params.huffman_refinement_dh as u32 + 2)?),
+        3 => {
+            custom_index += 1;
+            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+        }
+        _ => return Err(Jbig2Error::new("invalid Huffman refinement DH selector")),
+    };
+
+    let table_refinement_dx = match params.huffman_refinement_dx {
+        0..=2 => Some(get_standard_table(params.huffman_refinement_dx as u32 + 2)?),
+        3 => {
+            custom_index += 1;
+            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+        }
+        _ => return Err(Jbig2Error::new("invalid Huffman refinement DX selector")),
+    };
+
+    let table_refinement_dy = match params.huffman_refinement_dy {
+        0..=2 => Some(get_standard_table(params.huffman_refinement_dy as u32 + 2)?),
+        3 => {
+            custom_index += 1;
+            Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+        }
+        _ => return Err(Jbig2Error::new("invalid Huffman refinement DY selector")),
+    };
+
+    let table_refinement_size = if params.huffman_refinement_size_selector {
+        custom_index += 1;
+        Some(get_custom_huffman_table(custom_index - 1, referred_to, custom_tables)?)
+    } else {
+        Some(get_standard_table(1)?)
     };
 
     Ok(TextRegionHuffmanTables {
@@ -540,6 +602,11 @@ pub fn get_text_region_huffman_tables(
         table_first_s,
         table_delta_s,
         table_delta_t,
+        table_refinement_dw,
+        table_refinement_dh,
+        table_refinement_dx,
+        table_refinement_dy,
+        table_refinement_size,
     })
 }
 
