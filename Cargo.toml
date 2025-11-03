@@ -1,0 +1,10 @@
+[package]
+name = "jbig2-rs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Pure Rust JBIG2 decoder for images and PDFs"
+keywords = ["jbig2", "image", "decoder", "pdf"]
+categories = ["multimedia::images", "encoding"]
+
+[dependencies]
