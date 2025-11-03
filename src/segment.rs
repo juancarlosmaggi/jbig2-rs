@@ -1,5 +1,11 @@
+use crate::bitmap::Bitmap;
+use crate::contexts::DecodingContext;
+use crate::decode_generic::{decode_bitmap, DecodeBitmapParams};
+use crate::decode_halftone::decode_halftone_region;
+use crate::decode_pattern::decode_pattern_dictionary;
+use crate::decode_symbol::decode_symbol_dictionary;
+use crate::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
-use crate::bitmap::{Bitmap, decode_bitmap, DecodingContext, decode_symbol_dictionary, decode_text_region, decode_pattern_dictionary, decode_halftone_region};
 use std::collections::HashMap;
 
 pub const SEGMENT_TYPES: [&str; 63] = [
@@ -121,6 +127,18 @@ pub struct GenericRegion {
     pub at: Vec<(i8, i8)>,
 }
 
+#[derive(Clone)]
+pub struct SymbolDictionaryParams<'a> {
+    pub dictionary_flags: u16,
+    pub number_of_exported_symbols: u32,
+    pub number_of_new_symbols: u32,
+    pub current_segment: u32,
+    pub referred_segments: &'a [u32],
+    pub data: &'a [u8],
+    pub start: usize,
+    pub end: usize,
+}
+
 pub struct SimpleSegmentVisitor {
     pub current_page_info: Option<PageInfo>,
     pub bitmap: Option<Bitmap>,
@@ -211,86 +229,68 @@ impl SimpleSegmentVisitor {
         }
         let slice = &data[decoding_start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-        let bitmap = decode_bitmap(
-            region.mmr,
-            region_info.width as usize,
-            region_info.height as usize,
-            region.template,
-            region.prediction,
-            None,
-            region.at.clone(),
-            &mut decoding_context,
-        )?;
+        let params = DecodeBitmapParams {
+            mmr: region.mmr,
+            width: region_info.width as usize,
+            height: region_info.height as usize,
+            template_index: region.template,
+            prediction: region.prediction,
+            skip: None,
+            at: region.at.clone(),
+        };
+        let bitmap = decode_bitmap(&params, &mut decoding_context)?;
         self.draw_bitmap(region_info, &bitmap);
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn on_symbol_dictionary(
-        &mut self,
-        dictionary_flags: u16,
-        number_of_exported_symbols: u32,
-        number_of_new_symbols: u32,
-        current_segment: u32,
-        referred_segments: &[u32],
-        data: &[u8],
-        start: usize,
-        end: usize,
-    ) -> Result<(), Jbig2Error> {
-        let huffman = (dictionary_flags & 1) != 0;
-        let refinement = (dictionary_flags & 2) != 0;
-        let template = ((dictionary_flags >> 10) & 3) as usize;
-        let refinement_template = ((dictionary_flags >> 12) & 1) as usize;
-
+    pub fn on_symbol_dictionary(&mut self, params: &SymbolDictionaryParams) -> Result<(), Jbig2Error> {
+        let huffman = (params.dictionary_flags & 1) != 0;
+        let refinement = (params.dictionary_flags & 2) != 0;
+        let template = ((params.dictionary_flags >> 10) & 3) as usize;
+        let refinement_template = ((params.dictionary_flags >> 12) & 1) as usize;
         // Parse AT parameters if not Huffman
         let mut at = Vec::new();
         let mut refinement_at = Vec::new();
-        let mut pos = start;
-
+        let mut pos = params.start;
         if !huffman {
             let at_length = if template == 0 { 4 } else { 1 };
             for _ in 0..at_length {
-                let x = data[pos] as i8;
-                let y = data[pos + 1] as i8;
+                let x = params.data[pos] as i8;
+                let y = params.data[pos + 1] as i8;
                 at.push((x, y));
                 pos += 2;
             }
         }
-
         if refinement && refinement_template == 0 {
             for _ in 0..2 {
-                let x = data[pos] as i8;
-                let y = data[pos + 1] as i8;
+                let x = params.data[pos] as i8;
+                let y = params.data[pos + 1] as i8;
                 refinement_at.push((x, y));
                 pos += 2;
             }
         }
-
         // Collect input symbols from referred segments
         let mut input_symbols = Vec::new();
-        for &segment_id in referred_segments {
+        for &segment_id in params.referred_segments {
             if let Some(symbols) = self.symbols.get(&segment_id) {
                 input_symbols.extend(symbols.clone());
             }
         }
-
-        let slice = &data[pos..end];
+        let slice = &params.data[pos..params.end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let params = crate::bitmap::SymbolDictionaryParams {
+        let symbol_params = crate::decode_symbol::SymbolDictionaryParams {
             huffman,
             refinement,
             symbols: input_symbols,
-            number_of_new_symbols: number_of_new_symbols as usize,
-            number_of_exported_symbols: number_of_exported_symbols as usize,
+            number_of_new_symbols: params.number_of_new_symbols as usize,
+            number_of_exported_symbols: params.number_of_exported_symbols as usize,
             template_index: template,
             at,
             refinement_template_index: refinement_template,
             refinement_at,
         };
-        let exported_symbols = decode_symbol_dictionary(&params, &mut decoding_context)?;
-
-        self.symbols.insert(current_segment, exported_symbols);
+        let exported_symbols = decode_symbol_dictionary(&symbol_params, &mut decoding_context)?;
+        self.symbols.insert(params.current_segment, exported_symbols);
         Ok(())
     }
 
@@ -315,7 +315,6 @@ impl SimpleSegmentVisitor {
         let default_pixel_value = ((text_region_flags >> 9) & 1) as u8;
         let ds_offset = ((text_region_flags as i32) << 17) >> 27;
         let refinement_template = ((text_region_flags >> 15) & 1) as usize;
-
         // Collect input symbols from referred segments
         let mut input_symbols = Vec::new();
         for &segment_id in referred_segments {
@@ -323,18 +322,14 @@ impl SimpleSegmentVisitor {
                 input_symbols.extend(symbols.clone());
             }
         }
-
         let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
-
         // Parse refinement AT if needed
         let mut refinement_at = Vec::new();
         let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
-
         if huffman {
             // Skip Huffman flags for now
             pos += 2;
         }
-
         if refinement && refinement_template == 0 {
             for _ in 0..2 {
                 let x = data[pos] as i8;
@@ -343,11 +338,9 @@ impl SimpleSegmentVisitor {
                 pos += 2;
             }
         }
-
         let slice = &data[pos..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let params = crate::bitmap::TextRegionParams {
+        let params = crate::decode_text::TextRegionParams {
             huffman,
             refinement,
             width: region_info.width as usize,
@@ -364,7 +357,6 @@ impl SimpleSegmentVisitor {
             log_strip_size,
         };
         let bitmap = decode_text_region(&params, &mut decoding_context)?;
-
         self.draw_bitmap(region_info, &bitmap);
         Ok(())
     }
@@ -384,7 +376,7 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         let slice = &data[start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-        let params = crate::bitmap::PatternDictionaryParams {
+        let params = crate::decode_pattern::PatternDictionaryParams {
             mmr,
             pattern_width,
             pattern_height,
@@ -422,10 +414,9 @@ impl SimpleSegmentVisitor {
         } else {
             return Err(Jbig2Error::new("pattern dictionary not found"));
         };
-
         let slice = &data[start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-        let params = crate::bitmap::HalftoneRegionParams {
+        let params = crate::decode_halftone::HalftoneRegionParams {
             mmr,
             patterns: patterns.clone(),
             template,
@@ -596,16 +587,17 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
             let dictionary_flags = read_u16(data, start);
             let number_of_exported_symbols = read_u32(data, start + 2);
             let number_of_new_symbols = read_u32(data, start + 6);
-            visitor.on_symbol_dictionary(
+            let params = SymbolDictionaryParams {
                 dictionary_flags,
                 number_of_exported_symbols,
                 number_of_new_symbols,
-                header.number,
-                &header.referred_to,
+                current_segment: header.number,
+                referred_segments: &header.referred_to,
                 data,
-                start + 10,
+                start: start + 10,
                 end,
-            )?;
+            };
+            visitor.on_symbol_dictionary(&params)?;
         }
         6 | 7 => { // ImmediateTextRegion / ImmediateLosslessTextRegion
             let region_info = read_region_segment_information(data, start);
