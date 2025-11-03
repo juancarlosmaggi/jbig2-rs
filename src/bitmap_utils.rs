@@ -22,12 +22,12 @@ pub fn apply_combination_operator(dst_pixel: u8, src_pixel: u8, operator: usize)
 
 pub fn apply_page_combination_operator(dst_pixel: u8, src_pixel: u8, operator: u8) -> u8 {
     match operator {
-        0 => dst_pixel | src_pixel, // OR
-        1 => dst_pixel & src_pixel, // AND
-        2 => dst_pixel ^ src_pixel, // XOR
+        0 => dst_pixel | src_pixel,        // OR
+        1 => dst_pixel & src_pixel,        // AND
+        2 => dst_pixel ^ src_pixel,        // XOR
         3 => !(dst_pixel ^ src_pixel) & 1, // XNOR
-        4 => src_pixel,             // REPLACE
-        _ => dst_pixel,             // undefined: no-op
+        4 => src_pixel,                    // REPLACE
+        _ => dst_pixel,                    // undefined: no-op
     }
 }
 
@@ -50,7 +50,8 @@ pub fn draw_symbol_at_position(
                 let (src_x, src_y) = if transposed { (x, y) } else { (y, x) };
                 let src_pixel = symbol.get_pixel(src_x, src_y);
                 let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
-                let new_pixel = apply_combination_operator(dst_pixel, src_pixel, combination_operator);
+                let new_pixel =
+                    apply_combination_operator(dst_pixel, src_pixel, combination_operator);
                 bitmap.set_pixel(col as usize, row as usize, new_pixel);
             }
         }

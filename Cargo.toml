@@ -8,3 +8,6 @@ keywords = ["jbig2", "image", "decoder", "pdf"]
 categories = ["multimedia::images", "encoding"]
 
 [dependencies]
+
+[dev-dependencies]
+rstest = "0.18"

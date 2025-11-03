@@ -1,7 +1,10 @@
 use crate::bitmap::Bitmap;
 use crate::bitmap_utils::{self, draw_symbol_at_position};
 use crate::contexts::DecodingContext;
-use crate::decoder::{decode_i32_huffman_or_arith, decode_integer_context, decode_option_i32_huffman_or_arith, decode_u32_huffman_or_arith};
+use crate::decoder::{
+    decode_i32_huffman_or_arith, decode_integer_context, decode_option_i32_huffman_or_arith,
+    decode_u32_huffman_or_arith,
+};
 use crate::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::reader::Reader;
@@ -34,7 +37,12 @@ pub fn decode_text_region(
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
     // Validate parameters
-    validation::validate_text_decode_params(params.width, params.height, params.reference_corner, params.combination_operator)?;
+    validation::validate_text_decode_params(
+        params.width,
+        params.height,
+        params.reference_corner,
+        params.combination_operator,
+    )?;
     if params.input_symbols.is_empty() {
         return Err(Jbig2Error::new("no input symbols for text region"));
     }
@@ -43,7 +51,11 @@ pub fn decode_text_region(
     }
 
     // Prepare bitmap
-    let mut bitmap = bitmap_utils::create_initialized_bitmap(params.width, params.height, params.default_pixel_value);
+    let mut bitmap = bitmap_utils::create_initialized_bitmap(
+        params.width,
+        params.height,
+        params.default_pixel_value,
+    );
     let huffman_tables = params.huffman_tables.as_ref();
     let mut strip_t = -decode_i32_huffman_or_arith(
         params.huffman,
@@ -95,7 +107,9 @@ pub fn decode_text_region(
                 params.huffman,
                 || {
                     let tables = huffman_tables.unwrap();
-                    tables.symbol_id_table.decode(huffman_input.as_mut().unwrap())
+                    tables
+                        .symbol_id_table
+                        .decode(huffman_input.as_mut().unwrap())
                 },
                 params.symbol_code_length,
                 decoding_context,
@@ -185,7 +199,14 @@ pub fn decode_text_region(
                     0
                 };
             // Draw the symbol
-            draw_symbol_at_position(&mut bitmap, &final_symbol_bitmap, offset_s, offset_t, params.transposed, params.combination_operator);
+            draw_symbol_at_position(
+                &mut bitmap,
+                &final_symbol_bitmap,
+                offset_s,
+                offset_t,
+                params.transposed,
+                params.combination_operator,
+            );
             i += 1;
             let delta_s = decode_option_i32_huffman_or_arith(
                 params.huffman,

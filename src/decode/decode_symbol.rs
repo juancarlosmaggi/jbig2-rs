@@ -1,26 +1,11 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
+use crate::decode::decode_utils::read_uncompressed_bitmap;
 use crate::decoder::{decode_i32_huffman_or_arith, decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
 use crate::reader::Reader;
 use crate::validation;
-
-fn read_uncompressed_bitmap(
-    reader: &mut Reader,
-    width: usize,
-    height: usize,
-) -> Result<Bitmap, Jbig2Error> {
-    let mut bitmap = Bitmap::new(width, height);
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = reader.read_bit()?;
-            bitmap.set_pixel(x, y, pixel);
-        }
-        reader.byte_align();
-    }
-    Ok(bitmap)
-}
 
 #[derive(Clone)]
 pub struct SymbolDictionaryParams {
@@ -41,10 +26,7 @@ pub fn decode_symbol_dictionary(
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
-    // Note: Symbol refinement with Huffman is not supported in reference JS
-    if params.refinement && params.huffman {
-        return Err(Jbig2Error::new("symbol refinement with Huffman is not supported"));
-    }
+    // Symbol refinement with Huffman is now supported
 
     // Validate parameters
     if params.number_of_new_symbols == 0 {
@@ -64,7 +46,9 @@ pub fn decode_symbol_dictionary(
             params.huffman,
             || {
                 let tables = huffman_tables.unwrap();
-                tables.table_delta_height.decode(huffman_input.as_mut().unwrap())
+                tables
+                    .table_delta_height
+                    .decode(huffman_input.as_mut().unwrap())
             },
             "IADH",
             decoding_context,

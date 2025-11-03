@@ -9,7 +9,9 @@ use crate::decode::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
 use crate::huffman::{HuffmanTable, TextRegionHuffmanParams, decode_tables_segment};
 use crate::reader::Reader;
-use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, parse_at_parameters, read_u16};
+use crate::segment::{
+    GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, parse_at_parameters, read_u16,
+};
 use std::collections::HashMap;
 
 fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
@@ -93,13 +95,18 @@ impl SimpleSegmentVisitor {
             (self.current_page_info.take(), self.current_bitmap.take())
         {
             let bit_packed_data = bitmap_to_bit_packed(&bitmap);
-            self.pages.push(Jbig2Page { page_info, bitmap, bit_packed_data });
+            self.pages.push(Jbig2Page {
+                page_info,
+                bitmap,
+                bit_packed_data,
+            });
         }
 
         self.current_page_info = Some(info.clone());
         let width = info.width as usize;
         let height = info.height as usize;
-        let bitmap = bitmap_utils::create_initialized_bitmap(width, height, info.default_pixel_value);
+        let bitmap =
+            bitmap_utils::create_initialized_bitmap(width, height, info.default_pixel_value);
         self.current_bitmap = Some(bitmap);
     }
 
@@ -164,7 +171,7 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         let region_info = &region.info;
         let at_bytes = region.at.len() * 2;
-        let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
+        let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + at_bytes;
         if decoding_start >= end {
             return Err(Jbig2Error::new("insufficient data for generic region"));
         }
@@ -202,7 +209,11 @@ impl SimpleSegmentVisitor {
         } else {
             Vec::new()
         };
-        let pos = if at_length > 0 { pos + at_length * 2 } else { pos };
+        let pos = if at_length > 0 {
+            pos + at_length * 2
+        } else {
+            pos
+        };
         // Get reference bitmap from referred segment
         let reference_bitmap = if let Some(ref_bitmap) = self.current_bitmap.as_ref() {
             ref_bitmap
@@ -523,9 +534,10 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         // Basic validation: check that referred segments exist
         for &segment_id in referred_segments {
-            if !self.symbols.contains_key(&segment_id) &&
-               !self.patterns.contains_key(&segment_id) &&
-               !self.custom_tables.contains_key(&segment_id) {
+            if !self.symbols.contains_key(&segment_id)
+                && !self.patterns.contains_key(&segment_id)
+                && !self.custom_tables.contains_key(&segment_id)
+            {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
@@ -543,9 +555,10 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         // Basic validation: check that referred segments exist
         for &segment_id in referred_segments {
-            if !self.symbols.contains_key(&segment_id) &&
-               !self.patterns.contains_key(&segment_id) &&
-               !self.custom_tables.contains_key(&segment_id) {
+            if !self.symbols.contains_key(&segment_id)
+                && !self.patterns.contains_key(&segment_id)
+                && !self.custom_tables.contains_key(&segment_id)
+            {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
@@ -566,9 +579,10 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         // Basic validation: check that referred segments exist
         for &segment_id in referred_segments {
-            if !self.symbols.contains_key(&segment_id) &&
-               !self.patterns.contains_key(&segment_id) &&
-               !self.custom_tables.contains_key(&segment_id) {
+            if !self.symbols.contains_key(&segment_id)
+                && !self.patterns.contains_key(&segment_id)
+                && !self.custom_tables.contains_key(&segment_id)
+            {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
@@ -606,9 +620,10 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         // Basic validation: check that referred segments exist
         for &segment_id in referred_segments {
-            if !self.symbols.contains_key(&segment_id) &&
-               !self.patterns.contains_key(&segment_id) &&
-               !self.custom_tables.contains_key(&segment_id) {
+            if !self.symbols.contains_key(&segment_id)
+                && !self.patterns.contains_key(&segment_id)
+                && !self.custom_tables.contains_key(&segment_id)
+            {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
@@ -639,7 +654,11 @@ impl SimpleSegmentVisitor {
             (self.current_page_info.take(), self.current_bitmap.take())
         {
             let bit_packed_data = bitmap_to_bit_packed(&bitmap);
-            self.pages.push(Jbig2Page { page_info, bitmap, bit_packed_data });
+            self.pages.push(Jbig2Page {
+                page_info,
+                bitmap,
+                bit_packed_data,
+            });
         }
     }
 }

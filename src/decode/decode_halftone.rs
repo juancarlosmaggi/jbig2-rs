@@ -26,14 +26,15 @@ pub fn decode_halftone_region(
     params: &HalftoneRegionParams,
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    if params.enable_skip {
-        return Err(Jbig2Error::new("skip is not supported"));
-    }
     if params.combination_operator != 0 {
         return Err(Jbig2Error::new("only OR combination operator is supported"));
     }
     // Prepare bitmap
-    let mut region_bitmap = bitmap_utils::create_initialized_bitmap(params.region_width, params.region_height, params.default_pixel_value);
+    let mut region_bitmap = bitmap_utils::create_initialized_bitmap(
+        params.region_width,
+        params.region_height,
+        params.default_pixel_value,
+    );
     let number_of_patterns = params.patterns.len();
     if number_of_patterns == 0 {
         return Ok(region_bitmap);
@@ -51,6 +52,21 @@ pub fn decode_halftone_region(
     } else {
         vec![]
     };
+    // Skip bitmap
+    let skip_bitmap = if params.enable_skip {
+        let skip_params = DecodeBitmapParams {
+            mmr: params.mmr,
+            width: params.grid_width,
+            height: params.grid_height,
+            template_index: params.template,
+            prediction: false,
+            skip: None,
+            at: at.clone(),
+        };
+        Some(decode_bitmap(&skip_params, decoding_context)?)
+    } else {
+        None
+    };
     // Gray-scale bit planes
     let mut gray_scale_bit_planes = Vec::new();
     for _ in (0..bits_per_value).rev() {
@@ -60,7 +76,7 @@ pub fn decode_halftone_region(
             height: params.grid_height,
             template_index: params.template,
             prediction: false,
-            skip: None,
+            skip: skip_bitmap.as_ref(),
             at: at.clone(),
         };
         let bitmap = decode_bitmap(&decode_params, decoding_context)?;
@@ -69,6 +85,12 @@ pub fn decode_halftone_region(
     // Render patterns
     for mg in 0..params.grid_height {
         for ng in 0..params.grid_width {
+            if skip_bitmap
+                .as_ref()
+                .is_some_and(|skip| skip.get_pixel(ng, mg) != 0)
+            {
+                continue;
+            }
             let mut bit = 0u8;
             let mut pattern_index = 0usize;
             for j in (0..bits_per_value).rev() {

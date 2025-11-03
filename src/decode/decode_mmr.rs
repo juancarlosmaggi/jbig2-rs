@@ -29,35 +29,27 @@ impl CCITTFaxDecoder {
         self.reader.read_bit()
     }
     // Decode a 2D MMR line
-    #[allow(unused_assignments)]
-    fn decode_2d_line(&mut self, _y: usize) -> Result<(), Jbig2Error> {
+    fn decode_2d_line(&mut self) -> Result<(), Jbig2Error> {
         let mut a0 = -1i32; // Current position in reference line
-        let mut b1: usize; // First changing element on reference line
-        let mut b2: usize; // Second changing element on reference line
-        // Initialize b1 and b2 (values will be updated in the loop, but initial values are needed for variable declaration)
-        let _ = b1; // Suppress unused assignment warning
-        let _ = b2; // Suppress unused assignment warning
         let mut x = 0; // Current position in current line
         while x < self.width {
+            let b1 = self.find_changing_element(&self.ref_line, (a0 + 1) as usize, self.width);
+            let b2 = self.find_changing_element(&self.ref_line, b1 + 1, self.width);
             // Read mode code
             let mode = self.read_mode_code()?;
             match mode {
                 0 => {
                     // Pass mode
-                    // Find b2
-                    b2 = self.find_changing_element(&self.ref_line, a0 as usize + 1, self.width);
-                    // Set pixels from a0+1 to b2-1 to the color of a0
                     let color = if a0 >= 0 {
                         self.ref_line[a0 as usize]
                     } else {
                         0
                     };
-                    while x < b2 {
-                        self.curr_line[x] = color;
-                        x += 1;
+                    for i in x..b2 {
+                        self.curr_line[i] = color;
                     }
-                    // Update a0
-                    a0 = b2 as i32 - 1;
+                    x = b2;
+                    a0 = x as i32 - 1;
                 }
                 1 => {
                     // Vertical mode (-1)
@@ -79,17 +71,14 @@ impl CCITTFaxDecoder {
                 }
                 4 => {
                     // Horizontal mode
-                    // Read two run lengths
                     let run1 = self.decode_run_length(true)? as usize; // White run
                     let run2 = self.decode_run_length(false)? as usize; // Black run
-                    // Write first run
                     for i in 0..run1 {
                         if x + i < self.width {
                             self.curr_line[x + i] = 0; // White
                         }
                     }
                     x += run1;
-                    // Write second run
                     for i in 0..run2 {
                         if x + i < self.width {
                             self.curr_line[x + i] = 1; // Black
@@ -98,31 +87,52 @@ impl CCITTFaxDecoder {
                     x += run2;
                     a0 = x as i32 - 1;
                 }
+                5 => {
+                    // Vertical mode (-2)
+                    self.write_run(x, a0, -2);
+                    x = self.find_changing_element(&self.curr_line, x, self.width);
+                    a0 = x as i32 - 1;
+                }
+                6 => {
+                    // Vertical mode (-3)
+                    self.write_run(x, a0, -3);
+                    x = self.find_changing_element(&self.curr_line, x, self.width);
+                    a0 = x as i32 - 1;
+                }
+                7 => {
+                    // Vertical mode (+2)
+                    self.write_run(x, a0, 2);
+                    x = self.find_changing_element(&self.curr_line, x, self.width);
+                    a0 = x as i32 - 1;
+                }
+                8 => {
+                    // Vertical mode (+3)
+                    self.write_run(x, a0, 3);
+                    x = self.find_changing_element(&self.curr_line, x, self.width);
+                    a0 = x as i32 - 1;
+                }
                 _ => return Err(Jbig2Error::new("invalid MMR mode")),
-            }
-            // Update b1 and b2
-            if a0 >= 0 {
-                b1 = self.find_changing_element(&self.ref_line, a0 as usize + 1, self.width);
-                b2 = self.find_changing_element(&self.ref_line, b1, self.width);
             }
         }
         Ok(())
     }
-    #[allow(unreachable_patterns)]
-    #[allow(clippy::match_overlapping_arm)]
     fn read_mode_code(&mut self) -> Result<u8, Jbig2Error> {
         // Read up to 7 bits for mode codes
         let mut code = 0u32;
-        for i in 0..7 {
+        for length in 1..=7 {
             let bit = self.read_bit()? as u32;
-            code |= bit << i;
-            match code {
-                0b0001 => return Ok(0),    // Pass mode
-                0b1 => return Ok(1),       // Vertical -1
-                0b011 => return Ok(2),     // Vertical 0
-                0b000011 => return Ok(3),  // Vertical +1
-                0b0000010 => return Ok(4), // Horizontal
-                _ => {}                    // Continue reading
+            code |= bit << (length - 1);
+            match (code, length) {
+                (0b0001, 4) => return Ok(0),    // Pass
+                (0b010, 3) => return Ok(1),     // VL(1)
+                (0b1, 1) => return Ok(2),       // V(0)
+                (0b011, 3) => return Ok(3),     // VR(1)
+                (0b001, 3) => return Ok(4),     // Horizontal
+                (0b000010, 6) => return Ok(5),  // VL(2)
+                (0b0000010, 7) => return Ok(6), // VL(3)
+                (0b000011, 6) => return Ok(7),  // VR(2)
+                (0b0000011, 7) => return Ok(8), // VR(3)
+                _ => {}                         // Continue reading
             }
         }
         Err(Jbig2Error::new("invalid MMR mode code"))
@@ -442,7 +452,7 @@ impl CCITTFaxDecoder {
         let mut bitmap = Bitmap::new(self.width, self.height);
         for y in 0..self.height {
             // Decode 2D line
-            self.decode_2d_line(y)?;
+            self.decode_2d_line()?;
             // Copy current line to bitmap
             for x in 0..self.width {
                 bitmap.set_pixel(x, y, self.curr_line[x]);
@@ -453,9 +463,20 @@ impl CCITTFaxDecoder {
         }
         // Handle EOFB if required
         if self.end_of_block {
-            // Look for EOFB pattern (6 consecutive EOL codes)
-            // For simplicity, we'll just ensure we've consumed all data
-            // A full implementation would check for the specific EOFB pattern
+            // Look for EOFB pattern: two consecutive EOL codes (000000000001)
+            let mut eol_count = 0;
+            while eol_count < 2 {
+                let mut code = 0u16;
+                for _ in 0..12 {
+                    let bit = self.read_bit()? as u16;
+                    code = (code << 1) | bit;
+                }
+                if code & 1 == 1 {
+                    eol_count += 1;
+                } else {
+                    eol_count = 0;
+                }
+            }
         }
         Ok(bitmap)
     }

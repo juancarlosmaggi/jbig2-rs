@@ -141,7 +141,11 @@ pub fn read_u32(data: &[u8], pos: usize) -> u32 {
         | (data[pos + 3] as u32)
 }
 
-pub fn parse_at_parameters(data: &[u8], mut pos: usize, at_length: usize) -> Result<Vec<(i8, i8)>, Jbig2Error> {
+pub fn parse_at_parameters(
+    data: &[u8],
+    mut pos: usize,
+    at_length: usize,
+) -> Result<Vec<(i8, i8)>, Jbig2Error> {
     let mut at = vec![];
     for _ in 0..at_length {
         if pos + 1 >= data.len() {
@@ -352,6 +356,7 @@ pub fn process_segments<'a>(
     visitor: &mut SimpleSegmentVisitor,
 ) -> Result<(), Jbig2Error> {
     let mut current_page = 0u32;
+    let mut page_segments = Vec::new();
     for segment in segments {
         // Handle page association filtering
         let page_association = segment.header.page_association;
@@ -366,13 +371,45 @@ pub fn process_segments<'a>(
             continue;
         }
 
-        process_segment(segment, visitor)?;
+        page_segments.push(segment);
 
         // Update current page when we encounter a PageInformation segment
         if segment.header.segment_type == 48 {
             // PageInformation
+            // Process previous page segments
+            process_page_segments(&page_segments, visitor)?;
+            page_segments.clear();
             current_page += 1;
         }
+    }
+    // Process remaining segments
+    if !page_segments.is_empty() {
+        process_page_segments(&page_segments, visitor)?;
+    }
+    Ok(())
+}
+
+fn process_page_segments<'a>(
+    segments: &[&Segment<'a>],
+    visitor: &mut SimpleSegmentVisitor,
+) -> Result<(), Jbig2Error> {
+    // Separate retain and non-retain segments
+    let mut retain_segments = Vec::new();
+    let mut non_retain_segments = Vec::new();
+    for &segment in segments {
+        if segment.header.deferred_non_retain {
+            non_retain_segments.push(segment);
+        } else {
+            retain_segments.push(segment);
+        }
+    }
+    // Process retain segments first
+    for &segment in &retain_segments {
+        process_segment(segment, visitor)?;
+    }
+    // Then non-retain
+    for &segment in &non_retain_segments {
+        process_segment(segment, visitor)?;
     }
     Ok(())
 }

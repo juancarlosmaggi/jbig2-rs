@@ -5,3 +5,4 @@ pub mod decode_pattern;
 pub mod decode_refinement;
 pub mod decode_symbol;
 pub mod decode_text;
+pub mod decode_utils;
