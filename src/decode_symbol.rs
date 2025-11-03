@@ -67,8 +67,30 @@ pub fn decode_symbol_dictionary(
                 // 6.5.8.2 Refinement/aggregate-coded symbol bitmap
                 let number_of_instances = decode_integer_context(decoding_context, "IAAI")?.unwrap_or(1);
                 if number_of_instances > 1 {
-                    // Aggregate symbol - not implemented yet
-                    return Err(Jbig2Error::new("aggregate symbols not implemented"));
+                    // Aggregate symbol - decode text region
+                    let mut input_symbols = params.symbols.clone();
+                    input_symbols.extend(new_symbols.clone());
+                    let text_params = crate::decode_text::TextRegionParams {
+                        huffman: false, // Aggregate doesn't use Huffman
+                        refinement: params.refinement,
+                        width: current_width as usize,
+                        height: current_height as usize,
+                        default_pixel_value: 0,
+                        number_of_symbol_instances: number_of_instances as usize,
+                        strip_size: 1,
+                        input_symbols,
+                        symbol_code_length: symbol_code_length as usize,
+                        transposed: false,
+                        ds_offset: 0,
+                        reference_corner: 1, // top left
+                        combination_operator: 0, // OR
+                        log_strip_size: 0,
+                        huffman_tables: None,
+                        refinement_template_index: params.refinement_template_index,
+                        refinement_at: params.refinement_at.clone(),
+                    };
+                    let bitmap = crate::decode_text::decode_text_region(&text_params, decoding_context, None)?;
+                    new_symbols.push(bitmap);
                 } else {
                     let symbol_id = decode_iaid_context(decoding_context, symbol_code_length as usize)?;
                     let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);

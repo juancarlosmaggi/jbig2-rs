@@ -221,10 +221,45 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     if pos + 4 > data.len() {
         return Err(Jbig2Error::new("insufficient data for segment length"));
     }
-    let length = read_u32(data, pos) as usize;
+    let mut length = read_u32(data, pos) as usize;
     pos += 4;
     if length == 0xffffffff {
-        return Err(Jbig2Error::new("unknown segment length not supported"));
+        if segment_type == 38 {
+            // ImmediateGenericRegion - search for end pattern
+            if pos + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 > data.len() {
+                return Err(Jbig2Error::new("insufficient data for generic region info"));
+            }
+            let region_info = read_region_segment_information(data, pos);
+            let generic_region_flags = data[pos + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
+            let mmr = (generic_region_flags & 1) != 0;
+            // Search for end pattern
+            let search_pattern_length = 6;
+            let mut search_pattern = [0u8; 6];
+            if !mmr {
+                search_pattern[0] = 0xff;
+                search_pattern[1] = 0xac;
+            }
+            search_pattern[2] = ((region_info.height >> 24) & 0xff) as u8;
+            search_pattern[3] = ((region_info.height >> 16) & 0xff) as u8;
+            search_pattern[4] = ((region_info.height >> 8) & 0xff) as u8;
+            search_pattern[5] = (region_info.height & 0xff) as u8;
+            let mut found = false;
+            for i in pos..data.len() {
+                if i + search_pattern_length > data.len() {
+                    break;
+                }
+                if data[i..i + search_pattern_length] == search_pattern {
+                    length = i + search_pattern_length - pos;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Err(Jbig2Error::new("segment end was not found"));
+            }
+        } else {
+            return Err(Jbig2Error::new("invalid unknown segment length"));
+        }
     }
     Ok(SegmentHeader {
         number,

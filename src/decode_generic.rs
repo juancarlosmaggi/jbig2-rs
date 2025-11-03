@@ -126,14 +126,14 @@ pub fn decode_bitmap(params: &DecodeBitmapParams, decoding_context: &mut Decodin
     let mut contexts = decoding_context.get_contexts("GB");
     let mut ltp = 0i32;
     for i in 0..params.height {
-        if params.prediction {
+        if params.prediction && i > 0 {
             let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize) as i32;
             ltp ^= sltp;
             if ltp != 0 {
                 let src_start = (i - 1) * bitmap.stride;
                 let dst_start = i * bitmap.stride;
                 let (before, after) = bitmap.data.split_at_mut(dst_start);
-                let src_row = &before[src_start..];
+                let src_row = &before[src_start..src_start + bitmap.stride];
                 let dst_row = &mut after[0..bitmap.stride];
                 dst_row.copy_from_slice(src_row);
                 continue;

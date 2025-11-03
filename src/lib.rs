@@ -22,7 +22,6 @@ pub use image::{Jbig2Document, Jbig2Image};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
 
     #[test]
     fn test_jbig2_document_creation() {

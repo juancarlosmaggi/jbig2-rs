@@ -2,6 +2,11 @@ use crate::bitmap::Bitmap;
 use crate::contexts::{DecodingContext};
 use crate::error::Jbig2Error;
 
+const REFINEMENT_REUSED_CONTEXTS: [u16; 2] = [
+    0x0020, // '000' + '0' (coding) + '00010000' + '0' (reference)
+    0x0008, // '0000' + '001000'
+];
+
 #[derive(Clone)]
 pub struct RefinementTemplate {
     pub coding: Vec<(i8, i8)>,
@@ -38,9 +43,6 @@ pub struct RefinementParams<'a> {
 }
 
 pub fn decode_refinement<'a>(params: &RefinementParams<'a>, decoding_context: &mut DecodingContext) -> Result<Bitmap, Jbig2Error> {
-    if params.prediction {
-        return Err(Jbig2Error::new("prediction is not supported"));
-    }
     let mut coding_template = get_refinement_template(params.template_index).coding;
     if params.template_index == 0 {
         coding_template.push(params.at[0]);
@@ -57,10 +59,24 @@ pub fn decode_refinement<'a>(params: &RefinementParams<'a>, decoding_context: &m
     let reference_template_y = reference_template.iter().map(|&(_, y)| y as i32).collect::<Vec<_>>();
     let reference_width = params.reference_bitmap.width;
     let reference_height = params.reference_bitmap.height;
+    let pseudo_pixel_context = REFINEMENT_REUSED_CONTEXTS[params.template_index];
     let mut contexts = decoding_context.get_contexts("GR");
     let mut decoder = decoding_context.get_decoder();
     let mut bitmap = Bitmap::new(params.width, params.height);
+    let mut ltp = 0i32;
     for i in 0..params.height {
+        if params.prediction && i > 0 {
+            let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize) as i32;
+            ltp ^= sltp;
+            if ltp != 0 {
+                // Duplicate previous row
+                for j in 0..params.width {
+                    let pixel = bitmap.get_pixel(j, i - 1);
+                    bitmap.set_pixel(j, i, pixel);
+                }
+                continue;
+            }
+        }
         for j in 0..params.width {
             let mut context_label = 0u16;
             for k in 0..coding_template_length {
