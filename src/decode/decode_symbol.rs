@@ -40,8 +40,10 @@ pub fn decode_symbol_dictionary(
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
-    // Note: Symbol refinement with Huffman is not fully implemented in reference JS
-    // but we allow it to fall back to arithmetic decoding for now
+    // Note: Symbol refinement with Huffman is not supported in reference JS
+    if params.refinement && params.huffman {
+        return Err(Jbig2Error::new("symbol refinement with Huffman is not supported"));
+    }
 
     // Validate parameters
     if params.number_of_new_symbols == 0 {

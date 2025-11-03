@@ -47,6 +47,9 @@ pub fn decode_text_region(
     if params.combination_operator > 7 {
         return Err(Jbig2Error::new("invalid combination operator"));
     }
+    if params.refinement && params.huffman {
+        return Err(Jbig2Error::new("refinement with Huffman is not supported"));
+    }
 
     // Prepare bitmap
     let mut bitmap = Bitmap::new(params.width, params.height);

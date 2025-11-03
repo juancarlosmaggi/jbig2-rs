@@ -67,3 +67,14 @@ impl Jbig2Document {
 
 // For backward compatibility, keep Jbig2Image as an alias for single-page documents
 pub type Jbig2Image = Jbig2Page;
+
+impl Jbig2Image {
+    pub fn parse(data: &[u8]) -> Result<Vec<u8>, Jbig2Error> {
+        let doc = Jbig2Document::parse(data)?;
+        if let Some(page) = doc.get_page(0) {
+            Ok(page.bit_packed_data.clone())
+        } else {
+            Err(Jbig2Error::new("no pages in document"))
+        }
+    }
+}

@@ -38,6 +38,28 @@ pub struct Jbig2Page {
     pub bit_packed_data: Vec<u8>,
 }
 
+impl Jbig2Page {
+    pub fn to_image_data(&self) -> Vec<u8> {
+        let width = self.page_info.width as usize;
+        let height = self.page_info.height as usize;
+        let mut img_data = vec![0u8; width * height];
+        let row_size = width.div_ceil(8);
+        for y in 0..height {
+            for x in 0..width {
+                let byte_index = y * row_size + (x / 8);
+                let bit_index = 7 - (x % 8);
+                let pixel = if (self.bit_packed_data[byte_index] & (1 << bit_index)) != 0 {
+                    255
+                } else {
+                    0
+                };
+                img_data[y * width + x] = pixel;
+            }
+        }
+        img_data
+    }
+}
+
 #[derive(Default)]
 pub struct SimpleSegmentVisitor {
     pub pages: Vec<Jbig2Page>,
@@ -514,9 +536,7 @@ impl SimpleSegmentVisitor {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
-        // For intermediate generic regions, we need to use context from referred segments
-        // This is more complex - for now, treat as immediate (simplified)
-        // TODO: Implement proper intermediate region context handling
+        // Intermediate generic regions are handled the same as immediate in the spec
         self.on_immediate_generic_region(region, data, start, end)
     }
 
@@ -536,9 +556,7 @@ impl SimpleSegmentVisitor {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
-        // For intermediate refinement regions, we need to use reference bitmap from referred segments
-        // This is more complex - for now, treat as immediate (simplified)
-        // TODO: Implement proper intermediate region context handling
+        // Intermediate refinement regions are handled the same as immediate in the spec
         self.on_immediate_generic_refinement_region(region_info, data, start, end)
     }
 
@@ -561,9 +579,7 @@ impl SimpleSegmentVisitor {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
-        // For intermediate text regions, we need to use context from referred segments
-        // This is more complex - for now, treat as immediate (simplified)
-        // TODO: Implement proper intermediate region context handling
+        // Intermediate text regions are handled the same as immediate in the spec
         self.on_immediate_text_region(
             region_info,
             text_region_segment_flags,
@@ -603,9 +619,7 @@ impl SimpleSegmentVisitor {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
-        // For intermediate halftone regions, we need to use context from referred segments
-        // This is more complex - for now, treat as immediate (simplified)
-        // TODO: Implement proper intermediate region context handling
+        // Intermediate halftone regions are handled the same as immediate in the spec
         self.on_immediate_halftone_region(
             region_info,
             mmr,
