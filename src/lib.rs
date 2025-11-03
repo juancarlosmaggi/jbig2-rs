@@ -1,5 +1,6 @@
 pub mod arithmetic;
 pub mod bitmap;
+pub mod bitmap_utils;
 pub mod contexts;
 pub mod core_utils;
 pub mod decode;
@@ -9,6 +10,7 @@ pub mod huffman;
 pub mod image;
 pub mod reader;
 pub mod segment;
+pub mod validation;
 pub mod visitor;
 pub use error::Jbig2Error;
 pub use image::{Jbig2Document, Jbig2Image};

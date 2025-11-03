@@ -4,6 +4,7 @@ use crate::decoder::{decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
 use crate::reader::Reader;
+use crate::validation;
 
 fn read_uncompressed_bitmap(
     reader: &mut Reader,
@@ -49,12 +50,8 @@ pub fn decode_symbol_dictionary(
     if params.number_of_new_symbols == 0 {
         return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
-    if params.number_of_new_symbols > 65535 {
-        return Err(Jbig2Error::new("too many new symbols"));
-    }
-    if params.template_index > 3 {
-        return Err(Jbig2Error::new("invalid template index"));
-    }
+    validation::validate_symbol_count(params.number_of_new_symbols)?;
+    validation::validate_template_index(params.template_index)?;
 
     let mut new_symbols = Vec::new();
     let mut current_height = 0i32;

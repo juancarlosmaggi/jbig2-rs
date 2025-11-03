@@ -1,4 +1,5 @@
 use crate::bitmap::Bitmap;
+use crate::bitmap_utils;
 use crate::contexts::DecodingContext;
 use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
@@ -32,14 +33,7 @@ pub fn decode_halftone_region(
         return Err(Jbig2Error::new("only OR combination operator is supported"));
     }
     // Prepare bitmap
-    let mut region_bitmap = Bitmap::new(params.region_width, params.region_height);
-    if params.default_pixel_value != 0 {
-        for y in 0..params.region_height {
-            for x in 0..params.region_width {
-                region_bitmap.set_pixel(x, y, 1);
-            }
-        }
-    }
+    let mut region_bitmap = bitmap_utils::create_initialized_bitmap(params.region_width, params.region_height, params.default_pixel_value);
     let number_of_patterns = params.patterns.len();
     if number_of_patterns == 0 {
         return Ok(region_bitmap);

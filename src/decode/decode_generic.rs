@@ -3,6 +3,7 @@ use crate::contexts::DecodingContext;
 use crate::decode::decode_mmr::decode_mmr_bitmap;
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
+use crate::validation;
 const OLD_PIXEL_MASK: u16 = 0x7bf7;
 const REUSED_CONTEXTS: [u16; 4] = [
     0x9b25, // 10011 0110010 0101
@@ -123,18 +124,9 @@ pub fn decode_bitmap(
     params: &DecodeBitmapParams,
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    // Validate bitmap dimensions
-    if params.width == 0 || params.height == 0 {
-        return Err(Jbig2Error::new(
-            "invalid bitmap dimensions: width and height must be positive",
-        ));
-    }
-    if params.width > 65535 || params.height > 65535 {
-        return Err(Jbig2Error::new("bitmap dimensions too large"));
-    }
-    if params.template_index > 3 {
-        return Err(Jbig2Error::new("invalid template index"));
-    }
+    // Validate parameters
+    validation::validate_bitmap_dimensions(params.width, params.height)?;
+    validation::validate_template_index(params.template_index)?;
 
     if params.mmr {
         let mut reader = Reader::new(

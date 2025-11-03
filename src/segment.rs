@@ -141,6 +141,20 @@ pub fn read_u32(data: &[u8], pos: usize) -> u32 {
         | (data[pos + 3] as u32)
 }
 
+pub fn parse_at_parameters(data: &[u8], mut pos: usize, at_length: usize) -> Result<Vec<(i8, i8)>, Jbig2Error> {
+    let mut at = vec![];
+    for _ in 0..at_length {
+        if pos + 1 >= data.len() {
+            return Err(Jbig2Error::new("insufficient data for AT flags"));
+        }
+        let x = data[pos] as i8;
+        let y = data[pos + 1] as i8;
+        at.push((x, y));
+        pos += 2;
+    }
+    Ok(at)
+}
+
 pub fn read_u16(data: &[u8], pos: usize) -> u16 {
     ((data[pos] as u16) << 8) | (data[pos + 1] as u16)
 }
@@ -292,17 +306,8 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
     let template = ((generic_region_segment_flags >> 1) & 3) as usize;
     let prediction = (generic_region_segment_flags & 8) != 0;
     let at_length = if template == 0 { 4 } else { 1 };
-    let mut at = vec![];
-    let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1;
-    for _ in 0..at_length {
-        if pos + 1 >= data.len() {
-            return Err(Jbig2Error::new("insufficient data for AT flags"));
-        }
-        let x = data[pos] as i8;
-        let y = data[pos + 1] as i8;
-        at.push((x, y));
-        pos += 2;
-    }
+    let pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1;
+    let at = parse_at_parameters(data, pos, at_length)?;
     Ok(GenericRegion {
         info,
         mmr,

@@ -1,9 +1,11 @@
 use crate::bitmap::Bitmap;
+use crate::bitmap_utils;
 use crate::contexts::DecodingContext;
 use crate::decoder::{decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::reader::Reader;
+use crate::validation;
 
 #[derive(Clone)]
 pub struct TextRegionParams {
@@ -32,34 +34,18 @@ pub fn decode_text_region(
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Bitmap, Jbig2Error> {
     // Validate parameters
-    if params.width == 0 || params.height == 0 {
-        return Err(Jbig2Error::new("invalid text region dimensions"));
-    }
-    if params.width > 65535 || params.height > 65535 {
-        return Err(Jbig2Error::new("text region dimensions too large"));
-    }
+    validation::validate_bitmap_dimensions(params.width, params.height)?;
     if params.input_symbols.is_empty() {
         return Err(Jbig2Error::new("no input symbols for text region"));
     }
-    if params.reference_corner > 3 {
-        return Err(Jbig2Error::new("invalid reference corner"));
-    }
-    if params.combination_operator > 7 {
-        return Err(Jbig2Error::new("invalid combination operator"));
-    }
+    validation::validate_reference_corner(params.reference_corner)?;
+    validation::validate_combination_operator(params.combination_operator)?;
     if params.refinement && params.huffman {
         return Err(Jbig2Error::new("refinement with Huffman is not supported"));
     }
 
     // Prepare bitmap
-    let mut bitmap = Bitmap::new(params.width, params.height);
-    if params.default_pixel_value != 0 {
-        for y in 0..params.height {
-            for x in 0..params.width {
-                bitmap.set_pixel(x, y, 1);
-            }
-        }
-    }
+    let mut bitmap = bitmap_utils::create_initialized_bitmap(params.width, params.height, params.default_pixel_value);
     let huffman_tables = params.huffman_tables.as_ref();
     let mut strip_t = if params.huffman {
         let tables = huffman_tables.unwrap();
@@ -208,15 +194,7 @@ pub fn decode_text_region(
                         if col >= 0 && col < params.width as i32 {
                             let src_pixel = final_symbol_bitmap.get_pixel(t2, s2);
                             let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
-                            let new_pixel = match params.combination_operator {
-                                0 => src_pixel,             // OR
-                                2 => dst_pixel ^ src_pixel, // XOR
-                                _ => {
-                                    return Err(Jbig2Error::new(
-                                        "unsupported combination operator",
-                                    ));
-                                }
-                            };
+                            let new_pixel = bitmap_utils::apply_combination_operator(dst_pixel, src_pixel, params.combination_operator);
                             bitmap.set_pixel(col as usize, row as usize, new_pixel);
                         }
                     }
@@ -232,15 +210,7 @@ pub fn decode_text_region(
                         if col >= 0 && col < params.width as i32 {
                             let src_pixel = final_symbol_bitmap.get_pixel(s2, t2);
                             let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
-                            let new_pixel = match params.combination_operator {
-                                0 => src_pixel,             // OR
-                                2 => dst_pixel ^ src_pixel, // XOR
-                                _ => {
-                                    return Err(Jbig2Error::new(
-                                        "unsupported combination operator",
-                                    ));
-                                }
-                            };
+                            let new_pixel = bitmap_utils::apply_combination_operator(dst_pixel, src_pixel, params.combination_operator);
                             bitmap.set_pixel(col as usize, row as usize, new_pixel);
                         }
                     }

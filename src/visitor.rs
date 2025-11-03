@@ -1,4 +1,5 @@
 use crate::bitmap::Bitmap;
+use crate::bitmap_utils;
 use crate::contexts::DecodingContext;
 use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::decode::decode_halftone::decode_halftone_region;
@@ -8,7 +9,7 @@ use crate::decode::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
 use crate::huffman::{HuffmanTable, TextRegionHuffmanParams, decode_tables_segment};
 use crate::reader::Reader;
-use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, read_u16};
+use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, parse_at_parameters, read_u16};
 use std::collections::HashMap;
 
 fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
@@ -76,6 +77,16 @@ impl SimpleSegmentVisitor {
         Self::default()
     }
 
+    fn collect_input_symbols(&self, referred_segments: &[u32]) -> Vec<Bitmap> {
+        let mut input_symbols = Vec::new();
+        for &segment_id in referred_segments {
+            if let Some(symbols) = self.symbols.get(&segment_id) {
+                input_symbols.extend(symbols.clone());
+            }
+        }
+        input_symbols
+    }
+
     pub fn on_page_information(&mut self, info: PageInfo) {
         // If we have a previous page, finalize it
         if let (Some(page_info), Some(bitmap)) =
@@ -88,14 +99,7 @@ impl SimpleSegmentVisitor {
         self.current_page_info = Some(info.clone());
         let width = info.width as usize;
         let height = info.height as usize;
-        let mut bitmap = Bitmap::new(width, height);
-        if info.default_pixel_value != 0 {
-            for y in 0..height {
-                for x in 0..width {
-                    bitmap.set_pixel(x, y, 1);
-                }
-            }
-        }
+        let bitmap = bitmap_utils::create_initialized_bitmap(width, height, info.default_pixel_value);
         self.current_bitmap = Some(bitmap);
     }
 
@@ -144,14 +148,7 @@ impl SimpleSegmentVisitor {
                 let dx = reg_x + j;
                 let dy = reg_y + i;
                 let old_dst = dst.get_pixel(dx, dy);
-                let new_val = match combo_op {
-                    0 => src,                  // replace
-                    1 => old_dst | src,        // OR
-                    2 => old_dst & src,        // AND
-                    3 => old_dst ^ src,        // XOR
-                    4 => !(old_dst ^ src) & 1, // XNOR (bi-level)
-                    _ => old_dst,              // undefined: no-op
-                };
+                let new_val = bitmap_utils::apply_page_combination_operator(old_dst, src, combo_op);
                 dst.set_pixel(dx, dy, new_val);
             }
         }
@@ -199,12 +196,13 @@ impl SimpleSegmentVisitor {
         let generic_region_segment_flags = data[pos];
         pos += 1;
         let template = ((generic_region_segment_flags >> 1) & 3) as usize;
-        let mut at = Vec::new();
-        if template == 0 {
-            at.push((data[pos] as i8, data[pos + 1] as i8));
-            at.push((data[pos + 2] as i8, data[pos + 3] as i8));
-            pos += 4;
-        }
+        let at_length = if template == 0 { 2 } else { 0 };
+        let at = if at_length > 0 {
+            parse_at_parameters(data, pos, at_length)?
+        } else {
+            Vec::new()
+        };
+        let pos = if at_length > 0 { pos + at_length * 2 } else { pos };
         // Get reference bitmap from referred segment
         let reference_bitmap = if let Some(ref_bitmap) = self.current_bitmap.as_ref() {
             ref_bitmap
@@ -247,6 +245,11 @@ impl SimpleSegmentVisitor {
         }
         if !huffman {
             let at_length = if template == 0 { 4 } else { 1 };
+            at = parse_at_parameters(params.data, pos, at_length)?;
+            pos += at_length * 2;
+        }
+        if !huffman {
+            let at_length = if template == 0 { 4 } else { 1 };
             for _ in 0..at_length {
                 let x = params.data[pos] as i8;
                 let y = params.data[pos + 1] as i8;
@@ -263,12 +266,7 @@ impl SimpleSegmentVisitor {
             }
         }
         // Collect input symbols from referred segments
-        let mut input_symbols = Vec::new();
-        for &segment_id in params.referred_segments {
-            if let Some(symbols) = self.symbols.get(&segment_id) {
-                input_symbols.extend(symbols.clone());
-            }
-        }
+        let input_symbols = self.collect_input_symbols(params.referred_segments);
         let slice = &params.data[pos..params.end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
 
@@ -337,12 +335,7 @@ impl SimpleSegmentVisitor {
         let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
         let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
         // Collect input symbols from referred segments
-        let mut input_symbols = Vec::new();
-        for &segment_id in referred_segments {
-            if let Some(symbols) = self.symbols.get(&segment_id) {
-                input_symbols.extend(symbols.clone());
-            }
-        }
+        let input_symbols = self.collect_input_symbols(referred_segments);
         let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
         // Parse Huffman flags and refinement AT
         let mut refinement_at = Vec::new();
