@@ -18,12 +18,21 @@ impl Bitmap {
             return 0;
         }
         let byte_index = y * self.stride + (x >> 3);
+        if byte_index >= self.data.len() {
+            return 0;
+        }
         let bit_index = 7 - (x & 7);
         (self.data[byte_index] >> bit_index) & 1
     }
 
     pub fn set_pixel(&mut self, x: usize, y: usize, value: u8) {
+        if y >= self.height || x >= self.width {
+            return; // Silently ignore out-of-bounds writes
+        }
         let byte_index = y * self.stride + (x >> 3);
+        if byte_index >= self.data.len() {
+            return;
+        }
         let bit_index = 7 - (x & 7);
         if value != 0 {
             self.data[byte_index] |= 1 << bit_index;

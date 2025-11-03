@@ -1,31 +1,26 @@
 use crate::error::Jbig2Error;
-use crate::bitmap::Bitmap;
 use crate::segment::{read_segments, process_segments};
-use crate::visitor::SimpleSegmentVisitor;
+use crate::visitor::{SimpleSegmentVisitor, Jbig2Page};
 
 #[derive(Clone)]
-pub struct Jbig2Image {
-    pub width: usize,
-    pub height: usize,
-    pub bitmap: Bitmap,
+pub struct Jbig2Document {
+    pub pages: Vec<Jbig2Page>,
 }
 
-impl Default for Jbig2Image {
+impl Default for Jbig2Document {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Jbig2Image {
+impl Jbig2Document {
     pub fn new() -> Self {
-        Jbig2Image {
-            width: 0,
-            height: 0,
-            bitmap: Bitmap::new(0, 0),
+        Jbig2Document {
+            pages: Vec::new(),
         }
     }
 
-    pub fn parse(&mut self, data: &[u8]) -> Result<(), Jbig2Error> {
+    pub fn parse(data: &[u8]) -> Result<Self, Jbig2Error> {
         if data.len() < 8 || &data[0..8] != b"\x97\x4a\x42\x32\x0d\x0a\x1a\x0a" {
             return Err(Jbig2Error::new("invalid header"));
         }
@@ -33,10 +28,21 @@ impl Jbig2Image {
         let segments = read_segments(data, pos, data.len())?;
         let mut visitor = SimpleSegmentVisitor::new();
         process_segments(&segments, &mut visitor)?;
-        let page_info = visitor.current_page_info.ok_or(Jbig2Error::new("no page info"))?;
-        self.width = page_info.width as usize;
-        self.height = page_info.height as usize;
-        self.bitmap = visitor.bitmap.ok_or(Jbig2Error::new("no bitmap"))?.clone();
-        Ok(())
+        // Finalize any remaining page
+        visitor.finalize_current_page();
+        Ok(Jbig2Document {
+            pages: visitor.pages,
+        })
+    }
+
+    pub fn page_count(&self) -> usize {
+        self.pages.len()
+    }
+
+    pub fn get_page(&self, index: usize) -> Option<&Jbig2Page> {
+        self.pages.get(index)
     }
 }
+
+// For backward compatibility, keep Jbig2Image as an alias for single-page documents
+pub type Jbig2Image = Jbig2Page;

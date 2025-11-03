@@ -149,12 +149,18 @@ pub fn read_u16(data: &[u8], pos: usize) -> u16 {
 }
 
 pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
+    if start + 11 > data.len() {
+        return Err(Jbig2Error::new("segment header too short"));
+    }
     let mut pos = start;
     let number = read_u32(data, pos);
     pos += 4;
     let flags = data[pos];
     pos += 1;
     let segment_type = (flags & 0x3f) as usize;
+    if segment_type >= SEGMENT_TYPES.len() {
+        return Err(Jbig2Error::new("invalid segment type"));
+    }
     let type_name = SEGMENT_TYPES[segment_type].to_string();
     let deferred_non_retain = (flags & 0x80) != 0;
     let page_association_field_size = (flags & 0x40) != 0;
@@ -163,11 +169,17 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let mut referred_to_count = ((referred_flags >> 5) & 7) as usize;
     let mut retain_bits = vec![referred_flags & 31];
     if referred_flags == 7 {
+        if pos + 3 > data.len() {
+            return Err(Jbig2Error::new("insufficient data for extended referred-to count"));
+        }
         let extended_count = read_u32(data, pos - 1) & 0x1fffffff;
         referred_to_count = extended_count as usize;
         pos += 3;
         let bytes = (referred_to_count + 7) >> 3;
-        retain_bits = data[pos..pos + bytes.min(data.len() - pos)].to_vec();
+        if pos + bytes > data.len() {
+            return Err(Jbig2Error::new("insufficient data for retain bits"));
+        }
+        retain_bits = data[pos..pos + bytes].to_vec();
         pos += bytes;
     } else if referred_flags == 5 || referred_flags == 6 {
         return Err(Jbig2Error::new("invalid referred-to flags"));
@@ -180,6 +192,9 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     }
     let mut referred_to = vec![];
     for _ in 0..referred_to_count {
+        if pos + referred_to_segment_number_size > data.len() {
+            return Err(Jbig2Error::new("insufficient data for referred-to segments"));
+        }
         let num = match referred_to_segment_number_size {
             1 => data[pos] as u32,
             2 => ((data[pos] as u16) << 8 | data[pos + 1] as u16) as u32,
@@ -189,14 +204,23 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
         pos += referred_to_segment_number_size;
     }
     let page_association = if page_association_field_size {
+        if pos + 4 > data.len() {
+            return Err(Jbig2Error::new("insufficient data for page association"));
+        }
         let pa = read_u32(data, pos);
         pos += 4;
         pa
     } else {
+        if pos + 1 > data.len() {
+            return Err(Jbig2Error::new("insufficient data for page association"));
+        }
         let pa = data[pos] as u32;
         pos += 1;
         pa
     };
+    if pos + 4 > data.len() {
+        return Err(Jbig2Error::new("insufficient data for segment length"));
+    }
     let length = read_u32(data, pos) as usize;
     pos += 4;
     if length == 0xffffffff {
@@ -289,6 +313,15 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
     let data = segment.data;
     let start = segment.start;
     let end = segment.end;
+
+    // Skip deferred non-retain segments for now (not implemented)
+    if header.deferred_non_retain {
+        return Ok(());
+    }
+
+    // For now, process all segments regardless of page association
+    // Full page association support would require tracking current page context
+
     match header.segment_type {
         0 => { // SymbolDictionary
             let dictionary_flags = read_u16(data, start);
@@ -405,6 +438,61 @@ pub fn process_segment<'a>(segment: &Segment<'a>, visitor: &mut SimpleSegmentVis
         42 | 43 => { // ImmediateGenericRefinementRegion / ImmediateLosslessGenericRefinementRegion
             let region_info = read_region_segment_information(data, start);
             visitor.on_immediate_generic_refinement_region(&region_info, data, start, end)?;
+        }
+        4 => { // IntermediateTextRegion
+            let region_info = read_region_segment_information(data, start);
+            let text_region_segment_flags = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH);
+            let number_of_symbol_instances = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2);
+            visitor.on_intermediate_text_region(
+                &region_info,
+                text_region_segment_flags,
+                number_of_symbol_instances,
+                &header.referred_to,
+                data,
+                start,
+                end,
+            )?;
+        }
+        20 => { // IntermediateHalftoneRegion
+            let region_info = read_region_segment_information(data, start);
+            let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
+            let mmr = (halftone_region_flags & 1) != 0;
+            let template = ((halftone_region_flags >> 1) & 3) as usize;
+            let enable_skip = (halftone_region_flags & 8) != 0;
+            let combination_operator = ((halftone_region_flags >> 4) & 7) as usize;
+            let default_pixel_value = (halftone_region_flags >> 7) & 1;
+            let grid_width = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
+            let grid_height = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
+            let grid_offset_x = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
+            let grid_offset_y = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
+            let grid_vector_x = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
+            let grid_vector_y = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
+            visitor.on_intermediate_halftone_region(
+                &region_info,
+                mmr,
+                template,
+                enable_skip,
+                combination_operator,
+                default_pixel_value,
+                grid_width,
+                grid_height,
+                grid_offset_x,
+                grid_offset_y,
+                grid_vector_x,
+                grid_vector_y,
+                &header.referred_to,
+                data,
+                start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21,
+                end,
+            )?;
+        }
+        36 => { // IntermediateGenericRegion
+            let generic_region = read_generic_region(data, start)?;
+            visitor.on_intermediate_generic_region(&generic_region, &header.referred_to, data, start, end)?;
+        }
+        40 => { // IntermediateGenericRefinementRegion
+            let region_info = read_region_segment_information(data, start);
+            visitor.on_intermediate_generic_refinement_region(&region_info, &header.referred_to, data, start, end)?;
         }
         49 => { // EndOfPage
             // No action needed
