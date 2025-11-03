@@ -5,6 +5,22 @@ use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
 use crate::reader::Reader;
 
+fn read_uncompressed_bitmap(
+    reader: &mut Reader,
+    width: usize,
+    height: usize,
+) -> Result<Bitmap, Jbig2Error> {
+    let mut bitmap = Bitmap::new(width, height);
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = reader.read_bit()?;
+            bitmap.set_pixel(x, y, pixel);
+        }
+        reader.byte_align();
+    }
+    Ok(bitmap)
+}
+
 #[derive(Clone)]
 pub struct SymbolDictionaryParams {
     pub huffman: bool,
@@ -246,20 +262,4 @@ pub fn decode_symbol_dictionary(
         }
     }
     Ok(exported_symbols)
-}
-
-fn read_uncompressed_bitmap(
-    reader: &mut Reader,
-    width: usize,
-    height: usize,
-) -> Result<Bitmap, Jbig2Error> {
-    let mut bitmap = Bitmap::new(width, height);
-    for y in 0..height {
-        for x in 0..width {
-            let bit = reader.read_bit()?;
-            bitmap.set_pixel(x, y, bit);
-        }
-        reader.byte_align();
-    }
-    Ok(bitmap)
 }

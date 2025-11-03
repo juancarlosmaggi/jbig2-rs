@@ -389,10 +389,8 @@ pub fn process_segment<'a>(
         return Err(Jbig2Error::new("segment data shorter than expected"));
     }
 
-    // Skip deferred non-retain segments for now (not implemented)
-    if header.deferred_non_retain {
-        return Ok(());
-    }
+    // Note: Deferred non-retain segments are processed normally for now
+    // Full implementation would require ordering based on retain bits
 
     match header.segment_type {
         0 => {

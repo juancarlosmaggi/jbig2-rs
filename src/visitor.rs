@@ -11,10 +11,31 @@ use crate::reader::Reader;
 use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, read_u16};
 use std::collections::HashMap;
 
+fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
+    let width = bitmap.width;
+    let height = bitmap.height;
+    let row_size = width.div_ceil(8); // bytes per row
+    let mut packed = vec![0u8; row_size * height];
+
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = bitmap.get_pixel(x, y);
+            if pixel != 0 {
+                let byte_index = y * row_size + (x / 8);
+                let bit_index = 7 - (x % 8); // MSB first
+                packed[byte_index] |= 1 << bit_index;
+            }
+        }
+    }
+
+    packed
+}
+
 #[derive(Clone)]
 pub struct Jbig2Page {
     pub page_info: PageInfo,
     pub bitmap: Bitmap,
+    pub bit_packed_data: Vec<u8>,
 }
 
 #[derive(Default)]
@@ -38,7 +59,8 @@ impl SimpleSegmentVisitor {
         if let (Some(page_info), Some(bitmap)) =
             (self.current_page_info.take(), self.current_bitmap.take())
         {
-            self.pages.push(Jbig2Page { page_info, bitmap });
+            let bit_packed_data = bitmap_to_bit_packed(&bitmap);
+            self.pages.push(Jbig2Page { page_info, bitmap, bit_packed_data });
         }
 
         self.current_page_info = Some(info.clone());
@@ -479,11 +501,19 @@ impl SimpleSegmentVisitor {
     pub fn on_intermediate_generic_region(
         &mut self,
         region: &GenericRegion,
-        _referred_segments: &[u32],
+        referred_segments: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        // Basic validation: check that referred segments exist
+        for &segment_id in referred_segments {
+            if !self.symbols.contains_key(&segment_id) &&
+               !self.patterns.contains_key(&segment_id) &&
+               !self.custom_tables.contains_key(&segment_id) {
+                return Err(Jbig2Error::new("referred segment not found"));
+            }
+        }
         // For intermediate generic regions, we need to use context from referred segments
         // This is more complex - for now, treat as immediate (simplified)
         // TODO: Implement proper intermediate region context handling
@@ -493,11 +523,19 @@ impl SimpleSegmentVisitor {
     pub fn on_intermediate_generic_refinement_region(
         &mut self,
         region_info: &RegionInfo,
-        _referred_segments: &[u32],
+        referred_segments: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        // Basic validation: check that referred segments exist
+        for &segment_id in referred_segments {
+            if !self.symbols.contains_key(&segment_id) &&
+               !self.patterns.contains_key(&segment_id) &&
+               !self.custom_tables.contains_key(&segment_id) {
+                return Err(Jbig2Error::new("referred segment not found"));
+            }
+        }
         // For intermediate refinement regions, we need to use reference bitmap from referred segments
         // This is more complex - for now, treat as immediate (simplified)
         // TODO: Implement proper intermediate region context handling
@@ -510,11 +548,19 @@ impl SimpleSegmentVisitor {
         region_info: &RegionInfo,
         text_region_segment_flags: u16,
         number_of_symbol_instances: u32,
-        _referred_segments: &[u32],
+        referred_segments: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        // Basic validation: check that referred segments exist
+        for &segment_id in referred_segments {
+            if !self.symbols.contains_key(&segment_id) &&
+               !self.patterns.contains_key(&segment_id) &&
+               !self.custom_tables.contains_key(&segment_id) {
+                return Err(Jbig2Error::new("referred segment not found"));
+            }
+        }
         // For intermediate text regions, we need to use context from referred segments
         // This is more complex - for now, treat as immediate (simplified)
         // TODO: Implement proper intermediate region context handling
@@ -522,7 +568,7 @@ impl SimpleSegmentVisitor {
             region_info,
             text_region_segment_flags,
             number_of_symbol_instances,
-            _referred_segments,
+            referred_segments,
             data,
             start,
             end,
@@ -544,11 +590,19 @@ impl SimpleSegmentVisitor {
         grid_offset_y: i32,
         grid_vector_x: i16,
         grid_vector_y: i16,
-        _referred_segments: &[u32],
+        referred_segments: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        // Basic validation: check that referred segments exist
+        for &segment_id in referred_segments {
+            if !self.symbols.contains_key(&segment_id) &&
+               !self.patterns.contains_key(&segment_id) &&
+               !self.custom_tables.contains_key(&segment_id) {
+                return Err(Jbig2Error::new("referred segment not found"));
+            }
+        }
         // For intermediate halftone regions, we need to use context from referred segments
         // This is more complex - for now, treat as immediate (simplified)
         // TODO: Implement proper intermediate region context handling
@@ -565,7 +619,7 @@ impl SimpleSegmentVisitor {
             grid_offset_y,
             grid_vector_x,
             grid_vector_y,
-            _referred_segments,
+            referred_segments,
             data,
             start,
             end,
@@ -577,7 +631,8 @@ impl SimpleSegmentVisitor {
         if let (Some(page_info), Some(bitmap)) =
             (self.current_page_info.take(), self.current_bitmap.take())
         {
-            self.pages.push(Jbig2Page { page_info, bitmap });
+            let bit_packed_data = bitmap_to_bit_packed(&bitmap);
+            self.pages.push(Jbig2Page { page_info, bitmap, bit_packed_data });
         }
     }
 }

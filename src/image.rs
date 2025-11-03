@@ -3,6 +3,13 @@ use crate::segment::{process_segments, read_segments};
 use crate::visitor::{Jbig2Page, SimpleSegmentVisitor};
 
 #[derive(Clone)]
+pub struct Jbig2Chunk {
+    pub data: Vec<u8>,
+    pub start: usize,
+    pub end: usize,
+}
+
+#[derive(Clone)]
 pub struct Jbig2Document {
     pub pages: Vec<Jbig2Page>,
 }
@@ -26,6 +33,22 @@ impl Jbig2Document {
         let segments = read_segments(data, pos, data.len())?;
         let mut visitor = SimpleSegmentVisitor::new();
         process_segments(&segments, &mut visitor)?;
+        // Finalize any remaining page
+        visitor.finalize_current_page();
+        Ok(Jbig2Document {
+            pages: visitor.pages,
+        })
+    }
+
+    pub fn parse_chunks(chunks: &[Jbig2Chunk]) -> Result<Self, Jbig2Error> {
+        let mut visitor = SimpleSegmentVisitor::new();
+        for chunk in chunks {
+            if chunk.start > chunk.end || chunk.end > chunk.data.len() {
+                return Err(Jbig2Error::new("invalid chunk bounds"));
+            }
+            let segments = read_segments(&chunk.data, chunk.start, chunk.end)?;
+            process_segments(&segments, &mut visitor)?;
+        }
         // Finalize any remaining page
         visitor.finalize_current_page();
         Ok(Jbig2Document {

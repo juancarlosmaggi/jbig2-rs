@@ -132,6 +132,9 @@ pub fn decode_bitmap(
     if params.width > 65535 || params.height > 65535 {
         return Err(Jbig2Error::new("bitmap dimensions too large"));
     }
+    if params.template_index > 3 {
+        return Err(Jbig2Error::new("invalid template index"));
+    }
 
     if params.mmr {
         let mut reader = Reader::new(
