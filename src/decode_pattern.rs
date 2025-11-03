@@ -29,6 +29,7 @@ pub fn decode_pattern_dictionary(
     } else {
         vec![]
     };
+
     let collective_width = (params.max_pattern_index + 1) * params.pattern_width;
     let decode_params = DecodeBitmapParams {
         mmr: params.mmr,
@@ -40,38 +41,32 @@ pub fn decode_pattern_dictionary(
         at,
     };
     let collective_bitmap = decode_bitmap(&decode_params, decoding_context)?;
-    // Divide collective bitmap into patterns
+
+    // Divide collective bitmap into individual patterns
     let mut patterns = Vec::new();
     for i in 0..=params.max_pattern_index {
-        let mut pattern_bitmap = Vec::new();
-        let x_min = params.pattern_width * i;
-        let x_max = x_min + params.pattern_width;
+        let x_start = i * params.pattern_width;
+        let mut pattern = Bitmap::new(params.pattern_width, params.pattern_height);
+
         for y in 0..params.pattern_height {
-            let row = collective_bitmap.data[y * collective_bitmap.stride..(y + 1) * collective_bitmap.stride]
-                .iter()
-                .skip(x_min / 8)
-                .take(x_max.div_ceil(8) - x_min / 8)
-                .cloned()
-                .collect::<Vec<_>>();
-            // For simplicity, create a new bitmap with the pattern
-            // This is a simplified implementation
-            let mut pattern = Bitmap::new(params.pattern_width, params.pattern_height);
-            for py in 0..params.pattern_height {
-                for px in 0..params.pattern_width {
-                    let src_x = x_min + px;
-                    let bit_index = 7 - (src_x & 7);
-                    let byte_index = src_x >> 3;
-                    if byte_index < row.len() {
-                        let pixel = (row[byte_index] >> bit_index) & 1;
-                        pattern.set_pixel(px, py, pixel);
-                    }
-                }
+            let collective_byte_offset = y * collective_bitmap.stride + (x_start >> 3);
+
+            // Extract bytes for this row of the pattern, handling bit alignment
+            for px in 0..params.pattern_width {
+                let collective_x = x_start + px;
+                let collective_byte_idx = collective_x >> 3;
+                let collective_bit_idx = 7 - (collective_x & 7);
+                let byte_idx_in_row = collective_byte_idx - (x_start >> 3);
+
+                let pixel = if byte_idx_in_row < collective_bitmap.data[collective_byte_offset..].len() {
+                    (collective_bitmap.data[collective_byte_offset + byte_idx_in_row] >> collective_bit_idx) & 1
+                } else {
+                    0
+                };
+                pattern.set_pixel(px, y, pixel);
             }
-            pattern_bitmap.push(pattern);
         }
-        if !pattern_bitmap.is_empty() {
-            patterns.push(pattern_bitmap[0].clone());
-        }
+        patterns.push(pattern);
     }
     Ok(patterns)
 }
