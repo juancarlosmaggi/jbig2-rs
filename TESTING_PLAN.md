@@ -12,12 +12,13 @@ This document outlines a comprehensive testing strategy for the jbig2-rs JBIG2 d
 - [x] Added unit tests for decode_pattern.rs (9/9 passing - pattern dictionary decoding and reuse)
 - [x] Added unit tests for decode_refinement.rs (10/10 passing - refinement region decoding and quality improvements)
 - [x] Added integration test resources (4 JBIG2/PNG pairs for different weight/compression settings)
+- [x] Integration tests: Framework working and properly fails on invalid JBIG2 files
 
 ## 🐛 Known Issues & Plan
-- **Integration test JBIG2 files**: 3/4 test files have symbol dictionary parsing issues
-- **Root cause**: Test files contain invalid/corrupted symbol count data
-- **Impact**: Integration framework works but needs valid JBIG2 test files
-- **Plan**: Regenerate JBIG2 test files with proper symbol dictionary data
+- **Integration test JBIG2 files**: All 4 test files have parsing issues
+- **Root cause**: Test files contain invalid/corrupted symbol count data or missing pages
+- **Impact**: Integration tests fail as expected - JBIG2 files need regeneration
+- **Plan**: Regenerate JBIG2 test files with proper symbol dictionary data and page content
 
 ## Current Testing Status
 - ✅ Basic unit tests in `lib.rs` (document creation, header validation, bitmap operations, Huffman tables, segment parsing)
@@ -25,8 +26,8 @@ This document outlines a comprehensive testing strategy for the jbig2-rs JBIG2 d
 - ✅ Parameter validation and error handling thoroughly tested
 - ✅ Template and configuration testing complete
 - ✅ Arithmetic decoder initialization fixes for refinement and text region tests
-- ✅ **Phase 3 Integration Testing**: Framework implemented and working with PNG comparison
-- ⚠️ Integration test files need valid JBIG2 data regeneration (current files have parsing issues)
+- ✅ **Phase 3 Integration Testing**: Framework implemented and properly fails on invalid JBIG2 files
+- ❌ Integration test files: All 4 JBIG2 files fail parsing and need regeneration
 
 ## Testing Strategy Overview
 

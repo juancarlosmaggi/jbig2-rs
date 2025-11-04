@@ -42,84 +42,41 @@ mod tests {
     #[test]
     fn test_weight_no_jbig2() {
         let jbig2_data = load_file("tests/resources/weight_no_jbig2.jb2");
-        println!("File size: {} bytes", jbig2_data.len());
         let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
-        println!("Parsed document with {} pages", doc.page_count());
-        if doc.page_count() > 0 {
-            let page = doc.get_page(0).unwrap();
-            let decoded = page.to_image_data();
-            compare_images(&decoded, "tests/resources/weight_no_jbig2.png");
-        } else {
-            println!("Document has no pages - this may be expected for 'no_jbig2' test");
-        }
+        assert!(doc.page_count() > 0, "Document should have at least one page");
+        let page = doc.get_page(0).unwrap();
+        let decoded = page.to_image_data();
+        compare_images(&decoded, "tests/resources/weight_no_jbig2.png");
     }
 
     #[test]
     fn test_weight_t085_w025() {
         let jbig2_data = load_file("tests/resources/weight_t085_w025.jb2");
-        println!("File size: {} bytes", jbig2_data.len());
-        // For now, just check that parsing doesn't panic, even if it fails
-        let result = Jbig2Document::parse(&jbig2_data);
-        match result {
-            Ok(doc) => {
-                println!("Parsed document with {} pages", doc.page_count());
-                if doc.page_count() > 0 {
-                    let page = doc.get_page(0).unwrap();
-                    let decoded = page.to_image_data();
-                    compare_images(&decoded, "tests/resources/weight_t085_w025.png");
-                } else {
-                    println!("Document has no pages - skipping comparison");
-                }
-            }
-            Err(e) => {
-                println!("Parse error (expected for now): {}", e.message);
-                // Don't panic for now - the files may need adjustment
-            }
-        }
+        let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
+        assert!(doc.page_count() > 0, "Document should have at least one page");
+        let page = doc.get_page(0).unwrap();
+        let decoded = page.to_image_data();
+        compare_images(&decoded, "tests/resources/weight_t085_w025.png");
     }
 
     #[test]
     fn test_weight_t085_w050() {
         let jbig2_data = load_file("tests/resources/weight_t085_w050.jb2");
-        println!("File size: {} bytes", jbig2_data.len());
-        let result = Jbig2Document::parse(&jbig2_data);
-        match result {
-            Ok(doc) => {
-                println!("Parsed document with {} pages", doc.page_count());
-                if doc.page_count() > 0 {
-                    let page = doc.get_page(0).unwrap();
-                    let decoded = page.to_image_data();
-                    compare_images(&decoded, "tests/resources/weight_t085_w050.png");
-                } else {
-                    println!("Document has no pages - skipping comparison");
-                }
-            }
-            Err(e) => {
-                println!("Parse error (expected for now): {}", e.message);
-            }
-        }
+        let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
+        assert!(doc.page_count() > 0, "Document should have at least one page");
+        let page = doc.get_page(0).unwrap();
+        let decoded = page.to_image_data();
+        compare_images(&decoded, "tests/resources/weight_t085_w050.png");
     }
 
     #[test]
     fn test_weight_t085_w075() {
         let jbig2_data = load_file("tests/resources/weight_t085_w075.jb2");
-        println!("File size: {} bytes", jbig2_data.len());
-        let result = Jbig2Document::parse(&jbig2_data);
-        match result {
-            Ok(doc) => {
-                println!("Parsed document with {} pages", doc.page_count());
-                if doc.page_count() > 0 {
-                    let page = doc.get_page(0).unwrap();
-                    let decoded = page.to_image_data();
-                    compare_images(&decoded, "tests/resources/weight_t085_w075.png");
-                } else {
-                    println!("Document has no pages - skipping comparison");
-                }
-            }
-            Err(e) => {
-                println!("Parse error (expected for now): {}", e.message);
-            }
-        }
+        let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
+        assert!(doc.page_count() > 0, "Document should have at least one page");
+        let page = doc.get_page(0).unwrap();
+        let decoded = page.to_image_data();
+        compare_images(&decoded, "tests/resources/weight_t085_w075.png");
     }
 
     #[test]

@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use jbig2_rs::bitmap::Bitmap;
     use jbig2_rs::contexts::DecodingContext;
     use jbig2_rs::decode::decode_symbol::{decode_symbol_dictionary, SymbolDictionaryParams};
 
