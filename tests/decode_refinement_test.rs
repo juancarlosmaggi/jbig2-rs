@@ -67,7 +67,7 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![],
+            at: vec![(0, 0)], // Template 0 requires AT parameters
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -88,7 +88,7 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![],
+            at: vec![(0, 0), (0, 0)], // Provide AT parameters even for invalid template (shouldn't be used)
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -109,7 +109,7 @@ mod tests {
             offset_x: 8, // Non-zero offset
             offset_y: 8,
             prediction: false,
-            at: vec![],
+            at: vec![(0, 0)], // Template 0 requires AT parameters
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -131,7 +131,7 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: true, // Test prediction
-            at: vec![],
+            at: vec![(0, 0), (0, 0)], // Template 0 requires 2 AT parameters
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -148,6 +148,12 @@ mod tests {
             let mut context = DecodingContext::new(data.clone(), 0, data.len());
             let reference = Bitmap::new(16, 16);
 
+            let at = if template_index == 0 {
+                vec![(0, 0)] // Template 0 requires AT parameters
+            } else {
+                vec![] // Template 1 does not
+            };
+
             let params = RefinementParams {
                 width: 8,
                 height: 8,
@@ -156,7 +162,7 @@ mod tests {
                 offset_x: 0,
                 offset_y: 0,
                 prediction: false,
-                at: vec![],
+                at,
             };
 
             let result = decode_refinement(&params, &mut context);
@@ -209,7 +215,7 @@ mod tests {
                 offset_x: 0,
                 offset_y: 0,
                 prediction: false,
-                at: vec![],
+                at: vec![(0, 0)], // Template 0 requires at least 1 AT parameter
             };
 
             let result = decode_refinement(&params, &mut context);

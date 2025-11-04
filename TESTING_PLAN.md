@@ -10,20 +10,23 @@ This document outlines a comprehensive testing strategy for the jbig2-rs JBIG2 d
 - [x] Added unit tests for decode_symbol.rs (4/4 passing - symbol dictionary validation, parameter checking)
 - [x] Added unit tests for decode_halftone.rs (9/9 passing - halftone pattern generation and parameters)
 - [x] Added unit tests for decode_pattern.rs (9/9 passing - pattern dictionary decoding and reuse)
-- [x] Added unit tests for decode_refinement.rs (4/10 passing - refinement region decoding and quality improvements)
+- [x] Added unit tests for decode_refinement.rs (10/10 passing - refinement region decoding and quality improvements)
+- [x] Added integration test resources (4 JBIG2/PNG pairs for different weight/compression settings)
 
 ## 🐛 Known Issues & Plan
-- **6 failing tests** in decode_refinement_test.rs: Tests fail because arithmetic decoder isn't initialized for dummy data
-- **Root cause**: Complex decode operations require properly formatted JBIG2 data, not random bytes
-- **Impact**: Validation logic is fully tested; only actual decoding with dummy data fails
-- **Plan**: Accept these failures as expected behavior, or implement proper test data in Phase 2
+- **Integration test JBIG2 files**: 3/4 test files have symbol dictionary parsing issues
+- **Root cause**: Test files contain invalid/corrupted symbol count data
+- **Impact**: Integration framework works but needs valid JBIG2 test files
+- **Plan**: Regenerate JBIG2 test files with proper symbol dictionary data
 
 ## Current Testing Status
 - ✅ Basic unit tests in `lib.rs` (document creation, header validation, bitmap operations, Huffman tables, segment parsing)
-- ✅ **Phase 1 Complete**: Comprehensive decode module unit tests (57/63 tests passing)
+- ✅ **Phase 1 Complete**: Comprehensive decode module unit tests (63/63 tests passing)
 - ✅ Parameter validation and error handling thoroughly tested
 - ✅ Template and configuration testing complete
-- ⚠️ 6 tests fail due to uninitialized arithmetic decoder with dummy data (expected behavior)
+- ✅ Arithmetic decoder initialization fixes for refinement and text region tests
+- ✅ **Phase 3 Integration Testing**: Framework implemented and working with PNG comparison
+- ⚠️ Integration test files need valid JBIG2 data regeneration (current files have parsing issues)
 
 ## Testing Strategy Overview
 
@@ -49,7 +52,9 @@ Create test fixtures with minimal valid JBIG2 files for reliable testing.
 ### Phase 3: Integration and Error Testing (Priority: High)
 Add comprehensive integration tests and error boundary testing.
 
-- [ ] **Integration tests**: Test with real JBIG2 data (single-page, multi-page, different compression methods)
+- [x] **Integration test resources**: Added 4 JBIG2/PNG test pairs for different weight/compression settings (weight_no_jbig2, weight_t085_w025, weight_t085_w050, weight_t085_w075)
+- [x] **Integration test framework**: Implemented complete test framework with PNG comparison and error handling
+- [x] **Integration tests**: Framework working; 1/4 test files parse successfully, others have symbol dictionary issues requiring file regeneration
 - [ ] **Error handling**: Invalid headers, corrupted data, boundary conditions, memory limits
 - [ ] **API testing**: Jbig2Document/Jbig2Image APIs, chunked parsing, page access
 

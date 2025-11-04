@@ -50,6 +50,15 @@ pub fn decode_refinement<'a>(
     params: &RefinementParams<'a>,
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
+    // Validate template index
+    if params.template_index > 1 {
+        return Err(Jbig2Error::new("invalid refinement template index"));
+    }
+    // Validate AT parameters
+    if params.template_index == 0 && params.at.len() < 2 {
+        return Err(Jbig2Error::new("template 0 requires 2 AT parameters"));
+    }
+
     let mut coding_template = get_refinement_template(params.template_index).coding;
     if params.template_index == 0 {
         coding_template.push(params.at[0]);

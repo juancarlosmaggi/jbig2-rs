@@ -11,3 +11,4 @@ categories = ["multimedia::images", "encoding"]
 
 [dev-dependencies]
 rstest = "0.18"
+image = "0.24"
