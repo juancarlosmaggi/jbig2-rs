@@ -129,12 +129,20 @@ pub struct SymbolDictionaryParams<'a> {
     pub start: usize,
     pub end: usize,
 }
-const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
 pub fn read_u32(data: &[u8], pos: usize) -> u32 {
     ((data[pos] as u32) << 24)
         | ((data[pos + 1] as u32) << 16)
         | ((data[pos + 2] as u32) << 8)
         | (data[pos + 3] as u32)
+}
+pub fn read_u32_le(data: &[u8], pos: usize) -> u32 {
+    (data[pos] as u32)
+        | ((data[pos + 1] as u32) << 8)
+        | ((data[pos + 2] as u32) << 16)
+        | ((data[pos + 3] as u32) << 24)
+}
+pub fn read_u16_le(data: &[u8], pos: usize) -> u16 {
+    (data[pos] as u16) | ((data[pos + 1] as u16) << 8)
 }
 pub fn parse_at_parameters(
     data: &[u8],
@@ -156,7 +164,11 @@ pub fn parse_at_parameters(
 pub fn read_u16(data: &[u8], pos: usize) -> u16 {
     ((data[pos] as u16) << 8) | (data[pos + 1] as u16)
 }
-pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
+pub fn read_segment_header(
+    data: &[u8],
+    start: usize,
+    has_file_header: bool,
+) -> Result<SegmentHeader, Jbig2Error> {
     if data.len().saturating_sub(start) < 11 {
         return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
     }
@@ -174,13 +186,15 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let page_association_field_size = (flags & 0x40) != 0;
     let referred_flags = data[pos];
     pos += 1;
-    let mut referred_to_count = ((referred_flags >> 5) & 7) as usize;
-    let mut retain_bits = vec![referred_flags & 31];
-    if referred_flags == 7 {
+    let mut referred_to_count = (referred_flags & 0x1f) as usize;
+    let mut retain_bits = vec![referred_flags & 0x1f];
+    if referred_to_count == 31 {
         if data.len().saturating_sub(pos) < 3 {
             return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
-        let extended_count = read_u32(data, pos - 1) & 0x1fffffff;
+        let extended_count =
+            ((data[pos] as u32) << 16 | (data[pos + 1] as u32) << 8 | (data[pos + 2] as u32))
+                & 0x1fffffff;
         referred_to_count = extended_count as usize;
         pos += 3;
         let bytes = (referred_to_count + 7) >> 3;
@@ -192,12 +206,13 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     } else if referred_flags == 5 || referred_flags == 6 {
         return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
-    let mut referred_to_segment_number_size = 4;
-    if number <= 256 {
-        referred_to_segment_number_size = 1;
-    } else if number <= 65536 {
-        referred_to_segment_number_size = 2;
-    }
+    let referred_to_segment_number_size = if number < 256 {
+        1
+    } else if number < 65536 {
+        2
+    } else {
+        4
+    };
     let mut referred_to = vec![];
     for _ in 0..referred_to_count {
         if data.len().saturating_sub(pos) < referred_to_segment_number_size {
@@ -205,13 +220,14 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
         }
         let num = match referred_to_segment_number_size {
             1 => data[pos] as u32,
-            2 => ((data[pos] as u16) << 8 | data[pos + 1] as u16) as u32,
-            _ => read_u32(data, pos),
+            2 => ((data[pos] as u32) << 8) | (data[pos + 1] as u32),
+            4 => read_u32(data, pos),
+            _ => return Err(Jbig2Error::new("invalid referred segment number size")),
         };
         referred_to.push(num);
         pos += referred_to_segment_number_size;
     }
-    let page_association = if page_association_field_size {
+    let pa = if page_association_field_size {
         if data.len().saturating_sub(pos) < 4 {
             return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
@@ -229,41 +245,38 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     if data.len().saturating_sub(pos) < 4 {
         return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
     }
-    let mut length = read_u32(data, pos) as usize;
+    let length_u32 = read_u32(data, pos);
     pos += 4;
-    if length == 0xffffffff {
-        if segment_type == 38 {
-            // ImmediateGenericRegion - search for end pattern
+    let mut length = length_u32 as usize;
+    if length_u32 == 0xffffffff {
+        if segment_type == 38 || segment_type == 39 {
             if data.len().saturating_sub(pos) < REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 {
                 return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
             }
             let region_info = read_region_segment_information(data, pos);
-            let generic_region_flags = data[pos + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
-            let mmr = (generic_region_flags & 1) != 0;
-            // Search for end pattern
-            let search_pattern_length = 6;
-            let mut search_pattern = [0u8; 6];
-            if !mmr {
-                search_pattern[0] = 0xff;
-                search_pattern[1] = 0xac;
-            }
-            search_pattern[2] = ((region_info.height >> 24) & 0xff) as u8;
-            search_pattern[3] = ((region_info.height >> 16) & 0xff) as u8;
-            search_pattern[4] = ((region_info.height >> 8) & 0xff) as u8;
-            search_pattern[5] = (region_info.height & 0xff) as u8;
-            let mut found = false;
-            for i in pos..data.len() {
-                if i + search_pattern_length > data.len() {
-                    break;
+            let generic_flags = data[pos + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
+            let mmr = (generic_flags & 1) != 0;
+            if mmr && !has_file_header {
+                length = data.len() - pos;
+            } else {
+                let height = region_info.height;
+                let mut search_pattern: Vec<u8> = if mmr { vec![] } else { vec![0xff, 0xac] };
+                search_pattern.push(((height >> 24) & 0xff) as u8);
+                search_pattern.push(((height >> 16) & 0xff) as u8);
+                search_pattern.push(((height >> 8) & 0xff) as u8);
+                search_pattern.push((height & 0xff) as u8);
+                let search_pattern_length = search_pattern.len();
+                let mut found = false;
+                for i in pos..data.len().saturating_sub(search_pattern_length) + 1 {
+                    if &data[i..i + search_pattern_length] == &search_pattern[..] {
+                        length = i + search_pattern_length - pos;
+                        found = true;
+                        break;
+                    }
                 }
-                if data[i..i + search_pattern_length] == search_pattern {
-                    length = i + search_pattern_length - pos;
-                    found = true;
-                    break;
+                if !found {
+                    return Err(Jbig2Error::new(ERR_UNKNOWN_LENGTH));
                 }
-            }
-            if !found {
-                return Err(Jbig2Error::new(ERR_UNKNOWN_LENGTH));
             }
         } else {
             return Err(Jbig2Error::new(ERR_UNKNOWN_LENGTH));
@@ -276,7 +289,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
         deferred_non_retain,
         retain_bits,
         referred_to,
-        page_association,
+        page_association: pa,
         length,
         header_end: pos,
     })
@@ -312,55 +325,60 @@ pub fn read_segments<'a>(
     start: usize,
     end: usize,
     sequential: bool,
-    data_start: usize,
+    _data_start: usize,
+    has_file_header: bool,
 ) -> Result<Vec<Segment<'a>>, Jbig2Error> {
     let mut segments = vec![];
     let mut headers = vec![];
     let mut pos = start;
     while pos < end {
-        let segment_header = read_segment_header(data, pos)?;
-        headers.push(segment_header.clone());
-        pos = segment_header.header_end;
-        if segment_header.segment_type == 51 {
-            // EndOfFile
+        if pos + 11 > end {
             break;
         }
-        if sequential {
-            pos += segment_header.length;
-            if pos > end {
-                return Err(Jbig2Error::new(ERR_OVERRUN));
+        match read_segment_header(data, pos, has_file_header) {
+            Ok(segment_header) => {
+                if segment_header.segment_type == 51 {
+                    segments.push(Segment {
+                        header: segment_header.clone(),
+                        data,
+                        start: pos,
+                        end: segment_header.header_end,
+                    });
+                    break;
+                }
+                headers.push(segment_header.clone());
+                pos = segment_header.header_end;
+                if sequential {
+                    let segment_start = pos;
+                    let segment_end = segment_start + segment_header.length;
+                    if segment_end > end {
+                        break;
+                    }
+                    segments.push(Segment {
+                        header: segment_header.clone(),
+                        data,
+                        start: segment_start,
+                        end: segment_end,
+                    });
+                    pos = segment_end;
+                }
             }
+            Err(_) => break,
         }
     }
     if !sequential {
-        // Random access: data starts after last header
         let mut cumulative_length = 0;
         for header in &headers {
             cumulative_length += header.length;
         }
-        if data_start + cumulative_length > end {
+        if pos + cumulative_length > end {
             return Err(Jbig2Error::new(ERR_OVERRUN));
         }
-        let mut data_pos = data_start;
+        let mut data_pos = pos;
         for header in headers {
             let segment_start = data_pos;
             data_pos += header.length;
             let segment_end = data_pos;
-            segments.push(Segment {
-                header: header.clone(),
-                data,
-                start: segment_start,
-                end: segment_end,
-            });
-        }
-    } else {
-        // Sequential: data follows each header
-        for header in headers {
-            let segment_start = header.header_end;
-            let segment_end = header.header_end + header.length;
-            if segment_end > end {
-                return Err(Jbig2Error::new(ERR_OVERRUN));
-            }
             segments.push(Segment {
                 header: header.clone(),
                 data,
@@ -378,24 +396,23 @@ pub fn process_segments<'a>(
     let mut current_page = 0u32;
     let mut page_segments = Vec::new();
     for segment in segments {
-        // Handle page association filtering
         let page_association = segment.header.page_association;
         let is_global = page_association == 0;
-        let should_process = is_global || (page_association == current_page && current_page > 0);
+        let is_page_info = segment.header.segment_type == 48;
+        let should_process = is_global
+            || is_page_info
+            || (page_association == current_page && current_page > 0)
+            || (page_association == 1 && current_page == 0);
         if !should_process {
             continue;
         }
         page_segments.push(segment);
-        // Update current page when we encounter a PageInformation segment
         if segment.header.segment_type == 48 {
-            // PageInformation
-            // Process previous page segments
             process_page_segments(&page_segments, visitor)?;
             page_segments.clear();
             current_page += 1;
         }
     }
-    // Process remaining segments
     if !page_segments.is_empty() {
         process_page_segments(&page_segments, visitor)?;
     }
@@ -405,7 +422,6 @@ fn process_page_segments<'a>(
     segments: &[&Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
 ) -> Result<(), Jbig2Error> {
-    // Separate retain and non-retain segments
     let mut retain_segments = Vec::new();
     let mut non_retain_segments = Vec::new();
     for &segment in segments {
@@ -415,11 +431,9 @@ fn process_page_segments<'a>(
             retain_segments.push(segment);
         }
     }
-    // Process retain segments first
     for &segment in &retain_segments {
         process_segment(segment, visitor)?;
     }
-    // Then non-retain
     for &segment in &non_retain_segments {
         process_segment(segment, visitor)?;
     }
@@ -433,21 +447,14 @@ pub fn process_segment<'a>(
     let data = segment.data;
     let start = segment.start;
     let end = segment.end;
-    // Validate segment data bounds
     if start > end || end > data.len() {
         return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
-    if end - start < header.length {
-        return Err(Jbig2Error::new(ERR_MISMATCH));
-    }
-    // Note: Deferred non-retain segments are processed normally for now
-    // Full implementation would require ordering based on retain bits
     match header.segment_type {
         0 => {
-            // SymbolDictionary
             let dictionary_flags = read_u16(data, start);
-            let number_of_exported_symbols = read_u32(data, start + 2);
-            let number_of_new_symbols = read_u32(data, start + 6);
+            let number_of_exported_symbols = read_u32_le(data, start + 2);
+            let number_of_new_symbols = read_u32_le(data, start + 6);
             let params = SymbolDictionaryParams {
                 dictionary_flags,
                 number_of_exported_symbols,
@@ -461,19 +468,28 @@ pub fn process_segment<'a>(
             visitor.on_symbol_dictionary(&params)?;
         }
         6 | 7 => {
-            // ImmediateTextRegion / ImmediateLosslessTextRegion
-            let region_info = read_region_segment_information(data, start);
-            let text_region_segment_flags =
-                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH);
-            let number_of_symbol_instances =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2);
+            let mut pos = start;
+            let text_region_segment_flags = read_u16(data, pos);
+            pos += 2;
+            let number_of_symbol_instances = read_u32_le(data, pos);
+            pos += 4;
+            let referred_size = if header.number <= 256 {
+                1
+            } else if header.number <= 65536 {
+                2
+            } else {
+                4
+            };
+            pos += header.referred_to.len() * referred_size;
+            let region_info = read_region_segment_information(data, pos);
+            pos += REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
             visitor.on_immediate_text_region(
                 &region_info,
                 text_region_segment_flags,
                 number_of_symbol_instances,
                 &header.referred_to,
                 data,
-                start,
+                pos,
                 end,
             )?;
         }
@@ -688,3 +704,4 @@ pub fn process_segment<'a>(
     }
     Ok(())
 }
+const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;

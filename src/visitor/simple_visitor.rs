@@ -89,6 +89,10 @@ impl SimpleSegmentVisitor {
     }
 
     pub fn on_page_information(&mut self, info: PageInfo) {
+        println!(
+            "Page info: width={}, height={}, xres={}, yres={}",
+            info.width, info.height, info.resolution_x, info.resolution_y
+        );
         // If we have a previous page, finalize it
         if let (Some(page_info), Some(bitmap)) =
             (self.current_page_info.take(), self.current_bitmap.take())
@@ -835,6 +839,7 @@ impl SimpleSegmentVisitor {
 
     // Finalize the current page and add it to the pages vector
     pub fn finalize_current_page(&mut self) {
+        println!("Finalizing page, total pages now: {}", self.pages.len() + 1);
         if let (Some(page_info), Some(bitmap)) =
             (self.current_page_info.take(), self.current_bitmap.take())
         {

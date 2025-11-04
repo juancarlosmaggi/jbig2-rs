@@ -68,7 +68,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, // page association
             0x00, 0x00, 0x00, 0x00, // length
         ];
-        let header = crate::segment::read_segment_header(&data, 0);
+        let header = crate::segment::read_segment_header(&data, 0, false);
         assert!(header.is_ok());
         let header = header.unwrap();
         assert_eq!(header.segment_type, 0);
