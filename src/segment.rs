@@ -1,5 +1,10 @@
 use crate::error::Jbig2Error;
 use crate::visitor::SimpleSegmentVisitor;
+pub const ERR_INSUFFICIENT_DATA: &str = "insufficient data";
+pub const ERR_INVALID_SEGMENT: &str = "invalid segment";
+pub const ERR_OVERRUN: &str = "segment overruns data";
+pub const ERR_MISMATCH: &str = "data mismatch";
+pub const ERR_UNKNOWN_LENGTH: &str = "invalid unknown segment length";
 pub const SEGMENT_TYPES: [&str; 63] = [
     "SymbolDictionary",
     "",
@@ -153,7 +158,7 @@ pub fn read_u16(data: &[u8], pos: usize) -> u16 {
 }
 pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
     if data.len().saturating_sub(start) < 11 {
-        return Err(Jbig2Error::new("segment header too short"));
+        return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
     }
     let mut pos = start;
     let number = read_u32(data, pos);
@@ -162,7 +167,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     pos += 1;
     let segment_type = (flags & 0x3f) as usize;
     if segment_type >= SEGMENT_TYPES.len() {
-        return Err(Jbig2Error::new("invalid segment type"));
+        return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
     let type_name = SEGMENT_TYPES[segment_type].to_string();
     let deferred_non_retain = (flags & 0x80) != 0;
@@ -173,21 +178,19 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let mut retain_bits = vec![referred_flags & 31];
     if referred_flags == 7 {
         if data.len().saturating_sub(pos) < 3 {
-            return Err(Jbig2Error::new(
-                "insufficient data for extended referred-to count",
-            ));
+            return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
         let extended_count = read_u32(data, pos - 1) & 0x1fffffff;
         referred_to_count = extended_count as usize;
         pos += 3;
         let bytes = (referred_to_count + 7) >> 3;
         if data.len().saturating_sub(pos) < bytes {
-            return Err(Jbig2Error::new("insufficient data for retain bits"));
+            return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
         retain_bits = data[pos..pos + bytes].to_vec();
         pos += bytes;
     } else if referred_flags == 5 || referred_flags == 6 {
-        return Err(Jbig2Error::new("invalid referred-to flags"));
+        return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
     let mut referred_to_segment_number_size = 4;
     if number <= 256 {
@@ -198,9 +201,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let mut referred_to = vec![];
     for _ in 0..referred_to_count {
         if data.len().saturating_sub(pos) < referred_to_segment_number_size {
-            return Err(Jbig2Error::new(
-                "insufficient data for referred-to segments",
-            ));
+            return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
         let num = match referred_to_segment_number_size {
             1 => data[pos] as u32,
@@ -212,21 +213,21 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     }
     let page_association = if page_association_field_size {
         if data.len().saturating_sub(pos) < 4 {
-            return Err(Jbig2Error::new("insufficient data for page association"));
+            return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
         let pa = read_u32(data, pos);
         pos += 4;
         pa
     } else {
         if data.len().saturating_sub(pos) < 1 {
-            return Err(Jbig2Error::new("insufficient data for page association"));
+            return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
         let pa = data[pos] as u32;
         pos += 1;
         pa
     };
     if data.len().saturating_sub(pos) < 4 {
-        return Err(Jbig2Error::new("insufficient data for segment length"));
+        return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
     }
     let mut length = read_u32(data, pos) as usize;
     pos += 4;
@@ -234,7 +235,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
         if segment_type == 38 {
             // ImmediateGenericRegion - search for end pattern
             if data.len().saturating_sub(pos) < REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 {
-                return Err(Jbig2Error::new("insufficient data for generic region info"));
+                return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
             }
             let region_info = read_region_segment_information(data, pos);
             let generic_region_flags = data[pos + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
@@ -262,10 +263,10 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
                 }
             }
             if !found {
-                return Err(Jbig2Error::new("segment end was not found"));
+                return Err(Jbig2Error::new(ERR_UNKNOWN_LENGTH));
             }
         } else {
-            return Err(Jbig2Error::new("invalid unknown segment length"));
+            return Err(Jbig2Error::new(ERR_UNKNOWN_LENGTH));
         }
     }
     Ok(SegmentHeader {
@@ -310,27 +311,62 @@ pub fn read_segments<'a>(
     data: &'a [u8],
     start: usize,
     end: usize,
+    sequential: bool,
+    data_start: usize,
 ) -> Result<Vec<Segment<'a>>, Jbig2Error> {
     let mut segments = vec![];
-    let mut position = start;
-    while position < end {
-        let segment_header = read_segment_header(data, position)?;
-        position = segment_header.header_end;
-        let segment_start = position;
-        position += segment_header.length;
-        if position > end {
-            return Err(Jbig2Error::new("segment overruns data"));
-        }
-        let segment_end = position;
-        segments.push(Segment {
-            header: segment_header,
-            data,
-            start: segment_start,
-            end: segment_end,
-        });
-        if segments.last().unwrap().header.segment_type == 51 {
+    let mut headers = vec![];
+    let mut pos = start;
+    while pos < end {
+        let segment_header = read_segment_header(data, pos)?;
+        headers.push(segment_header.clone());
+        pos = segment_header.header_end;
+        if segment_header.segment_type == 51 {
             // EndOfFile
             break;
+        }
+        if sequential {
+            pos += segment_header.length;
+            if pos > end {
+                return Err(Jbig2Error::new(ERR_OVERRUN));
+            }
+        }
+    }
+    if !sequential {
+        // Random access: data starts after last header
+        let mut cumulative_length = 0;
+        for header in &headers {
+            cumulative_length += header.length;
+        }
+        if data_start + cumulative_length > end {
+            return Err(Jbig2Error::new(ERR_OVERRUN));
+        }
+        let mut data_pos = data_start;
+        for header in headers {
+            let segment_start = data_pos;
+            data_pos += header.length;
+            let segment_end = data_pos;
+            segments.push(Segment {
+                header: header.clone(),
+                data,
+                start: segment_start,
+                end: segment_end,
+            });
+        }
+    } else {
+        // Sequential: data follows each header
+        for header in headers {
+            let segment_start = header.header_end;
+            let segment_end = header.header_end + header.length;
+            if segment_end > end {
+                return Err(Jbig2Error::new(ERR_OVERRUN));
+            }
+            segments.push(Segment {
+                header: header.clone(),
+                data,
+                start: segment_start,
+                end: segment_end,
+            });
         }
     }
     Ok(segments)
@@ -399,10 +435,10 @@ pub fn process_segment<'a>(
     let end = segment.end;
     // Validate segment data bounds
     if start > end || end > data.len() {
-        return Err(Jbig2Error::new("invalid segment data bounds"));
+        return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
     if end - start < header.length {
-        return Err(Jbig2Error::new("segment data shorter than expected"));
+        return Err(Jbig2Error::new(ERR_MISMATCH));
     }
     // Note: Deferred non-retain segments are processed normally for now
     // Full implementation would require ordering based on retain bits
