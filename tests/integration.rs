@@ -80,6 +80,16 @@ mod tests {
     }
 
     #[test]
+    fn test_text_region() {
+        let jbig2_data = load_file("tests/resources/text_region.jb2");
+        let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
+        assert!(doc.page_count() > 0, "Document should have at least one page");
+        let page = doc.get_page(0).unwrap();
+        // Note: No PNG comparison as text_region.png is not present
+        let _decoded = page.to_image_data(); // Just check it decodes without error
+    }
+
+    #[test]
     fn test_parse_invalid_data() {
         // Test with invalid data
         let data = vec![0u8; 10];
