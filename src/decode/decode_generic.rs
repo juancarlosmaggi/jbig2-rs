@@ -235,7 +235,7 @@ pub fn decode_bitmap(
                 context_label
             } else {
                 let mut context_label = 0u16;
-                let mut shift = template_length - 1;
+                let mut shift = template_length as i32 - 1;
                 for k in 0..template_length {
                     let j0 = j as i32 + template_x[k] as i32;
                     if j0 >= 0 && j0 < params.width as i32 {
@@ -244,7 +244,9 @@ pub fn decode_bitmap(
                             && i0 < params.height as i32
                             && bitmap.get_pixel(j0 as usize, i0 as usize) != 0
                         {
-                            context_label |= 1 << shift;
+                            if shift >= 0 && shift < 16 {
+                                context_label |= 1 << shift;
+                            }
                         }
                     }
                     shift -= 1;
