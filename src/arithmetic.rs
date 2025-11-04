@@ -290,7 +290,7 @@ const QE_TABLE: [QeEntry; 47] = [
     },
 ];
 pub struct ArithmeticDecoder {
-    data: *const u8,
+    data: Vec<u8>,
     bp: usize,
     data_end: usize,
     chigh: u32,
@@ -299,13 +299,12 @@ pub struct ArithmeticDecoder {
     a: u16,
 }
 impl ArithmeticDecoder {
-    pub fn new(data: &[u8], start: usize, end: usize) -> Self {
-        let data_ptr = data.as_ptr();
+    pub fn new(data: &[u8], _start: usize, _end: usize) -> Self {
         let mut decoder = ArithmeticDecoder {
-            data: data_ptr,
-            bp: start,
-            data_end: end,
-            chigh: unsafe { *data_ptr.add(start) as u32 },
+            data: data.to_vec(),
+            bp: 0,
+            data_end: data.len(),
+            chigh: data[0] as u32,
             clow: 0,
             ct: 0,
             a: 0x8000,
@@ -321,11 +320,11 @@ impl ArithmeticDecoder {
         if self.bp >= self.data_end {
             return;
         }
-        let b = unsafe { *self.data.add(self.bp) };
+        let b = self.data[self.bp];
         self.bp += 1;
         if b == 0xff {
             if self.bp < self.data_end {
-                let next_byte = unsafe { *self.data.add(self.bp) };
+                let next_byte = self.data[self.bp];
                 if next_byte > 0x8f {
                     self.clow = self.clow.wrapping_add(0xff00u32);
                     self.ct = 8;
@@ -334,7 +333,7 @@ impl ArithmeticDecoder {
             }
             // Stuffed byte case
             let logical_b = if self.bp < self.data_end {
-                unsafe { *self.data.add(self.bp) as u32 }
+                self.data[self.bp] as u32
             } else {
                 0xff
             };
