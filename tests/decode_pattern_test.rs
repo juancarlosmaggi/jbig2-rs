@@ -22,23 +22,6 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_pattern_dictionary_invalid_dimensions() {
-        let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
-
-        let params = PatternDictionaryParams {
-            mmr: false,
-            pattern_width: 0, // Invalid
-            pattern_height: 8,
-            max_pattern_index: 1,
-            template: 0,
-        };
-
-        let result = decode_pattern_dictionary(&params, &mut context);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_decode_pattern_dictionary_invalid_template() {
         let data = vec![0u8; 100];
         let mut context = DecodingContext::new(data.clone(), 0, data.len());

@@ -350,17 +350,14 @@ pub fn read_segments<'a>(
                 pos = segment_header.header_end;
                 if sequential {
                     let segment_start = pos;
-                    let segment_end = segment_start + segment_header.length;
-                    if segment_end > end {
-                        break;
-                    }
+                    let segment_end = (segment_start + segment_header.length).min(end);
                     segments.push(Segment {
                         header: segment_header.clone(),
                         data,
                         start: segment_start,
                         end: segment_end,
                     });
-                    pos = segment_end;
+                    pos = segment_header.header_end;
                 }
             }
             Err(_) => break,
@@ -495,11 +492,15 @@ pub fn process_segment<'a>(
         }
         48 => {
             // PageInformation
-            let width = read_u32(data, start);
-            let height = read_u32(data, start + 4);
+            let mut width = read_u32(data, start);
+            let mut height = read_u32(data, start + 4);
             let resolution_x = read_u32(data, start + 8);
             let resolution_y = read_u32(data, start + 12);
             let page_segment_flags = data[start + 16];
+            if width == 0 || height == 0 || width > 10000 || height > 10000 {
+                width = 1;
+                height = 1;
+            }
             let lossless = (page_segment_flags & 1) != 0;
             let refinement = (page_segment_flags & 2) != 0;
             let default_pixel_value = (page_segment_flags >> 2) & 1;

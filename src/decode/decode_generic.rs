@@ -4,6 +4,7 @@ use crate::decode::decode_mmr::decode_mmr_bitmap;
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
 use crate::validation;
+
 const OLD_PIXEL_MASK: u16 = 0x7bf7;
 const REUSED_CONTEXTS: [u16; 4] = [
     0x9b25, // 10011 0110010 0101
@@ -11,6 +12,7 @@ const REUSED_CONTEXTS: [u16; 4] = [
     0x00e5, // 001 11001 01
     0x0195, // 011001 0101
 ];
+
 pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
     match index {
         0 => &[
@@ -66,6 +68,7 @@ pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
         _ => &[],
     }
 }
+
 fn decode_bitmap_template0(
     width: usize,
     height: usize,
@@ -110,6 +113,7 @@ fn decode_bitmap_template0(
     }
     Ok(bitmap)
 }
+
 #[derive(Clone)]
 pub struct DecodeBitmapParams<'a> {
     pub mmr: bool,
@@ -120,12 +124,19 @@ pub struct DecodeBitmapParams<'a> {
     pub skip: Option<&'a Bitmap>,
     pub at: Vec<(i8, i8)>,
 }
+
 pub fn decode_bitmap(
     params: &DecodeBitmapParams,
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    // Validate parameters
+    // Early return for zero dimensions
+    if params.width == 0 || params.height == 0 {
+        return Ok(Bitmap::new(params.width, params.height));
+    }
+
+    // Validate parameters (now allows zero via updated validation)
     validation::validate_generic_decode_params(params.width, params.height, params.template_index)?;
+
     if params.mmr {
         let mut reader = Reader::new(
             decoding_context.data.clone(),
@@ -134,6 +145,7 @@ pub fn decode_bitmap(
         );
         return decode_mmr_bitmap(&mut reader, params.width, params.height, false);
     }
+
     // Use optimized version for the most common case
     if params.template_index == 0
         && params.skip.is_none()
@@ -150,6 +162,7 @@ pub fn decode_bitmap(
     {
         return decode_bitmap_template0(params.width, params.height, decoding_context);
     }
+
     let useskip = params.skip.is_some();
     let template = get_coding_template(params.template_index)
         .iter()

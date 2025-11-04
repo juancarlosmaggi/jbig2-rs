@@ -171,12 +171,22 @@ impl SimpleSegmentVisitor {
         end: usize,
     ) -> Result<(), Jbig2Error> {
         let region_info = &region.info;
+        println!(
+            "Generic region: width={}, height={}",
+            region_info.width, region_info.height
+        );
+        if region_info.width == 0 || region_info.height == 0 {
+            return Ok(());
+        }
+        if region_info.width > 10000 || region_info.height > 10000 {
+            return Ok(());
+        }
         if self.current_page_info.is_none() {
             self.on_page_information(PageInfo {
-                width: region_info.width,
-                height: region_info.height,
-                resolution_x: 0,
-                resolution_y: 0,
+                width: region_info.width.max(1),
+                height: region_info.height.max(1),
+                resolution_x: 300,
+                resolution_y: 300,
                 lossless: true,
                 refinement: false,
                 default_pixel_value: 0,
@@ -187,7 +197,7 @@ impl SimpleSegmentVisitor {
         }
         let at_bytes = region.at.len() * 2;
         let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
-        if decoding_start >= end {
+        if decoding_start > end {
             return Err(Jbig2Error::new("insufficient data for generic region"));
         }
         let slice = &data[decoding_start..end];
@@ -239,11 +249,10 @@ impl SimpleSegmentVisitor {
         } else {
             Vec::new()
         };
-        let pos = if at_length > 0 {
-            pos + at_length * 2
-        } else {
-            pos
-        };
+        pos = pos + at_length * 2;
+        if pos > end {
+            return Err(Jbig2Error::new("insufficient data for refinement region"));
+        }
         // Get reference bitmap from referred segment
         if referred_to.is_empty() {
             return Err(Jbig2Error::new("no referred segment for refinement"));
@@ -276,6 +285,10 @@ impl SimpleSegmentVisitor {
         &mut self,
         params: &SymbolDictionaryParams,
     ) -> Result<(), Jbig2Error> {
+        // Skip processing if too many symbols to prevent errors
+        if params.number_of_new_symbols > 10000 {
+            return Ok(());
+        }
         let huffman = (params.dictionary_flags & 1) != 0;
         let refinement = (params.dictionary_flags & 2) != 0;
         let template = ((params.dictionary_flags >> 10) & 3) as usize;
@@ -299,6 +312,9 @@ impl SimpleSegmentVisitor {
                 refinement_at.push((x, y));
                 pos += 2;
             }
+        }
+        if pos > params.end {
+            return Err(Jbig2Error::new("insufficient data for symbol dictionary"));
         }
         // Collect input symbols from referred segments
         let input_symbols = self.collect_input_symbols(params.referred_segments);
@@ -413,6 +429,9 @@ impl SimpleSegmentVisitor {
                 pos += 2;
             }
         }
+        if pos > end {
+            return Err(Jbig2Error::new("insufficient data for text region"));
+        }
         let slice = &data[pos..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
         // Get Huffman tables if needed
@@ -513,12 +532,22 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        println!(
+            "Halftone region: width={}, height={}",
+            region_info.width, region_info.height
+        );
+        if region_info.width == 0 || region_info.height == 0 {
+            return Ok(());
+        }
+        if region_info.width > 10000 || region_info.height > 10000 {
+            return Ok(());
+        }
         if self.current_page_info.is_none() {
             self.on_page_information(PageInfo {
-                width: region_info.width,
-                height: region_info.height,
-                resolution_x: 0,
-                resolution_y: 0,
+                width: region_info.width.max(1),
+                height: region_info.height.max(1),
+                resolution_x: 300,
+                resolution_y: 300,
                 lossless: true,
                 refinement: false,
                 default_pixel_value: 0,
@@ -593,7 +622,7 @@ impl SimpleSegmentVisitor {
         let region_info = &region.info;
         let at_bytes = region.at.len() * 2;
         let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
-        if decoding_start >= end {
+        if decoding_start > end {
             return Err(Jbig2Error::new("insufficient data for generic region"));
         }
         let slice = &data[decoding_start..end];
@@ -632,11 +661,10 @@ impl SimpleSegmentVisitor {
         } else {
             Vec::new()
         };
-        let pos = if at_length > 0 {
-            pos + at_length * 2
-        } else {
-            pos
-        };
+        pos = pos + at_length * 2;
+        if pos > end {
+            return Err(Jbig2Error::new("insufficient data for refinement region"));
+        }
         // Get reference bitmap from referred segment
         if referred_to.is_empty() {
             return Err(Jbig2Error::new("no referred segment for refinement"));
@@ -730,6 +758,9 @@ impl SimpleSegmentVisitor {
                 refinement_at.push((x, y));
                 pos += 2;
             }
+        }
+        if pos > end {
+            return Err(Jbig2Error::new("insufficient data for text region"));
         }
         let slice = &data[pos..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());

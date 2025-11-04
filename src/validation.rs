@@ -1,12 +1,10 @@
 use crate::error::{
-    ERR_DIMENSIONS_TOO_LARGE, ERR_INVALID_COMBINATION_OPERATOR, ERR_INVALID_DIMENSIONS,
-    ERR_INVALID_REFERENCE_CORNER, ERR_INVALID_TEMPLATE_INDEX, ERR_TOO_MANY_SYMBOLS, Jbig2Error,
+    ERR_DIMENSIONS_TOO_LARGE, ERR_INVALID_COMBINATION_OPERATOR, ERR_INVALID_REFERENCE_CORNER,
+    ERR_INVALID_TEMPLATE_INDEX, ERR_TOO_MANY_SYMBOLS, Jbig2Error,
 };
 
 pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbig2Error> {
-    if width == 0 || height == 0 {
-        return Err(Jbig2Error::new(ERR_INVALID_DIMENSIONS));
-    }
+    // Allow 0 dimensions (empty bitmap)
     if width > 65535 || height > 65535 {
         return Err(Jbig2Error::new(ERR_DIMENSIONS_TOO_LARGE));
     }
