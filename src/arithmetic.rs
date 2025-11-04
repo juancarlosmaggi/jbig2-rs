@@ -299,7 +299,7 @@ pub struct ArithmeticDecoder {
     a: u16,
 }
 impl ArithmeticDecoder {
-    pub fn new(data: &[u8], _start: usize, _end: usize) -> Self {
+    pub fn new(data: &[u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data: data.to_vec(),
             bp: 0,
@@ -320,27 +320,25 @@ impl ArithmeticDecoder {
         if self.bp >= self.data_end {
             return;
         }
-        let b = self.data[self.bp];
+        let b0 = self.data[self.bp];
         self.bp += 1;
-        if b == 0xff {
-            if self.bp < self.data_end {
-                let next_byte = self.data[self.bp];
-                if next_byte > 0x8f {
-                    self.clow = self.clow.wrapping_add(0xff00u32);
-                    self.ct = 8;
-                    return;
-                }
+        if b0 == 0xff {
+            if self.bp >= self.data_end {
+                self.clow = self.clow.wrapping_add(0xff00u32);
+                self.ct = 8;
+                return;
             }
-            // Stuffed byte case
-            let logical_b = if self.bp < self.data_end {
-                self.data[self.bp] as u32
-            } else {
-                0xff
-            };
-            self.clow = self.clow.wrapping_add(logical_b << 9);
-            self.ct = 7;
+            let b1 = self.data[self.bp];
+            if b1 > 0x8f {
+                self.clow = self.clow.wrapping_add(0xff00u32);
+                self.ct = 8;
+                return;
+            }
+            self.bp += 1;
+            self.clow = self.clow.wrapping_add((b1 as u32) << 8);
+            self.ct = 8;
         } else {
-            self.clow = self.clow.wrapping_add((b as u32) << 8);
+            self.clow = self.clow.wrapping_add((b0 as u32) << 8);
             self.ct = 8;
         }
         if self.clow > 0xffff {

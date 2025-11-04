@@ -97,7 +97,7 @@ pub struct PageInfo {
     pub requires_buffer: bool,
     pub combination_operator_override: bool,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RegionInfo {
     pub width: u32,
     pub height: u32,
@@ -246,7 +246,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
                 search_pattern[0] = 0xff;
                 search_pattern[1] = 0xac;
             }
-            search_pattern[2] = ((region_info.height >> 24) >> 24) as u8;
+            search_pattern[2] = ((region_info.height >> 24) & 0xff) as u8;
             search_pattern[3] = ((region_info.height >> 16) & 0xff) as u8;
             search_pattern[4] = ((region_info.height >> 8) & 0xff) as u8;
             search_pattern[5] = (region_info.height & 0xff) as u8;
@@ -344,12 +344,8 @@ pub fn process_segments<'a>(
     for segment in segments {
         // Handle page association filtering
         let page_association = segment.header.page_association;
-        let should_process = match page_association {
-            0xFFFFFFFF => true,               // Global segment
-            0 => current_page > 0,            // Current page (only if we have a current page)
-            pa if pa == current_page => true, // Specific page matches current
-            _ => false,                       // Skip other pages
-        };
+        let is_global = page_association == 0;
+        let should_process = is_global || (page_association == current_page && current_page > 0);
         if !should_process {
             continue;
         }
