@@ -152,7 +152,7 @@ pub fn read_u16(data: &[u8], pos: usize) -> u16 {
     ((data[pos] as u16) << 8) | (data[pos + 1] as u16)
 }
 pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, Jbig2Error> {
-    if start + 11 > data.len() {
+    if data.len().saturating_sub(start) < 11 {
         return Err(Jbig2Error::new("segment header too short"));
     }
     let mut pos = start;
@@ -172,7 +172,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     let mut referred_to_count = ((referred_flags >> 5) & 7) as usize;
     let mut retain_bits = vec![referred_flags & 31];
     if referred_flags == 7 {
-        if pos + 3 > data.len() {
+        if data.len().saturating_sub(pos) < 3 {
             return Err(Jbig2Error::new(
                 "insufficient data for extended referred-to count",
             ));
@@ -181,7 +181,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
         referred_to_count = extended_count as usize;
         pos += 3;
         let bytes = (referred_to_count + 7) >> 3;
-        if pos + bytes > data.len() {
+        if data.len().saturating_sub(pos) < bytes {
             return Err(Jbig2Error::new("insufficient data for retain bits"));
         }
         retain_bits = data[pos..pos + bytes].to_vec();
@@ -197,7 +197,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     }
     let mut referred_to = vec![];
     for _ in 0..referred_to_count {
-        if pos + referred_to_segment_number_size > data.len() {
+        if data.len().saturating_sub(pos) < referred_to_segment_number_size {
             return Err(Jbig2Error::new(
                 "insufficient data for referred-to segments",
             ));
@@ -211,21 +211,21 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
         pos += referred_to_segment_number_size;
     }
     let page_association = if page_association_field_size {
-        if pos + 4 > data.len() {
+        if data.len().saturating_sub(pos) < 4 {
             return Err(Jbig2Error::new("insufficient data for page association"));
         }
         let pa = read_u32(data, pos);
         pos += 4;
         pa
     } else {
-        if pos + 1 > data.len() {
+        if data.len().saturating_sub(pos) < 1 {
             return Err(Jbig2Error::new("insufficient data for page association"));
         }
         let pa = data[pos] as u32;
         pos += 1;
         pa
     };
-    if pos + 4 > data.len() {
+    if data.len().saturating_sub(pos) < 4 {
         return Err(Jbig2Error::new("insufficient data for segment length"));
     }
     let mut length = read_u32(data, pos) as usize;
@@ -233,7 +233,7 @@ pub fn read_segment_header(data: &[u8], start: usize) -> Result<SegmentHeader, J
     if length == 0xffffffff {
         if segment_type == 38 {
             // ImmediateGenericRegion - search for end pattern
-            if pos + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 > data.len() {
+            if data.len().saturating_sub(pos) < REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 {
                 return Err(Jbig2Error::new("insufficient data for generic region info"));
             }
             let region_info = read_region_segment_information(data, pos);
@@ -540,7 +540,13 @@ pub fn process_segment<'a>(
         42 | 43 => {
             // ImmediateGenericRefinementRegion / ImmediateLosslessGenericRefinementRegion
             let region_info = read_region_segment_information(data, start);
-            visitor.on_immediate_generic_refinement_region(&region_info, data, start, end)?;
+            visitor.on_immediate_generic_refinement_region(
+                &region_info,
+                &header.referred_to,
+                data,
+                start,
+                end,
+            )?;
         }
         4 => {
             // IntermediateTextRegion
@@ -557,6 +563,7 @@ pub fn process_segment<'a>(
                 data,
                 start,
                 end,
+                header.number,
             )?;
         }
         20 => {
@@ -597,6 +604,7 @@ pub fn process_segment<'a>(
                 data,
                 start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21,
                 end,
+                header.number,
             )?;
         }
         36 => {
@@ -608,6 +616,7 @@ pub fn process_segment<'a>(
                 data,
                 start,
                 end,
+                header.number,
             )?;
         }
         40 => {
@@ -619,6 +628,7 @@ pub fn process_segment<'a>(
                 data,
                 start,
                 end,
+                header.number,
             )?;
         }
         49 => { // EndOfPage

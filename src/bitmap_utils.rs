@@ -1,17 +1,18 @@
 use crate::bitmap::Bitmap;
-
 pub fn create_initialized_bitmap(width: usize, height: usize, default_value: u8) -> Bitmap {
-    let mut bitmap = Bitmap::new(width, height);
-    if default_value != 0 {
-        for y in 0..height {
-            for x in 0..width {
-                bitmap.set_pixel(x, y, 1);
-            }
-        }
+    let stride = (width + 7) >> 3;
+    let data = if default_value != 0 {
+        vec![0xff; stride * height]
+    } else {
+        vec![0; stride * height]
+    };
+    Bitmap {
+        data,
+        width,
+        height,
+        stride,
     }
-    bitmap
 }
-
 pub fn apply_combination_operator(dst_pixel: u8, src_pixel: u8, operator: usize) -> u8 {
     match operator {
         0 => dst_pixel | src_pixel, // OR
@@ -19,7 +20,6 @@ pub fn apply_combination_operator(dst_pixel: u8, src_pixel: u8, operator: usize)
         _ => dst_pixel,             // undefined: no-op
     }
 }
-
 pub fn apply_page_combination_operator(dst_pixel: u8, src_pixel: u8, operator: u8) -> u8 {
     match operator {
         0 => dst_pixel | src_pixel,        // OR
@@ -30,7 +30,6 @@ pub fn apply_page_combination_operator(dst_pixel: u8, src_pixel: u8, operator: u
         _ => dst_pixel,                    // undefined: no-op
     }
 }
-
 pub fn draw_symbol_at_position(
     bitmap: &mut Bitmap,
     symbol: &Bitmap,

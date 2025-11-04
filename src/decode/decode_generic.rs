@@ -90,7 +90,7 @@ fn decode_bitmap_template0(
             context_label |= (bitmap.get_pixel(3, row1_y) as u16) << 4;
         }
         for j in 0..width {
-            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);
+            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize)?;
             bitmap.set_pixel(j, i, pixel);
             let row2_contrib = if i >= 2 && j + 3 < width {
                 (bitmap.get_pixel(j + 3, i - 2) as u16) << 11
@@ -126,7 +126,6 @@ pub fn decode_bitmap(
 ) -> Result<Bitmap, Jbig2Error> {
     // Validate parameters
     validation::validate_generic_decode_params(params.width, params.height, params.template_index)?;
-
     if params.mmr {
         let mut reader = Reader::new(
             decoding_context.data.clone(),
@@ -202,7 +201,7 @@ pub fn decode_bitmap(
     let mut ltp = 0i32;
     for i in 0..params.height {
         if params.prediction && i > 0 {
-            let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize) as i32;
+            let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize)? as i32;
             ltp ^= sltp;
             if ltp != 0 {
                 let src_start = (i - 1) * bitmap.stride;
@@ -252,7 +251,7 @@ pub fn decode_bitmap(
                 }
                 context_label
             };
-            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);
+            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize)?;
             bitmap.set_pixel(j, i, pixel);
         }
     }

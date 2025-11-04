@@ -1,18 +1,15 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
 use crate::error::Jbig2Error;
-
 const REFINEMENT_REUSED_CONTEXTS: [u16; 2] = [
     0x0020, // '000' + '0' (coding) + '00010000' + '0' (reference)
     0x0008, // '0000' + '001000'
 ];
-
 #[derive(Clone)]
 pub struct RefinementTemplate {
     pub coding: Vec<(i8, i8)>,
     pub reference: Vec<(i8, i8)>,
 }
-
 pub fn get_refinement_template(index: usize) -> RefinementTemplate {
     match index {
         0 => RefinementTemplate {
@@ -38,7 +35,6 @@ pub fn get_refinement_template(index: usize) -> RefinementTemplate {
         },
     }
 }
-
 #[derive(Clone)]
 pub struct RefinementParams<'a> {
     pub width: usize,
@@ -50,7 +46,6 @@ pub struct RefinementParams<'a> {
     pub prediction: bool,
     pub at: Vec<(i8, i8)>,
 }
-
 pub fn decode_refinement<'a>(
     params: &RefinementParams<'a>,
     decoding_context: &mut DecodingContext,
@@ -90,7 +85,7 @@ pub fn decode_refinement<'a>(
     let mut ltp = 0i32;
     for i in 0..params.height {
         if params.prediction && i > 0 {
-            let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize) as i32;
+            let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize)? as i32;
             ltp ^= sltp;
             if ltp != 0 {
                 // Duplicate previous row
@@ -124,7 +119,7 @@ pub fn decode_refinement<'a>(
                         | (params.reference_bitmap.get_pixel(j0 as usize, i0 as usize) as u16);
                 }
             }
-            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize);
+            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize)?;
             bitmap.set_pixel(j, i, pixel);
         }
     }

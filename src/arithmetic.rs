@@ -351,13 +351,17 @@ impl ArithmeticDecoder {
             self.clow &= 0xffff;
         }
     }
-    pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
+    pub fn read_bit(
+        &mut self,
+        contexts: &mut [i8],
+        pos: usize,
+    ) -> Result<u8, crate::error::Jbig2Error> {
         if pos >= contexts.len() {
-            return 0; // Invalid context position
+            return Err(crate::error::Jbig2Error::new("invalid context position"));
         }
         let cx_index = (contexts[pos] >> 1) as usize;
         if cx_index >= QE_TABLE.len() {
-            return 0; // Invalid context index
+            return Err(crate::error::Jbig2Error::new("invalid context index"));
         }
         let mut cx_mps = (contexts[pos] & 1) as u8;
         let qe_entry = &QE_TABLE[cx_index];
@@ -383,7 +387,7 @@ impl ArithmeticDecoder {
             self.chigh -= qe_icx as u32;
             if (a & 0x8000) != 0 {
                 self.a = a;
-                return cx_mps;
+                return Ok(cx_mps);
             }
             // exchangeMps
             if a < qe_icx {
@@ -412,6 +416,6 @@ impl ArithmeticDecoder {
         }
         self.a = a;
         contexts[pos] = ((new_cx_index as i8) << 1) | (cx_mps as i8);
-        d
+        Ok(d)
     }
 }

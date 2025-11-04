@@ -2,7 +2,6 @@ use crate::arithmetic::ArithmeticDecoder;
 use crate::contexts::ContextCache;
 use crate::contexts::DecodingContext;
 use crate::error::Jbig2Error;
-
 // Annex A. Arithmetic Integer Decoding Procedure
 // A.2 Procedure for decoding values
 pub fn decode_integer(
@@ -19,7 +18,7 @@ pub fn decode_integer(
      -> Result<u32, Jbig2Error> {
         let mut v = 0;
         for _ in 0..length {
-            let bit = decoder.read_bit(contexts, *prev) as usize;
+            let bit = decoder.read_bit(contexts, *prev)? as usize;
             *prev = if *prev < 256 {
                 (*prev << 1) | bit
             } else {
@@ -70,7 +69,7 @@ pub fn decode_iaid(
     let contexts = context_cache.get_contexts("IAID");
     let mut prev = 1;
     for _ in 0..code_length {
-        let bit = decoder.read_bit(contexts.as_mut(), prev);
+        let bit = decoder.read_bit(contexts.as_mut(), prev)?;
         prev = (prev << 1) | bit as usize;
     }
     if code_length < 31 {
@@ -97,7 +96,6 @@ pub fn decode_iaid_context(
     let decoder = decoder.as_mut().unwrap();
     decode_iaid(&mut context_cache, decoder, code_length)
 }
-
 pub fn decode_i32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
@@ -113,7 +111,6 @@ where
         decode_integer_context(decoding_context, arith_proc).map(|opt| opt.unwrap_or(0))
     }
 }
-
 pub fn decode_option_i32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
@@ -129,7 +126,6 @@ where
         decode_integer_context(decoding_context, arith_proc)
     }
 }
-
 pub fn decode_u32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
