@@ -56,7 +56,7 @@ mod tests {
             huffman: false,
             refinement: false,
             symbols: vec![],
-            number_of_new_symbols: 1000000, // Too many
+            number_of_new_symbols: 20000000, // Too many (> 2^24-1)
             number_of_exported_symbols: 0,
             template_index: 0,
             at: vec![],

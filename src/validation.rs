@@ -21,7 +21,7 @@ pub fn validate_template_index(index: usize) -> Result<(), Jbig2Error> {
 }
 
 pub fn validate_symbol_count(count: usize) -> Result<(), Jbig2Error> {
-    if count > 65535 {
+    if count > 16777215 { // 2^24 - 1, maximum for 3-byte field
         return Err(Jbig2Error::new(ERR_TOO_MANY_SYMBOLS));
     }
     Ok(())
