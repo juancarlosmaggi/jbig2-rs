@@ -88,8 +88,6 @@ impl DecodingContext {
         if opt.is_none() {
             *opt = Some(crate::arithmetic::ArithmeticDecoder::new(
                 &self.data[self.start..self.end],
-                0,
-                self.end - self.start,
             ));
         }
         std::cell::RefMut::map(opt, |o| o.as_mut().unwrap())
