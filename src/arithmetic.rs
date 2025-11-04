@@ -307,12 +307,10 @@ impl ArithmeticDecoder {
             data_end: end,
             chigh: unsafe { *data_ptr.add(start) as u32 },
             clow: 0,
-            ct: -24,
+            ct: 0,
             a: 0x8000,
         };
-        for _ in 0..7 {
-            decoder.byte_in();
-        }
+        decoder.byte_in();
         decoder.chigh = ((decoder.chigh << 7) & 0xffff) | ((decoder.clow >> 9) & 0x7f);
         decoder.clow = (decoder.clow << 7) & 0xffff;
         decoder.ct -= 7;
