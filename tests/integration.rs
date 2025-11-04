@@ -19,23 +19,37 @@ mod tests {
             expected_gray.push(chunk[0]); // Use red channel as grayscale
         }
 
-        assert_eq!(decoded.len(), expected_gray.len(),
+        assert_eq!(
+            decoded.len(),
+            expected_gray.len(),
             "Image dimensions don't match: decoded {} bytes, expected {} bytes",
-            decoded.len(), expected_gray.len());
+            decoded.len(),
+            expected_gray.len()
+        );
 
         // Compare pixel by pixel
         let mut differences = 0;
-        for (i, (&decoded_pixel, &expected_pixel)) in decoded.iter().zip(expected_gray.iter()).enumerate() {
+        for (i, (&decoded_pixel, &expected_pixel)) in
+            decoded.iter().zip(expected_gray.iter()).enumerate()
+        {
             if decoded_pixel != expected_pixel {
                 differences += 1;
-                if differences <= 10 { // Only print first few differences
-                    println!("Pixel {} differs: decoded={}, expected={}", i, decoded_pixel, expected_pixel);
+                if differences <= 10 {
+                    // Only print first few differences
+                    println!(
+                        "Pixel {} differs: decoded={}, expected={}",
+                        i, decoded_pixel, expected_pixel
+                    );
                 }
             }
         }
 
         if differences > 0 {
-            panic!("Images differ in {} pixels out of {}", differences, decoded.len());
+            panic!(
+                "Images differ in {} pixels out of {}",
+                differences,
+                decoded.len()
+            );
         }
     }
 
@@ -43,7 +57,10 @@ mod tests {
     fn test_weight_no_jbig2() {
         let jbig2_data = load_file("tests/resources/weight_no_jbig2.jb2");
         let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
-        assert!(doc.page_count() > 0, "Document should have at least one page");
+        assert!(
+            doc.page_count() > 0,
+            "Document should have at least one page"
+        );
         let page = doc.get_page(0).unwrap();
         let decoded = page.to_image_data();
         compare_images(&decoded, "tests/resources/weight_no_jbig2.png");
@@ -53,7 +70,10 @@ mod tests {
     fn test_weight_t085_w025() {
         let jbig2_data = load_file("tests/resources/weight_t085_w025.jb2");
         let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
-        assert!(doc.page_count() > 0, "Document should have at least one page");
+        assert!(
+            doc.page_count() > 0,
+            "Document should have at least one page"
+        );
         let page = doc.get_page(0).unwrap();
         let decoded = page.to_image_data();
         compare_images(&decoded, "tests/resources/weight_t085_w025.png");
@@ -63,7 +83,10 @@ mod tests {
     fn test_weight_t085_w050() {
         let jbig2_data = load_file("tests/resources/weight_t085_w050.jb2");
         let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
-        assert!(doc.page_count() > 0, "Document should have at least one page");
+        assert!(
+            doc.page_count() > 0,
+            "Document should have at least one page"
+        );
         let page = doc.get_page(0).unwrap();
         let decoded = page.to_image_data();
         compare_images(&decoded, "tests/resources/weight_t085_w050.png");
@@ -73,7 +96,10 @@ mod tests {
     fn test_weight_t085_w075() {
         let jbig2_data = load_file("tests/resources/weight_t085_w075.jb2");
         let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
-        assert!(doc.page_count() > 0, "Document should have at least one page");
+        assert!(
+            doc.page_count() > 0,
+            "Document should have at least one page"
+        );
         let page = doc.get_page(0).unwrap();
         let decoded = page.to_image_data();
         compare_images(&decoded, "tests/resources/weight_t085_w075.png");
@@ -83,7 +109,10 @@ mod tests {
     fn test_text_region() {
         let jbig2_data = load_file("tests/resources/text_region.jb2");
         let doc = Jbig2Document::parse(&jbig2_data).expect("Failed to parse JBIG2");
-        assert!(doc.page_count() > 0, "Document should have at least one page");
+        assert!(
+            doc.page_count() > 0,
+            "Document should have at least one page"
+        );
         let page = doc.get_page(0).unwrap();
         // Note: No PNG comparison as text_region.png is not present
         let _decoded = page.to_image_data(); // Just check it decodes without error

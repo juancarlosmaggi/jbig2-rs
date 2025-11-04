@@ -13,6 +13,7 @@ use crate::segment::{
     GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, parse_at_parameters, read_u16,
 };
 use std::collections::HashMap;
+
 fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
     let width = bitmap.width;
     let height = bitmap.height;
@@ -30,12 +31,14 @@ fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
     }
     packed
 }
+
 #[derive(Clone)]
 pub struct Jbig2Page {
     pub page_info: PageInfo,
     pub bitmap: Bitmap,
     pub bit_packed_data: Vec<u8>,
 }
+
 impl Jbig2Page {
     pub fn to_image_data(&self) -> Vec<u8> {
         let width = self.page_info.width as usize;
@@ -57,6 +60,7 @@ impl Jbig2Page {
         img_data
     }
 }
+
 #[derive(Default)]
 pub struct SimpleSegmentVisitor {
     pub pages: Vec<Jbig2Page>,
@@ -68,10 +72,12 @@ pub struct SimpleSegmentVisitor {
     pub custom_tables: HashMap<u32, HuffmanTable>,
     pub bitmaps: HashMap<u32, Bitmap>,
 }
+
 impl SimpleSegmentVisitor {
     pub fn new() -> Self {
         Self::default()
     }
+
     fn collect_input_symbols(&self, referred_segments: &[u32]) -> Vec<Bitmap> {
         let mut input_symbols = Vec::new();
         for &segment_id in referred_segments {
@@ -81,6 +87,7 @@ impl SimpleSegmentVisitor {
         }
         input_symbols
     }
+
     pub fn on_page_information(&mut self, info: PageInfo) {
         // If we have a previous page, finalize it
         if let (Some(page_info), Some(bitmap)) =
@@ -101,9 +108,11 @@ impl SimpleSegmentVisitor {
             bitmap_utils::create_initialized_bitmap(width, height, info.default_pixel_value);
         self.current_bitmap = Some(bitmap);
     }
+
     pub fn on_end_of_stripe(&mut self, height: usize) {
         self.current_y += height;
     }
+
     pub fn draw_bitmap(
         &mut self,
         region_info: &RegionInfo,
@@ -149,6 +158,7 @@ impl SimpleSegmentVisitor {
         }
         Ok(())
     }
+
     pub fn on_immediate_generic_region(
         &mut self,
         region: &GenericRegion,
@@ -157,6 +167,20 @@ impl SimpleSegmentVisitor {
         end: usize,
     ) -> Result<(), Jbig2Error> {
         let region_info = &region.info;
+        if self.current_page_info.is_none() {
+            self.on_page_information(PageInfo {
+                width: region_info.width,
+                height: region_info.height,
+                resolution_x: 0,
+                resolution_y: 0,
+                lossless: true,
+                refinement: false,
+                default_pixel_value: 0,
+                combination_operator: 0, // OR
+                requires_buffer: false,
+                combination_operator_override: false,
+            });
+        }
         let at_bytes = region.at.len() * 2;
         let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
         if decoding_start >= end {
@@ -177,6 +201,7 @@ impl SimpleSegmentVisitor {
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
+
     pub fn on_immediate_generic_refinement_region(
         &mut self,
         region_info: &RegionInfo,
@@ -185,6 +210,20 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        if self.current_page_info.is_none() {
+            self.on_page_information(PageInfo {
+                width: region_info.width,
+                height: region_info.height,
+                resolution_x: 0,
+                resolution_y: 0,
+                lossless: true,
+                refinement: false,
+                default_pixel_value: 0,
+                combination_operator: 0, // OR
+                requires_buffer: false,
+                combination_operator_override: false,
+            });
+        }
         // Parse refinement region parameters
         let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
         let generic_region_segment_flags = data[pos];
@@ -228,6 +267,7 @@ impl SimpleSegmentVisitor {
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
+
     pub fn on_symbol_dictionary(
         &mut self,
         params: &SymbolDictionaryParams,
@@ -299,6 +339,7 @@ impl SimpleSegmentVisitor {
             .insert(params.current_segment, exported_symbols);
         Ok(())
     }
+
     #[allow(clippy::too_many_arguments)]
     pub fn on_immediate_text_region(
         &mut self,
@@ -310,6 +351,20 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        if self.current_page_info.is_none() {
+            self.on_page_information(PageInfo {
+                width: region_info.width,
+                height: region_info.height,
+                resolution_x: 0,
+                resolution_y: 0,
+                lossless: true,
+                refinement: false,
+                default_pixel_value: 0,
+                combination_operator: 0, // OR
+                requires_buffer: false,
+                combination_operator_override: false,
+            });
+        }
         let huffman = (text_region_segment_flags & 1) != 0;
         let refinement = (text_region_segment_flags & 2) != 0;
         let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
@@ -406,6 +461,7 @@ impl SimpleSegmentVisitor {
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
+
     #[allow(clippy::too_many_arguments)]
     pub fn on_pattern_dictionary(
         &mut self,
@@ -432,6 +488,7 @@ impl SimpleSegmentVisitor {
         self.patterns.insert(current_segment, patterns);
         Ok(())
     }
+
     #[allow(clippy::too_many_arguments)]
     pub fn on_immediate_halftone_region(
         &mut self,
@@ -452,6 +509,20 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
+        if self.current_page_info.is_none() {
+            self.on_page_information(PageInfo {
+                width: region_info.width,
+                height: region_info.height,
+                resolution_x: 0,
+                resolution_y: 0,
+                lossless: true,
+                refinement: false,
+                default_pixel_value: 0,
+                combination_operator: 0, // OR
+                requires_buffer: false,
+                combination_operator_override: false,
+            });
+        }
         // Get patterns from referred segment
         if referred_to.is_empty() {
             return Err(Jbig2Error::new("no referred segment for halftone patterns"));
@@ -483,6 +554,7 @@ impl SimpleSegmentVisitor {
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
+
     pub fn on_tables(
         &mut self,
         segment_number: u32,
@@ -494,6 +566,7 @@ impl SimpleSegmentVisitor {
         self.custom_tables.insert(segment_number, table);
         Ok(())
     }
+
     pub fn on_intermediate_generic_region(
         &mut self,
         region: &GenericRegion,
@@ -534,6 +607,7 @@ impl SimpleSegmentVisitor {
         self.bitmaps.insert(segment_number, bitmap);
         Ok(())
     }
+
     pub fn on_intermediate_generic_refinement_region(
         &mut self,
         region_info: &RegionInfo,
@@ -586,6 +660,7 @@ impl SimpleSegmentVisitor {
         self.bitmaps.insert(segment_number, bitmap);
         Ok(())
     }
+
     #[allow(clippy::too_many_arguments)]
     pub fn on_intermediate_text_region(
         &mut self,
@@ -704,6 +779,7 @@ impl SimpleSegmentVisitor {
         self.bitmaps.insert(segment_number, bitmap);
         Ok(())
     }
+
     #[allow(clippy::too_many_arguments)]
     pub fn on_intermediate_halftone_region(
         &mut self,
@@ -756,6 +832,7 @@ impl SimpleSegmentVisitor {
         self.bitmaps.insert(segment_number, bitmap);
         Ok(())
     }
+
     // Finalize the current page and add it to the pages vector
     pub fn finalize_current_page(&mut self) {
         if let (Some(page_info), Some(bitmap)) =
@@ -770,4 +847,5 @@ impl SimpleSegmentVisitor {
         }
     }
 }
+
 const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;

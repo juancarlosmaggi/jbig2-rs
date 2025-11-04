@@ -2,7 +2,7 @@
 mod tests {
     use jbig2_rs::bitmap::Bitmap;
     use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_halftone::{decode_halftone_region, HalftoneRegionParams};
+    use jbig2_rs::decode::decode_halftone::{HalftoneRegionParams, decode_halftone_region};
 
     #[test]
     fn test_decode_halftone_region_invalid_combination_operator() {
@@ -93,10 +93,7 @@ mod tests {
         let data = vec![0u8; 1000];
         let mut context = DecodingContext::new(data.clone(), 0, data.len());
 
-        let patterns = vec![
-            Bitmap::new(8, 8),
-            Bitmap::new(8, 8),
-        ];
+        let patterns = vec![Bitmap::new(8, 8), Bitmap::new(8, 8)];
 
         let params = HalftoneRegionParams {
             mmr: false,

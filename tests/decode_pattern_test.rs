@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_pattern::{decode_pattern_dictionary, PatternDictionaryParams};
+    use jbig2_rs::decode::decode_pattern::{PatternDictionaryParams, decode_pattern_dictionary};
 
     #[test]
     fn test_decode_pattern_dictionary_zero_patterns() {
@@ -133,13 +133,7 @@ mod tests {
 
     #[test]
     fn test_decode_pattern_dictionary_different_sizes() {
-        let sizes = vec![
-            (4, 4),
-            (8, 8),
-            (16, 16),
-            (2, 8),
-            (8, 2),
-        ];
+        let sizes = vec![(4, 4), (8, 8), (16, 16), (2, 8), (8, 2)];
 
         for (width, height) in sizes {
             let data = vec![0u8; 1000];

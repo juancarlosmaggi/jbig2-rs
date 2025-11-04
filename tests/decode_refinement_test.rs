@@ -2,7 +2,9 @@
 mod tests {
     use jbig2_rs::bitmap::Bitmap;
     use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_refinement::{decode_refinement, get_refinement_template, RefinementParams};
+    use jbig2_rs::decode::decode_refinement::{
+        RefinementParams, decode_refinement, get_refinement_template,
+    };
 
     #[test]
     fn test_get_refinement_template() {
@@ -130,7 +132,7 @@ mod tests {
             reference_bitmap: &reference,
             offset_x: 0,
             offset_y: 0,
-            prediction: true, // Test prediction
+            prediction: true,         // Test prediction
             at: vec![(0, 0), (0, 0)], // Template 0 requires 2 AT parameters
         };
 
@@ -195,12 +197,7 @@ mod tests {
 
     #[test]
     fn test_decode_refinement_different_sizes() {
-        let sizes = vec![
-            (4, 4),
-            (8, 8),
-            (16, 16),
-            (32, 32),
-        ];
+        let sizes = vec![(4, 4), (8, 8), (16, 16), (32, 32)];
 
         for (width, height) in sizes {
             let data = vec![0u8; 1000];

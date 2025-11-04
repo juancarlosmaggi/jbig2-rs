@@ -35,7 +35,9 @@ pub fn decode_symbol_dictionary(
         crate::core_utils::log2((params.symbols.len() + params.number_of_new_symbols) as u32);
     let huffman_tables = params.huffman_tables.as_ref();
     if params.huffman && huffman_tables.is_none() {
-        return Err(Jbig2Error::new("Huffman tables required for Huffman decoding"));
+        return Err(Jbig2Error::new(
+            "Huffman tables required for Huffman decoding",
+        ));
     }
     while new_symbols.len() < params.number_of_new_symbols {
         let delta_height = decode_i32_huffman_or_arith(

@@ -50,7 +50,9 @@ pub fn decode_text_region(
         return Err(Jbig2Error::new("refinement with Huffman is not supported"));
     }
     if params.huffman && params.huffman_tables.is_none() {
-        return Err(Jbig2Error::new("Huffman tables required for Huffman decoding"));
+        return Err(Jbig2Error::new(
+            "Huffman tables required for Huffman decoding",
+        ));
     }
     // Prepare bitmap
     let mut bitmap = bitmap_utils::create_initialized_bitmap(
