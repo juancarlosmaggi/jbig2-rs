@@ -143,7 +143,7 @@ impl SimpleSegmentVisitor {
                 let dx = reg_x + j;
                 let dy = reg_y + i;
                 let old_dst = dst.get_pixel(dx, dy);
-                let new_val = bitmap_utils::apply_page_combination_operator(old_dst, src, combo_op);
+                let new_val = bitmap_utils::apply_combination_operator(old_dst, src, combo_op);
                 dst.set_pixel(dx, dy, new_val);
             }
         }

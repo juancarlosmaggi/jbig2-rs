@@ -1,6 +1,8 @@
 use crate::bitmap::Bitmap;
-use crate::bitmap_utils::{self, draw_symbol_at_position};
+use crate::bitmap_utils::{self, apply_combination_operator};
 use crate::contexts::DecodingContext;
+use crate::decode::decode_refinement::RefinementParams;
+use crate::decode::decode_refinement::decode_refinement;
 use crate::decoder::{
     decode_i32_huffman_or_arith, decode_integer_context, decode_option_i32_huffman_or_arith,
     decode_u32_huffman_or_arith,
@@ -9,7 +11,6 @@ use crate::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::reader::Reader;
 use crate::validation;
-
 #[derive(Clone)]
 pub struct TextRegionParams {
     pub huffman: bool,
@@ -30,7 +31,6 @@ pub struct TextRegionParams {
     pub refinement_template_index: usize,
     pub refinement_at: Vec<(i8, i8)>,
 }
-
 pub fn decode_text_region(
     params: &TextRegionParams,
     decoding_context: &mut DecodingContext,
@@ -49,7 +49,6 @@ pub fn decode_text_region(
     if params.refinement && params.huffman {
         return Err(Jbig2Error::new("refinement with Huffman is not supported"));
     }
-
     // Prepare bitmap
     let mut bitmap = bitmap_utils::create_initialized_bitmap(
         params.width,
@@ -158,10 +157,10 @@ pub fn decode_text_region(
                     let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
                     (rdw, rdh, rdx, rdy)
                 };
-                let refined_width = symbol_width + rdw as usize;
-                let refined_height = symbol_height + rdh as usize;
-                let refined_bitmap = crate::decode::decode_refinement::decode_refinement(
-                    &crate::decode::decode_refinement::RefinementParams {
+                let refined_width = (symbol_width as i32 + rdw) as usize;
+                let refined_height = (symbol_height as i32 + rdh) as usize;
+                let refined_bitmap = decode_refinement(
+                    &RefinementParams {
                         width: refined_width,
                         height: refined_height,
                         template_index: params.refinement_template_index,
@@ -177,16 +176,6 @@ pub fn decode_text_region(
             } else {
                 (symbol_width, symbol_height, symbol_bitmap.clone())
             };
-            let increment = if !params.transposed {
-                if params.reference_corner > 1 {
-                    current_s += final_symbol_width as i32 - 1;
-                    final_symbol_width as i32 - 1
-                } else {
-                    final_symbol_width as i32 - 1
-                }
-            } else {
-                final_symbol_height as i32 - 1
-            };
             let offset_t = t - if (params.reference_corner & 1) != 0 {
                 0
             } else {
@@ -198,15 +187,47 @@ pub fn decode_text_region(
                 } else {
                     0
                 };
-            // Draw the symbol
-            draw_symbol_at_position(
-                &mut bitmap,
-                &final_symbol_bitmap,
-                offset_s,
-                offset_t,
-                params.transposed,
-                params.combination_operator,
-            );
+            // Draw the symbol with correct transformations and clipping
+            for i in 0..final_symbol_height {
+                let region_y = offset_t + i as i32;
+                if region_y < 0 || region_y >= params.height as i32 {
+                    continue;
+                }
+                for j in 0..final_symbol_width {
+                    let region_x = offset_s + j as i32;
+                    if region_x < 0 || region_x >= params.width as i32 {
+                        continue;
+                    }
+                    let mut cx = j as i32;
+                    let mut cy = final_symbol_height as i32 - 1 - i as i32;
+                    if params.transposed {
+                        cx = i as i32;
+                        cy = final_symbol_height as i32 - 1 - j as i32;
+                        if params.ds_offset < 0 {
+                            cy += params.ds_offset;
+                        } else if params.ds_offset > 0 {
+                            cx += params.ds_offset;
+                        }
+                    } else {
+                        cy += params.ds_offset;
+                    }
+                    if cx < 0
+                        || cy < 0
+                        || cx >= final_symbol_width as i32
+                        || cy >= final_symbol_height as i32
+                    {
+                        continue;
+                    }
+                    let src_pixel = final_symbol_bitmap.get_pixel(cx as usize, cy as usize);
+                    let dst_pixel = bitmap.get_pixel(region_x as usize, region_y as usize);
+                    let new_pixel = apply_combination_operator(
+                        dst_pixel,
+                        src_pixel,
+                        params.combination_operator as u8,
+                    );
+                    bitmap.set_pixel(region_x as usize, region_y as usize, new_pixel);
+                }
+            }
             i += 1;
             let delta_s = decode_option_i32_huffman_or_arith(
                 params.huffman,
@@ -220,6 +241,17 @@ pub fn decode_text_region(
             if delta_s.is_none() {
                 break; // OOB
             }
+            let increment = if !params.transposed {
+                if params.reference_corner > 1 {
+                    final_symbol_width as i32 - 1
+                } else {
+                    0
+                }
+            } else if params.reference_corner & 1 != 0 {
+                final_symbol_height as i32 - 1
+            } else {
+                0
+            };
             current_s += increment + delta_s.unwrap() + params.ds_offset;
         }
     }

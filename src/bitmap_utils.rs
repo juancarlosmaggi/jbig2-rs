@@ -13,14 +13,7 @@ pub fn create_initialized_bitmap(width: usize, height: usize, default_value: u8)
         stride,
     }
 }
-pub fn apply_combination_operator(dst_pixel: u8, src_pixel: u8, operator: usize) -> u8 {
-    match operator {
-        0 => dst_pixel | src_pixel, // OR
-        2 => dst_pixel ^ src_pixel, // XOR
-        _ => dst_pixel,             // undefined: no-op
-    }
-}
-pub fn apply_page_combination_operator(dst_pixel: u8, src_pixel: u8, operator: u8) -> u8 {
+pub fn apply_combination_operator(dst_pixel: u8, src_pixel: u8, operator: u8) -> u8 {
     match operator {
         0 => dst_pixel | src_pixel,        // OR
         1 => dst_pixel & src_pixel,        // AND
@@ -35,8 +28,7 @@ pub fn draw_symbol_at_position(
     symbol: &Bitmap,
     offset_x: i32,
     offset_y: i32,
-    transposed: bool,
-    combination_operator: usize,
+    combination_operator: u8,
 ) {
     for y in 0..symbol.height {
         let row = offset_y + y as i32;
@@ -45,14 +37,13 @@ pub fn draw_symbol_at_position(
         }
         for x in 0..symbol.width {
             let col = offset_x + x as i32;
-            if col >= 0 && col < bitmap.width as i32 {
-                let (src_x, src_y) = if transposed { (x, y) } else { (y, x) };
-                let src_pixel = symbol.get_pixel(src_x, src_y);
-                let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
-                let new_pixel =
-                    apply_combination_operator(dst_pixel, src_pixel, combination_operator);
-                bitmap.set_pixel(col as usize, row as usize, new_pixel);
+            if col < 0 || col >= bitmap.width as i32 {
+                continue;
             }
+            let src_pixel = symbol.get_pixel(x, y);
+            let dst_pixel = bitmap.get_pixel(col as usize, row as usize);
+            let new_pixel = apply_combination_operator(dst_pixel, src_pixel, combination_operator);
+            bitmap.set_pixel(col as usize, row as usize, new_pixel);
         }
     }
 }
