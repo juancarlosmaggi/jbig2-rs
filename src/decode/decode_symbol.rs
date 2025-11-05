@@ -24,6 +24,7 @@ pub fn decode_symbol_dictionary(
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
+    println!("decode_symbol_dictionary: context.data.len()={}, context.start={}, context.end={}", decoding_context.data.len(), decoding_context.start, decoding_context.end);
     // Validate parameters
     if params.number_of_new_symbols == 0 {
         return Err(Jbig2Error::new("number of new symbols must be positive"));

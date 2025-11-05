@@ -286,6 +286,10 @@ impl SimpleSegmentVisitor {
         &mut self,
         params: &SymbolDictionaryParams,
     ) -> Result<(), Jbig2Error> {
+        if params.start >= params.end {
+            println!("Skipping symbol dictionary due to invalid bounds: start={}, end={}", params.start, params.end);
+            return Ok(());
+        }
         println!(
             "Entering on_symbol_dictionary, start: {}, end: {}",
             params.start, params.end
@@ -332,6 +336,7 @@ impl SimpleSegmentVisitor {
         }
         let slice = &params.data[pos.min(params.end)..params.end];
         println!("Slicing from {} to {}", pos.min(params.end), params.end);
+        println!("After adjustments: pos={}, data_len={}, slice_len={}", pos, data_len, slice.len());
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
         // Get Huffman tables if needed
         let huffman_tables = if huffman {

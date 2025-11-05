@@ -351,6 +351,7 @@ pub fn read_segments<'a>(
                 if sequential {
                     let segment_start = pos;
                     let segment_end = (segment_start + segment_header.length).min(end);
+                    println!("Segment {}: type={}, segment_start={}, segment_end={}, length={}", segment_header.number, segment_header.segment_type, segment_start, segment_end, segment_header.length);
                     segments.push(Segment {
                         header: segment_header.clone(),
                         data,
@@ -462,6 +463,7 @@ pub fn process_segment<'a>(
                 start: start + 10,
                 end,
             };
+            println!("SymbolDictionary segment {}: params.start={}, params.end={}, data_len={}", header.number, params.start, params.end, params.end.saturating_sub(params.start));
             visitor.on_symbol_dictionary(&params)?;
         }
         6 | 7 => {
