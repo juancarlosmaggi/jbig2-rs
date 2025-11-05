@@ -346,6 +346,10 @@ pub fn read_segments<'a>(
                     });
                     break;
                 }
+                // Process extension segments normally - they may contain embedded data but we'll
+                // let the regular segment parsing handle segments that come after
+                headers.push(segment_header.clone());
+                pos = segment_header.header_end;
                 headers.push(segment_header.clone());
                 pos = segment_header.header_end;
                 if sequential {

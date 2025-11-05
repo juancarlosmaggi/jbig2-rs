@@ -286,6 +286,7 @@ impl SimpleSegmentVisitor {
         &mut self,
         params: &SymbolDictionaryParams,
     ) -> Result<(), Jbig2Error> {
+        
         if params.start >= params.end {
             println!("Skipping symbol dictionary due to invalid bounds: start={}, end={}", params.start, params.end);
             return Ok(());
@@ -893,7 +894,7 @@ impl SimpleSegmentVisitor {
 
     // Finalize the current page and add it to the pages vector
     pub fn finalize_current_page(&mut self) {
-        println!("Finalizing page, total pages now: {}", self.pages.len() + 1);
+        
         if let (Some(page_info), Some(bitmap)) =
             (self.current_page_info.take(), self.current_bitmap.take())
         {
