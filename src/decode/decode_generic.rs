@@ -256,10 +256,9 @@ pub fn decode_bitmap(
                         if i0 >= 0
                             && i0 < params.height as i32
                             && bitmap.get_pixel(j0 as usize, i0 as usize) != 0
+                            && (0..16).contains(&shift)
                         {
-                            if shift >= 0 && shift < 16 {
-                                context_label |= 1 << shift;
-                            }
+                            context_label |= 1 << shift;
                         }
                     }
                     shift -= 1;

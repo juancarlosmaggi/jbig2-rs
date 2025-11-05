@@ -249,7 +249,7 @@ impl SimpleSegmentVisitor {
         } else {
             Vec::new() // Default to empty if insufficient data
         };
-        pos = pos + at_length * 2;
+        pos += at_length * 2;
         if pos > end {
             return Ok(()); // Allow short data
         }
@@ -427,32 +427,28 @@ impl SimpleSegmentVisitor {
         let mut huffman_refinement_dx = 0u8;
         let mut huffman_refinement_dy = 0u8;
         let mut huffman_refinement_size_selector = false;
-        if huffman {
-            if pos + 2 <= end {
-                let huffman_flags = read_u16(data, pos);
+        if huffman && pos + 2 <= end {
+            let huffman_flags = read_u16(data, pos);
+            pos += 2;
+            println!("After huffman_flags pos: {}", pos);
+            huffman_fs = (huffman_flags & 3) as u8;
+            huffman_ds = ((huffman_flags >> 2) & 3) as u8;
+            huffman_dt = ((huffman_flags >> 4) & 3) as u8;
+            huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
+            huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
+            huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
+            huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
+            huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
+        } // else default 0
+        if refinement && refinement_template == 0 && pos + 4 <= end {
+            for _ in 0..2 {
+                let x = data[pos] as i8;
+                let y = data[pos + 1] as i8;
+                refinement_at.push((x, y));
                 pos += 2;
-                println!("After huffman_flags pos: {}", pos);
-                huffman_fs = (huffman_flags & 3) as u8;
-                huffman_ds = ((huffman_flags >> 2) & 3) as u8;
-                huffman_dt = ((huffman_flags >> 4) & 3) as u8;
-                huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
-                huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
-                huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
-                huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
-                huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
-            } // else default 0
-        }
-        if refinement && refinement_template == 0 {
-            if pos + 4 <= end {
-                for _ in 0..2 {
-                    let x = data[pos] as i8;
-                    let y = data[pos + 1] as i8;
-                    refinement_at.push((x, y));
-                    pos += 2;
-                }
-                println!("After refinement_at pos: {}", pos);
-            } // else default empty
-        }
+            }
+            println!("After refinement_at pos: {}", pos);
+        } // else default empty
         let slice = &data[pos.min(end)..end];
         println!("Slicing from {} to {}", pos.min(end), end);
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
@@ -592,7 +588,7 @@ impl SimpleSegmentVisitor {
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
         let params = crate::decode::decode_halftone::HalftoneRegionParams {
             mmr,
-            patterns: patterns,
+            patterns,
             template,
             region_width: region_info.width as usize,
             region_height: region_info.height as usize,
@@ -684,7 +680,7 @@ impl SimpleSegmentVisitor {
         } else {
             Vec::new()
         };
-        pos = pos + at_length * 2;
+        pos += at_length * 2;
         if pos > end {
             return Ok(());
         }
@@ -727,7 +723,7 @@ impl SimpleSegmentVisitor {
         data: &[u8],
         start: usize,
         end: usize,
-        segment_number: u32,
+        _segment_number: u32,
     ) -> Result<(), Jbig2Error> {
         // Basic validation: check that referred segments exist
         for &seg_id in referred_to {
@@ -763,30 +759,26 @@ impl SimpleSegmentVisitor {
         let mut huffman_refinement_dx = 0u8;
         let mut huffman_refinement_dy = 0u8;
         let mut huffman_refinement_size_selector = false;
-        if huffman {
-            if pos + 2 <= end {
-                let huffman_flags = read_u16(data, pos);
+        if huffman && pos + 2 <= end {
+            let huffman_flags = read_u16(data, pos);
+            pos += 2;
+            huffman_fs = (huffman_flags & 3) as u8;
+            huffman_ds = ((huffman_flags >> 2) & 3) as u8;
+            huffman_dt = ((huffman_flags >> 4) & 3) as u8;
+            huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
+            huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
+            huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
+            huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
+            huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
+        } // else default 0
+        if refinement && refinement_template == 0 && pos + 4 <= end {
+            for _ in 0..2 {
+                let x = data[pos] as i8;
+                let y = data[pos + 1] as i8;
+                refinement_at.push((x, y));
                 pos += 2;
-                huffman_fs = (huffman_flags & 3) as u8;
-                huffman_ds = ((huffman_flags >> 2) & 3) as u8;
-                huffman_dt = ((huffman_flags >> 4) & 3) as u8;
-                huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
-                huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
-                huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
-                huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
-                huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
-            } // else default 0
-        }
-        if refinement && refinement_template == 0 {
-            if pos + 4 <= end {
-                for _ in 0..2 {
-                    let x = data[pos] as i8;
-                    let y = data[pos + 1] as i8;
-                    refinement_at.push((x, y));
-                    pos += 2;
-                }
-            } // else default empty
-        }
+            }
+        } // else default empty
         let slice = &data[pos.min(end)..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
         // Get Huffman tables if needed
@@ -875,7 +867,7 @@ impl SimpleSegmentVisitor {
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
         let params = crate::decode::decode_halftone::HalftoneRegionParams {
             mmr,
-            patterns: patterns,
+            patterns,
             template,
             region_width: region_info.width as usize,
             region_height: region_info.height as usize,

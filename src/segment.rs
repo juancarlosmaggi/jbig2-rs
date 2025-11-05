@@ -268,7 +268,7 @@ pub fn read_segment_header(
                 let search_pattern_length = search_pattern.len();
                 let mut found = false;
                 for i in pos..data.len().saturating_sub(search_pattern_length) + 1 {
-                    if &data[i..i + search_pattern_length] == &search_pattern[..] {
+                    if data[i..i + search_pattern_length] == search_pattern[..] {
                         length = i + search_pattern_length - pos;
                         found = true;
                         break;
