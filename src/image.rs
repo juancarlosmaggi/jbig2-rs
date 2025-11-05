@@ -55,6 +55,7 @@ impl Jbig2Document {
             };
         let data_start = pos;
         
+        println!("Calling read_segments with pos=0x{:04x} ({})", pos, pos);
         let segments = read_segments(
             data,
             pos,
@@ -72,6 +73,7 @@ impl Jbig2Document {
         
 // If we have no pages but the file was parsed successfully, create a default page
         if visitor.pages.is_empty() {
+            println!("No pages found, creating default 100x100 page");
             
             visitor.on_page_information(PageInfo {
                 width: 100,
