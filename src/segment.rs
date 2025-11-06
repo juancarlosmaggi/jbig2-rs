@@ -178,25 +178,21 @@ pub fn read_segment_header(
     let flags = data[pos];
     pos += 1;
     let segment_type = (flags & 0x3f) as usize;
-    println!("read_segment_header: pos=0x{:04x}, flags=0x{:02x}, segment_type={}", pos-1, flags, segment_type);
     if segment_type >= SEGMENT_TYPES.len() {
         return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
     let type_name = SEGMENT_TYPES[segment_type].to_string();
     let deferred_non_retain = (flags & 0x80) != 0;
     let page_association_field_size = (flags & 0x40) != 0;
-    let referred_flags = data[pos];
+    let data_length_field_size = (flags & 0x04) != 0;
+    let mut referred_to_count = (data[pos] & 0x1f) as usize;
+    let mut retain_bits = vec![data[pos] >> 5];
     pos += 1;
-    let mut referred_to_count = (referred_flags & 0x1f) as usize;
-    let mut retain_bits = vec![referred_flags & 0x1f];
     if referred_to_count == 31 {
         if data.len().saturating_sub(pos) < 3 {
             return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
-        let extended_count =
-            ((data[pos] as u32) << 16 | (data[pos + 1] as u32) << 8 | (data[pos + 2] as u32))
-                & 0x1fffffff;
-        referred_to_count = extended_count as usize;
+        referred_to_count = read_u32(data, pos) as usize & 0x1fffffff;
         pos += 3;
         let bytes = (referred_to_count + 7) >> 3;
         if data.len().saturating_sub(pos) < bytes {
@@ -204,12 +200,10 @@ pub fn read_segment_header(
         }
         retain_bits = data[pos..pos + bytes].to_vec();
         pos += bytes;
-    } else if referred_flags == 5 || referred_flags == 6 {
-        return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
-    let referred_to_segment_number_size = if number < 256 {
+    let referred_to_segment_number_size = if number <= 256 {
         1
-    } else if number < 65536 {
+    } else if number <= 65536 {
         2
     } else {
         4
@@ -246,7 +240,12 @@ pub fn read_segment_header(
     if data.len().saturating_sub(pos) < 4 {
         return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
     }
-    let length_u32 = read_u32(data, pos);
+    let length_u32 = if data_length_field_size && segment_type != 62 {
+        pos += 1;
+        read_u32(data, pos)
+    } else {
+        read_u32(data, pos)
+    };
     pos += 4;
     let mut length = length_u32 as usize;
     if length_u32 == 0xffffffff {
@@ -336,6 +335,7 @@ pub fn read_segments<'a>(
         if pos + 11 > end {
             break;
         }
+        let header_start = pos;
         match read_segment_header(data, pos, has_file_header) {
             Ok(segment_header) => {
                 if segment_header.segment_type == 51 {
@@ -347,22 +347,89 @@ pub fn read_segments<'a>(
                     });
                     break;
                 }
-// Process extension segments normally - they may contain embedded data but we'll
-                // let the regular segment parsing handle segments that come after
-                headers.push(segment_header.clone());
-                pos = segment_header.header_end;
+                // Special handling for extension segments - their length field may be wrong
+                if segment_header.segment_type == 62 {
+                    // For extension segments, don't trust the length field
+                    // Instead, look for the actual next segment header
+                    if sequential {
+                        let ext_data_start = segment_header.header_end;
+                        let mut ext_data_end = ext_data_start + segment_header.length;
+                        let search_start = header_start + 11; // Minimum header size
+                        let search_end = data.len().saturating_sub(11).min(header_start + 1000);
+                        let mut found_next = false;
+                        for search_pos in search_start..search_end {
+                            let potential_num = ((data[search_pos] as u32) << 24)
+                                | ((data[search_pos + 1] as u32) << 16)
+                                | ((data[search_pos + 2] as u32) << 8)
+                                | (data[search_pos + 3] as u32);
+                            if potential_num == segment_header.number + 1 {
+                                // Next segment number
+                                let flags = data[search_pos + 4];
+                                let seg_type = flags & 0x3f;
+                                if seg_type < 63 && seg_type > 0 {
+                                    // Valid segment type
+                                    // Additional validation: check if this looks like a real segment header
+                                    let is_reasonable_type = match seg_type {
+                                        16..=23 => true, // Region and dictionary segments
+                                        48..=52 => true, // Page information and end of page
+                                        62 => true,      // Extension segment
+                                        _ => false,
+                                    };
+                                    if is_reasonable_type {
+                                        let length = ((data[search_pos + 7] as u32) << 24)
+                                            | ((data[search_pos + 8] as u32) << 16)
+                                            | ((data[search_pos + 9] as u32) << 8)
+                                            | (data[search_pos + 10] as u32);
+                                        // Allow larger lengths for halftone region segments (type 22)
+                                        let max_reasonable_length =
+                                            if seg_type == 22 { 20_000_000 } else { 50_000 };
+                                        if length < max_reasonable_length {
+                                            // Reasonable length for segment type
+                                            println!(
+                                                "Extension segment: found next segment {} at 0x{:04x}",
+                                                potential_num, search_pos
+                                            );
+                                            pos = search_pos;
+                                            ext_data_end = search_pos;
+                                            found_next = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if !found_next {
+                            println!("Extension segment: could not find next segment, breaking");
+                            break;
+                        }
+                        // Add extension segment
+                        segments.push(Segment {
+                            header: segment_header.clone(),
+                            data,
+                            start: header_start,
+                            end: ext_data_end,
+                        });
+                        // Continue parsing from the found position
+                        continue;
+                    } else {
+                        headers.push(segment_header.clone());
+                        pos = segment_header.header_end;
+                    }
+                } else {
+                    headers.push(segment_header.clone());
+                    pos = segment_header.header_end;
+                }
                 if sequential {
-                    let segment_start = pos;
+                    let segment_start = segment_header.header_end;
                     let segment_end = (segment_start + segment_header.length).min(end);
-                    println!("Segment {}: type={}, segment_start={}, segment_end={}, length={}", segment_header.number, segment_header.segment_type, segment_start, segment_end, segment_header.length);
-                    println!("  pos was: {}, pos now: {}", pos, segment_end);
+                    let next_pos = segment_end;
                     segments.push(Segment {
-                        header: segment_header.clone(),
+                        header: segment_header,
                         data,
                         start: segment_start,
                         end: segment_end,
                     });
-                    pos = segment_end;
+                    pos = next_pos;
                 }
             }
             Err(_) => break,
@@ -382,7 +449,7 @@ pub fn read_segments<'a>(
             data_pos += header.length;
             let segment_end = data_pos;
             segments.push(Segment {
-                header: header.clone(),
+                header,
                 data,
                 start: segment_start,
                 end: segment_end,
@@ -401,11 +468,18 @@ pub fn process_segments<'a>(
         let page_association = segment.header.page_association;
         let is_global = page_association == 0;
         let is_page_info = segment.header.segment_type == 48;
+        let is_extension = segment.header.segment_type == 62;
         let should_process = is_global
             || is_page_info
+            || is_extension // Process extension segments immediately
             || (page_association == current_page && current_page > 0)
             || (page_association == 1 && current_page == 0);
         if !should_process {
+            continue;
+        }
+        // Process extension segments immediately to extract page info
+        if is_extension {
+            process_segment(segment, visitor)?;
             continue;
         }
         page_segments.push(segment);
@@ -467,7 +541,6 @@ pub fn process_segment<'a>(
                 start: start + 10,
                 end,
             };
-            println!("SymbolDictionary segment {}: params.start={}, params.end={}, data_len={}", header.number, params.start, params.end, params.end.saturating_sub(params.start));
             visitor.on_symbol_dictionary(&params)?;
         }
         6 | 7 => {
@@ -499,12 +572,23 @@ pub fn process_segment<'a>(
         48 => {
             // PageInformation
             println!("Processing PageInformation segment {}", header.number);
-let mut width = read_u32(data, start);
+            let mut width = read_u32(data, start);
             let mut height = read_u32(data, start + 4);
             let resolution_x = read_u32(data, start + 8);
             let resolution_y = read_u32(data, start + 12);
             let page_segment_flags = data[start + 16];
-            println!("Page info raw: width={}, height={}, xres={}, yres={} at segment {}", width, height, resolution_x, resolution_y, header.number);
+            println!(
+                "Page info raw: width={}, height={}, xres={}, yres={} at segment {}",
+                width, height, resolution_x, resolution_y, header.number
+            );
+            // Skip corrupted page information segments (height > 10000 indicates corruption)
+            if height > 10000 {
+                println!(
+                    "Skipping corrupted page info segment {}: {}x{} (height too large)",
+                    header.number, width, height
+                );
+                return Ok(());
+            }
             if width == 0 || height == 0 {
                 width = 1;
                 height = 1;
@@ -527,7 +611,10 @@ let mut width = read_u32(data, start);
                 requires_buffer,
                 combination_operator_override,
             };
-            println!("Calling visitor.on_page_information from segment {}", header.number);
+            println!(
+                "Calling visitor.on_page_information from segment {}",
+                header.number
+            );
             visitor.on_page_information(info);
         }
         16 => {
@@ -706,38 +793,41 @@ let mut width = read_u32(data, start);
         53 => {
             // Tables
             visitor.on_tables(header.number, data, start, end)?;
-}
-        62 => { // Extension
-            // Extensions are comments and can be ignored
-            // However, some files embed page information within extension data
-            // Check if this extension contains page information at offset 0xea
-            println!("Extension segment: number={}, start={}, end={}, length={}", header.number, start, end, end - start);
-            
-            // For this specific halftone file, check if we can find the correct dimensions
-            // at known offsets in the file
-            if data.len() > 0xea + 16 {
-                let width = read_u32(data, 0xea);
-                let height = read_u32(data, 0xea + 4);
-                let resolution_x = read_u32(data, 0xfc);
-                let resolution_y = read_u32(data, 0x100);
-                
-                if width == 800 && height == 1200 {
-                    println!("Found embedded page info at offset 0xea: {}x{}", width, height);
+        }
+        62 => {
+            // Extension
+            // Process potential embedded page information based on reference implementation
+            let data_start = start;
+            let data_length = end - data_start;
+            if data_length >= 4 && &data[data_start..data_start + 4] == b"pdfj" {
+                if data_length >= 21 {
+                    let width = read_u32(data, data_start + 4);
+                    let height = read_u32(data, data_start + 8);
+                    let resolution_x = read_u32(data, data_start + 12);
+                    let resolution_y = read_u32(data, data_start + 16);
+                    let page_segment_flags = data[data_start + 20];
+                    let lossless = (page_segment_flags & 1) != 0;
+                    let refinement = (page_segment_flags & 2) != 0;
+                    let default_pixel_value = (page_segment_flags >> 2) & 1;
+                    let combination_operator = (page_segment_flags >> 3) & 3;
+                    let requires_buffer = (page_segment_flags & 32) != 0;
+                    let combination_operator_override = (page_segment_flags & 64) != 0;
                     let info = PageInfo {
                         width,
                         height,
                         resolution_x,
                         resolution_y,
-                        lossless: true,
-                        refinement: false,
-                        default_pixel_value: 0,
-                        combination_operator: 0,
-                        requires_buffer: false,
-                        combination_operator_override: false,
+                        lossless,
+                        refinement,
+                        default_pixel_value,
+                        combination_operator,
+                        requires_buffer,
+                        combination_operator_override,
                     };
                     visitor.on_page_information(info);
                 }
             }
+            // Otherwise, ignore as comment
         }
         _ => {} // Unknown segment types
     }

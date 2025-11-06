@@ -89,10 +89,20 @@ impl SimpleSegmentVisitor {
     }
 
     pub fn on_page_information(&mut self, info: PageInfo) {
+        // Validate dimensions to skip corrupted page information
+        if info.width == 0 || info.height == 0 || info.width > 100000 || info.height > 100000 {
+            println!(
+                "Skipping invalid page dimensions: {}x{}",
+                info.width, info.height
+            );
+            return;
+        }
+
         println!(
             "Page info: width={}, height={}, xres={}, yres={}",
             info.width, info.height, info.resolution_x, info.resolution_y
         );
+
         // If we have a previous page, finalize it
         if let (Some(page_info), Some(bitmap)) =
             (self.current_page_info.take(), self.current_bitmap.take())
@@ -104,6 +114,7 @@ impl SimpleSegmentVisitor {
                 bit_packed_data,
             });
         }
+
         self.current_page_info = Some(info.clone());
         self.current_y = 0;
         let width = info.width as usize;
@@ -137,19 +148,24 @@ impl SimpleSegmentVisitor {
             .current_bitmap
             .as_mut()
             .ok_or(Jbig2Error::new("no current bitmap"))?;
+
         // Region coordinates are validated by checking bounds below
         let reg_x = region_info.x as usize;
         let reg_y = region_info.y as usize + self.current_y;
+
         // Check if region is completely outside page bounds
         if reg_x >= page_width || reg_y >= page_height {
             return Ok(()); // Nothing to draw
         }
+
         let width = (region_info.width as usize).min(page_width - reg_x);
         let height = (region_info.height as usize).min(page_height - reg_y);
+
         // Validate source bitmap dimensions
         if src_bitmap.width < width || src_bitmap.height < height {
             return Err(Jbig2Error::new("source bitmap too small for region"));
         }
+
         for i in 0..height {
             for j in 0..width {
                 let src = src_bitmap.get_pixel(j, i);
@@ -195,13 +211,16 @@ impl SimpleSegmentVisitor {
                 combination_operator_override: false,
             });
         }
+
         let at_bytes = region.at.len() * 2;
         let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
         if decoding_start > end {
             return Ok(()); // Allow short data for minimal test
         }
+
         let slice = &data[decoding_start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         let params = DecodeBitmapParams {
             mmr: region.mmr,
             width: region_info.width as usize,
@@ -211,6 +230,7 @@ impl SimpleSegmentVisitor {
             skip: None,
             at: region.at.clone(),
         };
+
         let bitmap = decode_bitmap(&params, &mut decoding_context)?;
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
@@ -238,13 +258,14 @@ impl SimpleSegmentVisitor {
                 combination_operator_override: false,
             });
         }
+
         // Parse refinement region parameters
         let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
         let generic_region_segment_flags = data[pos];
         pos += 1;
         let template = ((generic_region_segment_flags >> 1) & 3) as usize;
         let at_length = if template == 0 { 2 } else { 0 };
-        let at = if at_length > 0 && pos + at_length * 2 <= end {
+        let at = if at_length > 0 {
             parse_at_parameters(data, pos, at_length)?
         } else {
             Vec::new() // Default to empty if insufficient data
@@ -253,6 +274,7 @@ impl SimpleSegmentVisitor {
         if pos > end {
             return Ok(()); // Allow short data
         }
+
         // Get reference bitmap from referred segment
         if referred_to.is_empty() {
             return Ok(()); // Skip if no referred
@@ -263,8 +285,10 @@ impl SimpleSegmentVisitor {
         } else {
             return Ok(()); // Skip if not found
         };
+
         let slice = &data[pos..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         let bitmap = crate::decode::decode_refinement::decode_refinement(
             &crate::decode::decode_refinement::RefinementParams {
                 width: region_info.width as usize,
@@ -278,6 +302,7 @@ impl SimpleSegmentVisitor {
             },
             &mut decoding_context,
         )?;
+
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
@@ -286,34 +311,43 @@ impl SimpleSegmentVisitor {
         &mut self,
         params: &SymbolDictionaryParams,
     ) -> Result<(), Jbig2Error> {
-        
         if params.start >= params.end {
-            println!("Skipping symbol dictionary due to invalid bounds: start={}, end={}", params.start, params.end);
+            println!(
+                "Skipping symbol dictionary due to invalid bounds: start={}, end={}",
+                params.start, params.end
+            );
             return Ok(());
         }
+
         println!(
             "Entering on_symbol_dictionary, start: {}, end: {}",
             params.start, params.end
         );
+
         // Skip processing if too many symbols to prevent errors
         if params.number_of_new_symbols > 10000 {
             return Ok(());
         }
+
         let huffman = (params.dictionary_flags & 1) != 0;
         let refinement = (params.dictionary_flags & 2) != 0;
         let template = ((params.dictionary_flags >> 10) & 3) as usize;
         let refinement_template = ((params.dictionary_flags >> 12) & 1) as usize;
+
         // Parse AT parameters if not Huffman
         let mut at = Vec::new();
         let mut refinement_at = Vec::new();
         let mut pos = params.start;
         println!("Initial pos: {}", pos);
+
         if huffman {
             pos = params.start + 4;
             println!("After huffman adjustment pos: {}", pos);
         }
+
         let data_len = params.end.saturating_sub(pos);
         println!("data_len: {}", data_len);
+
         if !huffman {
             let at_length = if template == 0 { 4 } else { 1 };
             let required = at_length * 2;
@@ -323,6 +357,7 @@ impl SimpleSegmentVisitor {
                 println!("After AT parse pos: {}", pos);
             } // else default empty
         }
+
         if refinement && refinement_template == 0 {
             let required = 4;
             if data_len >= required {
@@ -335,10 +370,18 @@ impl SimpleSegmentVisitor {
                 println!("After refinement AT parse pos: {}", pos);
             } // else default empty
         }
+
         let slice = &params.data[pos.min(params.end)..params.end];
         println!("Slicing from {} to {}", pos.min(params.end), params.end);
-        println!("After adjustments: pos={}, data_len={}, slice_len={}", pos, data_len, slice.len());
+        println!(
+            "After adjustments: pos={}, data_len={}, slice_len={}",
+            pos,
+            data_len,
+            slice.len()
+        );
+
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         // Get Huffman tables if needed
         let huffman_tables = if huffman {
             Some(crate::huffman::get_symbol_dictionary_huffman_tables(
@@ -352,6 +395,7 @@ impl SimpleSegmentVisitor {
         } else {
             None
         };
+
         let symbol_params = crate::decode::decode_symbol::SymbolDictionaryParams {
             huffman,
             refinement,
@@ -364,18 +408,22 @@ impl SimpleSegmentVisitor {
             refinement_at,
             huffman_tables,
         };
+
         let mut huffman_input = if huffman {
             Some(Reader::new(slice.to_vec(), 0, slice.len()))
         } else {
             None
         };
+
         let exported_symbols = decode_symbol_dictionary(
             &symbol_params,
             &mut decoding_context,
             huffman_input.as_mut(),
         )?;
+
         self.symbols
             .insert(params.current_segment, exported_symbols);
+
         Ok(())
     }
 
@@ -394,6 +442,7 @@ impl SimpleSegmentVisitor {
             "Entering on_immediate_text_region, start: {}, end: {}",
             start, end
         );
+
         if self.current_page_info.is_none() {
             self.on_page_information(PageInfo {
                 width: region_info.width,
@@ -408,6 +457,7 @@ impl SimpleSegmentVisitor {
                 combination_operator_override: false,
             });
         }
+
         let huffman = (text_region_segment_flags & 1) != 0;
         let refinement = (text_region_segment_flags & 2) != 0;
         let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
@@ -418,13 +468,16 @@ impl SimpleSegmentVisitor {
         let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
         let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
         let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
+
         // Collect input symbols from referred segments
         let input_symbols = self.collect_input_symbols(referred_to);
         let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
+
         // Parse Huffman flags and refinement AT
         let mut refinement_at = Vec::new();
         let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
         println!("Initial pos: {}", pos);
+
         let mut huffman_fs = 0u8;
         let mut huffman_ds = 0u8;
         let mut huffman_dt = 0u8;
@@ -433,6 +486,7 @@ impl SimpleSegmentVisitor {
         let mut huffman_refinement_dx = 0u8;
         let mut huffman_refinement_dy = 0u8;
         let mut huffman_refinement_size_selector = false;
+
         if huffman && pos + 2 <= end {
             let huffman_flags = read_u16(data, pos);
             pos += 2;
@@ -446,6 +500,7 @@ impl SimpleSegmentVisitor {
             huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
             huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
         } // else default 0
+
         if refinement && refinement_template == 0 && pos + 4 <= end {
             for _ in 0..2 {
                 let x = data[pos] as i8;
@@ -455,15 +510,19 @@ impl SimpleSegmentVisitor {
             }
             println!("After refinement_at pos: {}", pos);
         } // else default empty
+
         let slice = &data[pos.min(end)..end];
         println!("Slicing from {} to {}", pos.min(end), end);
+
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         // Get Huffman tables if needed
         let mut huffman_reader = if huffman {
             Some(Reader::new(slice.to_vec(), 0, slice.len()))
         } else {
             None
         };
+
         let huffman_tables = if let Some(ref mut reader) = huffman_reader {
             let params = TextRegionHuffmanParams {
                 huffman_fs,
@@ -485,6 +544,7 @@ impl SimpleSegmentVisitor {
         } else {
             None
         };
+
         let params = crate::decode::decode_text::TextRegionParams {
             huffman,
             refinement,
@@ -504,7 +564,9 @@ impl SimpleSegmentVisitor {
             refinement_template_index: refinement_template,
             refinement_at,
         };
+
         let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
+
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
@@ -524,6 +586,7 @@ impl SimpleSegmentVisitor {
     ) -> Result<(), Jbig2Error> {
         let slice = &data[start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         let params = crate::decode::decode_pattern::PatternDictionaryParams {
             mmr,
             pattern_width,
@@ -531,8 +594,11 @@ impl SimpleSegmentVisitor {
             max_pattern_index,
             template,
         };
+
         let patterns = decode_pattern_dictionary(&params, &mut decoding_context)?;
+
         self.patterns.insert(current_segment, patterns);
+
         Ok(())
     }
 
@@ -566,6 +632,7 @@ impl SimpleSegmentVisitor {
         if region_info.width > 10000 || region_info.height > 10000 {
             return Ok(());
         }
+
         if self.current_page_info.is_none() {
             self.on_page_information(PageInfo {
                 width: region_info.width.max(1),
@@ -580,6 +647,7 @@ impl SimpleSegmentVisitor {
                 combination_operator_override: false,
             });
         }
+
         // Get patterns from referred segment
         if referred_to.is_empty() {
             return Ok(()); // Skip if no referred
@@ -590,8 +658,10 @@ impl SimpleSegmentVisitor {
         } else {
             return Ok(()); // Skip if not found
         };
+
         let slice = &data[start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         let params = crate::decode::decode_halftone::HalftoneRegionParams {
             mmr,
             patterns,
@@ -608,7 +678,9 @@ impl SimpleSegmentVisitor {
             grid_vector_x,
             grid_vector_y,
         };
+
         let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
+
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
@@ -644,14 +716,18 @@ impl SimpleSegmentVisitor {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
+
         let region_info = &region.info;
+
         let at_bytes = region.at.len() * 2;
         let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
         if decoding_start > end {
             return Ok(()); // Allow short data
         }
+
         let slice = &data[decoding_start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         let params = DecodeBitmapParams {
             mmr: region.mmr,
             width: region_info.width as usize,
@@ -661,7 +737,9 @@ impl SimpleSegmentVisitor {
             skip: None,
             at: region.at.clone(),
         };
+
         let bitmap = decode_bitmap(&params, &mut decoding_context)?;
+
         self.bitmaps.insert(segment_number, bitmap);
         Ok(())
     }
@@ -690,6 +768,7 @@ impl SimpleSegmentVisitor {
         if pos > end {
             return Ok(());
         }
+
         // Get reference bitmap from referred segment
         if referred_to.is_empty() {
             return Ok(());
@@ -700,8 +779,10 @@ impl SimpleSegmentVisitor {
         } else {
             return Ok(());
         };
+
         let slice = &data[pos..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         let bitmap = crate::decode::decode_refinement::decode_refinement(
             &crate::decode::decode_refinement::RefinementParams {
                 width: region_info.width as usize,
@@ -715,6 +796,7 @@ impl SimpleSegmentVisitor {
             },
             &mut decoding_context,
         )?;
+
         self.bitmaps.insert(segment_number, bitmap);
         Ok(())
     }
@@ -741,6 +823,7 @@ impl SimpleSegmentVisitor {
                 return Err(Jbig2Error::new("referred segment not found"));
             }
         }
+
         let huffman = (text_region_segment_flags & 1) != 0;
         let refinement = (text_region_segment_flags & 2) != 0;
         let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
@@ -751,12 +834,15 @@ impl SimpleSegmentVisitor {
         let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
         let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
         let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
+
         // Collect input symbols from referred segments
         let input_symbols = self.collect_input_symbols(referred_to);
         let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
+
         // Parse Huffman flags and refinement AT
         let mut refinement_at = Vec::new();
         let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
+
         let mut huffman_fs = 0u8;
         let mut huffman_ds = 0u8;
         let mut huffman_dt = 0u8;
@@ -765,6 +851,7 @@ impl SimpleSegmentVisitor {
         let mut huffman_refinement_dx = 0u8;
         let mut huffman_refinement_dy = 0u8;
         let mut huffman_refinement_size_selector = false;
+
         if huffman && pos + 2 <= end {
             let huffman_flags = read_u16(data, pos);
             pos += 2;
@@ -777,6 +864,7 @@ impl SimpleSegmentVisitor {
             huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
             huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
         } // else default 0
+
         if refinement && refinement_template == 0 && pos + 4 <= end {
             for _ in 0..2 {
                 let x = data[pos] as i8;
@@ -785,14 +873,18 @@ impl SimpleSegmentVisitor {
                 pos += 2;
             }
         } // else default empty
+
         let slice = &data[pos.min(end)..end];
+
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         // Get Huffman tables if needed
         let mut huffman_reader = if huffman {
             Some(Reader::new(slice.to_vec(), 0, slice.len()))
         } else {
             None
         };
+
         let huffman_tables = if let Some(ref mut reader) = huffman_reader {
             let params = TextRegionHuffmanParams {
                 huffman_fs,
@@ -814,6 +906,7 @@ impl SimpleSegmentVisitor {
         } else {
             None
         };
+
         let params = crate::decode::decode_text::TextRegionParams {
             huffman,
             refinement,
@@ -833,7 +926,9 @@ impl SimpleSegmentVisitor {
             refinement_template_index: refinement_template,
             refinement_at,
         };
+
         let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
+
         self.draw_bitmap(region_info, &bitmap)?;
         Ok(())
     }
@@ -869,8 +964,10 @@ impl SimpleSegmentVisitor {
         } else {
             return Ok(());
         };
+
         let slice = &data[start..end];
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+
         let params = crate::decode::decode_halftone::HalftoneRegionParams {
             mmr,
             patterns,
@@ -887,14 +984,15 @@ impl SimpleSegmentVisitor {
             grid_vector_x,
             grid_vector_y,
         };
+
         let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
+
         self.bitmaps.insert(segment_number, bitmap);
         Ok(())
     }
 
     // Finalize the current page and add it to the pages vector
     pub fn finalize_current_page(&mut self) {
-        
         if let (Some(page_info), Some(bitmap)) =
             (self.current_page_info.take(), self.current_bitmap.take())
         {
