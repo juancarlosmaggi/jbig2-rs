@@ -89,10 +89,11 @@ impl SimpleSegmentVisitor {
     }
 
     pub fn on_page_information(&mut self, info: PageInfo) {
-        // Validate dimensions to skip corrupted page information
-        if info.width == 0 || info.height == 0 || info.width > 100000 || info.height > 100000 {
+        // Validate dimensions: only check for zero, not for max size
+        // Large dimensions are allowed - allocation will naturally fail if too large
+        if info.width == 0 || info.height == 0 {
             println!(
-                "Skipping invalid page dimensions: {}x{}",
+                "Skipping invalid page dimensions (zero): {}x{}",
                 info.width, info.height
             );
             return;

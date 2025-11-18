@@ -74,6 +74,7 @@ impl Jbig2Document {
 // If we have no pages but the file was parsed successfully, create a default page
         if visitor.pages.is_empty() {
             println!("No pages found, creating default 100x100 page");
+            eprintln!("Error: Parsed segments but no pages were created. This indicates skipped segments or parsing logic issues.");
             
             visitor.on_page_information(PageInfo {
                 width: 100,

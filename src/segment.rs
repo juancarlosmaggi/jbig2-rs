@@ -282,6 +282,11 @@ pub fn read_segment_header(
             return Err(Jbig2Error::new(ERR_UNKNOWN_LENGTH));
         }
     }
+    println!("Segment header at {}: number={}, type={}, flags={:02x}, page_assoc={}, length={}, header_end={}", 
+        start, number, segment_type, flags, pa, length, pos);
+    if segment_type == 48 || segment_type == 62 {
+        println!("  -> Segment type {} at 0x{:04x}, data will start at 0x{:04x}", segment_type, start, pos);
+    }
     Ok(SegmentHeader {
         number,
         segment_type,
@@ -331,6 +336,7 @@ pub fn read_segments<'a>(
     let mut segments = vec![];
     let mut headers = vec![];
     let mut pos = start;
+    println!("read_segments: start={}, end={}, data[start..start+20]={:02x?}", start, end, &data[start..(start+20).min(end)]);
     while pos < end {
         if pos + 11 > end {
             break;
@@ -570,8 +576,13 @@ pub fn process_segment<'a>(
             )?;
         }
         48 => {
-            // PageInformation
+            // PageInformation  
             println!("Processing PageInformation segment {}", header.number);
+            println!("PageInfo segment data starts at offset 0x{:04x} ({})", start, start);
+            if end - start >= 19 {
+                println!("PageInfo bytes: {:02x?}", &data[start..start+19]);
+            }
+            // Per JBIG2 spec and reference implementation: ALL fields use BIG-ENDIAN
             let mut width = read_u32(data, start);
             let mut height = read_u32(data, start + 4);
             let resolution_x = read_u32(data, start + 8);
@@ -581,14 +592,9 @@ pub fn process_segment<'a>(
                 "Page info raw: width={}, height={}, xres={}, yres={} at segment {}",
                 width, height, resolution_x, resolution_y, header.number
             );
-            // Skip corrupted page information segments (height > 10000 indicates corruption)
-            if height > 10000 {
-                println!(
-                    "Skipping corrupted page info segment {}: {}x{} (height too large)",
-                    header.number, width, height
-                );
-                return Ok(());
-            }
+            println!("Parsed from bytes: width=[{:02x} {:02x} {:02x} {:02x}], height=[{:02x} {:02x} {:02x} {:02x}]",
+                data[start], data[start+1], data[start+2], data[start+3],
+                data[start+4], data[start+5], data[start+6], data[start+7]);
             if width == 0 || height == 0 {
                 width = 1;
                 height = 1;
@@ -611,8 +617,7 @@ pub fn process_segment<'a>(
                 requires_buffer,
                 combination_operator_override,
             };
-            println!(
-                "Calling visitor.on_page_information from segment {}",
+            println!("Calling visitor.on_page_information from segment {}",
                 header.number
             );
             visitor.on_page_information(info);
@@ -799,13 +804,20 @@ pub fn process_segment<'a>(
             // Process potential embedded page information based on reference implementation
             let data_start = start;
             let data_length = end - data_start;
+            println!("Extension segment: start={}, end={}, length={}", data_start, end, data_length);
+            if data_length >= 4 {
+                println!("Extension segment first 4 bytes: {:02x?}", &data[data_start..data_start + 4]);
+                println!("Extension segment first bytes as string: {:?}", std::str::from_utf8(&data[data_start..(data_start + 4).min(end)]));
+            }
             if data_length >= 4 && &data[data_start..data_start + 4] == b"pdfj" {
+                println!("Found 'pdfj' marker in extension segment");
                 if data_length >= 21 {
                     let width = read_u32(data, data_start + 4);
                     let height = read_u32(data, data_start + 8);
                     let resolution_x = read_u32(data, data_start + 12);
                     let resolution_y = read_u32(data, data_start + 16);
                     let page_segment_flags = data[data_start + 20];
+                    println!("Extension segment page info: width={}, height={}, xres={}, yres={}", width, height, resolution_x, resolution_y);
                     let lossless = (page_segment_flags & 1) != 0;
                     let refinement = (page_segment_flags & 2) != 0;
                     let default_pixel_value = (page_segment_flags >> 2) & 1;
@@ -824,8 +836,13 @@ pub fn process_segment<'a>(
                         requires_buffer,
                         combination_operator_override,
                     };
+                    println!("Calling visitor.on_page_information from extension segment");
                     visitor.on_page_information(info);
+                } else {
+                    println!("Extension segment with pdfj but too short: {} bytes", data_length);
                 }
+            } else {
+                println!("Extension segment does not have pdfj marker, treating as comment");
             }
             // Otherwise, ignore as comment
         }
