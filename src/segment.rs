@@ -184,9 +184,9 @@ pub fn read_segment_header(
     let type_name = SEGMENT_TYPES[segment_type].to_string();
     let deferred_non_retain = (flags & 0x80) != 0;
     let page_association_field_size = (flags & 0x40) != 0;
-    let data_length_field_size = (flags & 0x04) != 0;
-    let mut referred_to_count = (data[pos] & 0x1f) as usize;
-    let mut retain_bits = vec![data[pos] >> 5];
+    let _data_length_field_size = (flags & 0x04) != 0;
+    let mut referred_to_count = (data[pos] >> 5) as usize;
+    let mut retain_bits = vec![data[pos] & 0x07];
     pos += 1;
     if referred_to_count == 31 {
         if data.len().saturating_sub(pos) < 3 {
@@ -330,87 +330,122 @@ pub fn read_segments<'a>(
     has_file_header: bool,
 ) -> Result<Vec<Segment<'a>>, Jbig2Error> {
     let mut segments = vec![];
-    let mut headers = vec![];
     let mut pos = start;
-    println!("read_segments: start={}, end={}, data[start..start+20]={:02x?}", start, end, &data[start..(start+20).min(end)]);
-    while pos < end {
-        if pos + 11 > end {
-            break;
-        }
-        let header_start = pos;
-        match read_segment_header(data, pos, has_file_header) {
-            Ok(segment_header) => {
-                if segment_header.segment_type == 51 {
-                    segments.push(Segment {
-                        header: segment_header.clone(),
-                        data,
-                        start: pos,
-                        end: segment_header.header_end,
-                    });
-                    break;
-                }
-                // Extension segments: trust the length field
-                if segment_header.segment_type == 62 {
-                    if sequential {
-                        let ext_data_start = segment_header.header_end;
-                        let ext_data_end = ext_data_start + segment_header.length;
-                        
-                        // Add extension segment
-                        segments.push(Segment {
-                            header: segment_header.clone(),
-                            data,
-                            start: ext_data_start,
-                            end: ext_data_end,
-                        });
-                        
-                        // Move position to after this segment's data
-                        pos = ext_data_end;
-                        continue;
-                    } else {
-                        headers.push(segment_header.clone());
-                        pos = segment_header.header_end;
-                    }
-                } else {
-                    headers.push(segment_header.clone());
+    
+    println!("read_segments: mode={}, start=0x{:04x}, end=0x{:04x}", 
+        if sequential { "sequential" } else { "random-access" }, start, end);
+    
+    if sequential {
+        // SEQUENTIAL MODE: Parse header and data together
+        while pos < end {
+            if pos + 11 > end {
+                break;
+            }
+            
+            match read_segment_header(data, pos, has_file_header) {
+                Ok(segment_header) => {
+                    println!("  Segment {}: type={}, header_end=0x{:04x}, length={}", 
+                        segment_header.number, segment_header.segment_type, 
+                        segment_header.header_end, segment_header.length);
+                    
+                    // Move past header
                     pos = segment_header.header_end;
-                }
-                if sequential {
-                    let segment_start = segment_header.header_end;
-                    let segment_end = (segment_start + segment_header.length).min(end);
-                    let next_pos = segment_end;
+                    
+                    // EOF segment has no data
+                    if segment_header.segment_type == 51 {
+                        segments.push(Segment {
+                            header: segment_header,
+                            data,
+                            start: pos,
+                            end: pos,
+                        });
+                        break;
+                    }
+                    
+                    // Calculate data range
+                    let segment_start = pos;
+                    let segment_end = (pos + segment_header.length).min(end);
+                    
                     segments.push(Segment {
                         header: segment_header,
                         data,
                         start: segment_start,
                         end: segment_end,
                     });
-                    pos = next_pos;
+                    
+                    // Move to next segment
+                    pos = segment_end;
                 }
+                Err(_) => break,
             }
-            Err(_) => break,
         }
-    }
-    if !sequential {
-        let mut cumulative_length = 0;
-        for header in &headers {
-            cumulative_length += header.length;
+    } else {
+        // RANDOM-ACCESS MODE: Two-phase parsing
+        
+        // PHASE 1: Parse ALL segment headers (directory)
+        println!("PHASE 1: Parsing segment directory");
+        let mut headers = vec![];
+        
+        while pos < end {
+            if pos + 11 > end {
+                break;
+            }
+            
+            match read_segment_header(data, pos, has_file_header) {
+                Ok(segment_header) => {
+                    println!("  Directory entry {}: type={}, header at 0x{:04x}-0x{:04x}, data_length={}", 
+                        segment_header.number, segment_header.segment_type, 
+                        pos, segment_header.header_end, segment_header.length);
+                    
+                    // Move past header
+                    pos = segment_header.header_end;
+                    
+                    // Store header for phase 2
+                    let is_eof = segment_header.segment_type == 51;
+                    headers.push(segment_header);
+                    
+                    // EOF segment marks end of directory
+                    if is_eof {
+                        println!("  → End of directory (EOF segment)");
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
         }
-        if pos + cumulative_length > end {
-            return Err(Jbig2Error::new(ERR_OVERRUN));
-        }
-        let mut data_pos = pos;
-        for header in headers {
-            let segment_start = data_pos;
-            data_pos += header.length;
-            let segment_end = data_pos;
+        
+        println!("Directory complete: {} segments, data area starts at 0x{:04x}", 
+            headers.len(), pos);
+        
+        // PHASE 2: Parse ALL segment data (in same order as headers)
+        println!("PHASE 2: Parsing segment data");
+        let _data_area_start = pos;
+        
+        for (i, header) in headers.into_iter().enumerate() {
+            let segment_start = pos;
+            let segment_end = pos + header.length;
+            
+            println!("  Segment {} data: 0x{:04x}-0x{:04x} ({} bytes)", 
+                i, segment_start, segment_end, header.length);
+            
+            // Validate we have enough data
+            if segment_end > end {
+                return Err(Jbig2Error::new(ERR_OVERRUN));
+            }
+            
             segments.push(Segment {
                 header,
                 data,
                 start: segment_start,
                 end: segment_end,
             });
+            
+            // Move to next segment's data
+            pos = segment_end;
         }
     }
+    
+    println!("read_segments: parsed {} segments", segments.len());
     Ok(segments)
 }
 pub fn process_segments<'a>(

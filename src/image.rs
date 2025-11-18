@@ -30,7 +30,7 @@ impl Jbig2Document {
                 }
                 let flags = data[pos];
                 pos += 1;
-                let sequential = (flags & 1) == 0;
+                let sequential = (flags & 1) != 0;
                 let has_num_pages = (flags & 2) == 0;
                 if (flags & 0xfc) != 0 {
                     return Err(Jbig2Error::new("invalid file header flags"));
