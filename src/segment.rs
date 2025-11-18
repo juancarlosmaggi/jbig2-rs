@@ -240,12 +240,8 @@ pub fn read_segment_header(
     if data.len().saturating_sub(pos) < 4 {
         return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
     }
-    let length_u32 = if data_length_field_size && segment_type != 62 {
-        pos += 1;
-        read_u32(data, pos)
-    } else {
-        read_u32(data, pos)
-    };
+    // Length field is ALWAYS 4 bytes
+    let length_u32 = read_u32(data, pos);
     pos += 4;
     let mut length = length_u32 as usize;
     if length_u32 == 0xffffffff {
@@ -353,69 +349,22 @@ pub fn read_segments<'a>(
                     });
                     break;
                 }
-                // Special handling for extension segments - their length field may be wrong
+                // Extension segments: trust the length field
                 if segment_header.segment_type == 62 {
-                    // For extension segments, don't trust the length field
-                    // Instead, look for the actual next segment header
                     if sequential {
                         let ext_data_start = segment_header.header_end;
-                        let mut ext_data_end = ext_data_start + segment_header.length;
-                        let search_start = header_start + 11; // Minimum header size
-                        let search_end = data.len().saturating_sub(11).min(header_start + 1000);
-                        let mut found_next = false;
-                        for search_pos in search_start..search_end {
-                            let potential_num = ((data[search_pos] as u32) << 24)
-                                | ((data[search_pos + 1] as u32) << 16)
-                                | ((data[search_pos + 2] as u32) << 8)
-                                | (data[search_pos + 3] as u32);
-                            if potential_num == segment_header.number + 1 {
-                                // Next segment number
-                                let flags = data[search_pos + 4];
-                                let seg_type = flags & 0x3f;
-                                if seg_type < 63 && seg_type > 0 {
-                                    // Valid segment type
-                                    // Additional validation: check if this looks like a real segment header
-                                    let is_reasonable_type = match seg_type {
-                                        16..=23 => true, // Region and dictionary segments
-                                        48..=52 => true, // Page information and end of page
-                                        62 => true,      // Extension segment
-                                        _ => false,
-                                    };
-                                    if is_reasonable_type {
-                                        let length = ((data[search_pos + 7] as u32) << 24)
-                                            | ((data[search_pos + 8] as u32) << 16)
-                                            | ((data[search_pos + 9] as u32) << 8)
-                                            | (data[search_pos + 10] as u32);
-                                        // Allow larger lengths for halftone region segments (type 22)
-                                        let max_reasonable_length =
-                                            if seg_type == 22 { 20_000_000 } else { 50_000 };
-                                        if length < max_reasonable_length {
-                                            // Reasonable length for segment type
-                                            println!(
-                                                "Extension segment: found next segment {} at 0x{:04x}",
-                                                potential_num, search_pos
-                                            );
-                                            pos = search_pos;
-                                            ext_data_end = search_pos;
-                                            found_next = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if !found_next {
-                            println!("Extension segment: could not find next segment, breaking");
-                            break;
-                        }
+                        let ext_data_end = ext_data_start + segment_header.length;
+                        
                         // Add extension segment
                         segments.push(Segment {
                             header: segment_header.clone(),
                             data,
-                            start: header_start,
+                            start: ext_data_start,
                             end: ext_data_end,
                         });
-                        // Continue parsing from the found position
+                        
+                        // Move position to after this segment's data
+                        pos = ext_data_end;
                         continue;
                     } else {
                         headers.push(segment_header.clone());
@@ -800,51 +749,9 @@ pub fn process_segment<'a>(
             visitor.on_tables(header.number, data, start, end)?;
         }
         62 => {
-            // Extension
-            // Process potential embedded page information based on reference implementation
-            let data_start = start;
-            let data_length = end - data_start;
-            println!("Extension segment: start={}, end={}, length={}", data_start, end, data_length);
-            if data_length >= 4 {
-                println!("Extension segment first 4 bytes: {:02x?}", &data[data_start..data_start + 4]);
-                println!("Extension segment first bytes as string: {:?}", std::str::from_utf8(&data[data_start..(data_start + 4).min(end)]));
-            }
-            if data_length >= 4 && &data[data_start..data_start + 4] == b"pdfj" {
-                println!("Found 'pdfj' marker in extension segment");
-                if data_length >= 21 {
-                    let width = read_u32(data, data_start + 4);
-                    let height = read_u32(data, data_start + 8);
-                    let resolution_x = read_u32(data, data_start + 12);
-                    let resolution_y = read_u32(data, data_start + 16);
-                    let page_segment_flags = data[data_start + 20];
-                    println!("Extension segment page info: width={}, height={}, xres={}, yres={}", width, height, resolution_x, resolution_y);
-                    let lossless = (page_segment_flags & 1) != 0;
-                    let refinement = (page_segment_flags & 2) != 0;
-                    let default_pixel_value = (page_segment_flags >> 2) & 1;
-                    let combination_operator = (page_segment_flags >> 3) & 3;
-                    let requires_buffer = (page_segment_flags & 32) != 0;
-                    let combination_operator_override = (page_segment_flags & 64) != 0;
-                    let info = PageInfo {
-                        width,
-                        height,
-                        resolution_x,
-                        resolution_y,
-                        lossless,
-                        refinement,
-                        default_pixel_value,
-                        combination_operator,
-                        requires_buffer,
-                        combination_operator_override,
-                    };
-                    println!("Calling visitor.on_page_information from extension segment");
-                    visitor.on_page_information(info);
-                } else {
-                    println!("Extension segment with pdfj but too short: {} bytes", data_length);
-                }
-            } else {
-                println!("Extension segment does not have pdfj marker, treating as comment");
-            }
-            // Otherwise, ignore as comment
+            // Extension segment - ignore completely (as jbig2dec does)
+            println!("Extension segment: ignoring as comment/metadata");
+            // Don't process anything from extension segments
         }
         _ => {} // Unknown segment types
     }
