@@ -463,15 +463,26 @@ impl ArithmeticDecoder {
         let qe_icx = qe_entry.qe;
         let d;
         let new_cx_index;
-        let mut a = self.a.wrapping_sub(qe_icx as u32);
-        if self.chigh < qe_icx as u32 {
-            // exchangeLps
-            if a < qe_icx as u32 {
-                a = qe_icx as u32;
+        
+        // CRITICAL FIX: Update self.a FIRST, then compare chigh to updated A
+        self.a = self.a.wrapping_sub(qe_icx as u32);
+        
+        // Figure F.2: Compare C (top 16 bits) to updated A
+        if self.chigh < self.a {
+            // LPS path - C < A means we decoded the Less Probable Symbol
+            // Subtract (A << 16) from C
+            let c_full = ((self.chigh as u32) << 16) | (self.clow as u32);
+            let c_full = c_full.wrapping_sub(self.a << 16);
+            self.chigh = ((c_full >> 16) & 0xFFFF) as u32;
+            self.clow = (c_full & 0xFFFF) as u32;
+            
+            // LPS_EXCHANGE (Figure E.17)
+            if self.a < qe_icx as u32 {
+                self.a = qe_icx as u32;
                 d = cx_mps;
                 new_cx_index = qe_entry.nmps as usize;
             } else {
-                a = qe_icx as u32;
+                self.a = qe_icx as u32;
                 d = 1 ^ cx_mps;
                 if qe_entry.switch_flag == 1 {
                     cx_mps = d;
@@ -479,38 +490,41 @@ impl ArithmeticDecoder {
                 new_cx_index = qe_entry.nlps as usize;
             }
         } else {
-            self.chigh -= qe_icx as u32;
-            if (a & 0x8000) != 0 {
-                self.a = a;
+            // MPS path - C >= A means we decoded the More Probable Symbol
+            if (self.a & 0x8000) == 0 {
+                // Renormalization needed - MPS_EXCHANGE (Figure E.16)
+                if self.a < qe_icx as u32 {
+                    d = 1 ^ cx_mps;
+                    if qe_entry.switch_flag == 1 {
+                        cx_mps = d;
+                    }
+                    new_cx_index = qe_entry.nlps as usize;
+                } else {
+                    d = cx_mps;
+                    new_cx_index = qe_entry.nmps as usize;
+                }
+            } else {
+                // No renormalization needed - fast path
+                contexts[pos] = ((qe_entry.nmps as i8) << 1) | (cx_mps as i8);
                 return Ok(cx_mps);
             }
-            // exchangeMps
-            if a < qe_icx as u32 {
-                d = 1 ^ cx_mps;
-                if qe_entry.switch_flag == 1 {
-                    cx_mps = d;
-                }
-                new_cx_index = qe_entry.nlps as usize;
-            } else {
-                d = cx_mps;
-                new_cx_index = qe_entry.nmps as usize;
-            }
         }
+        
         // renormD - Figure E.18 from JBIG2 spec
         loop {
             // CRITICAL: Check ct BEFORE decrementing (matches jbig2dec)
             if self.ct == 0 {
-                self.byte_in();  // Sets ct = 8
+                self.byte_in();  // Sets ct = 8 or 7
             }
-            a <<= 1;
+            self.a <<= 1;
             self.chigh = ((self.chigh << 1) & 0xffff) | ((self.clow >> 15) & 1);
             self.clow = (self.clow << 1) & 0xffff;
             self.ct -= 1;  // Safe: ct was >= 1
-            if (a & 0x8000) != 0 {
+            if (self.a & 0x8000) != 0 {
                 break;
             }
         }
-        self.a = a;
+        self.a = self.a;
         contexts[pos] = ((new_cx_index as i8) << 1) | (cx_mps as i8);
         Ok(d)
     }
