@@ -29,7 +29,7 @@ impl CCITTFaxDecoder {
         self.reader.read_bit()
     }
     // Decode a 2D MMR line
-    fn decode_2d_line(&mut self) -> Result<(), Jbig2Error> {
+    fn decode_2d_line(&mut self, eofb: &mut bool) -> Result<(), Jbig2Error> {
         // Handle width=0 case immediately to prevent infinite loop
         if self.width == 0 {
             return Ok(());
@@ -154,9 +154,10 @@ impl CCITTFaxDecoder {
                     current_color = 1 - current_color;
                 }
                 9 => {
-                    // EOFB
-                    eprintln!("DEBUG: MMR EOFB encountered");
-                    return Ok(());
+                    // EOFB - End of Fax Block
+                    eprintln!("DEBUG: MMR EOFB encountered, setting eofb flag");
+                    *eofb = true;
+                    break;  // Exit line decode immediately
                 }
                 _ => return Err(Jbig2Error::new("invalid MMR mode")),
             }
@@ -538,12 +539,18 @@ impl CCITTFaxDecoder {
     }
     fn decode(&mut self) -> Result<Bitmap, Jbig2Error> {
         let mut bitmap = Bitmap::new(self.width, self.height);
+        let mut eofb = false;
+        let mut y = 0;
+        
         eprintln!("DEBUG MMR: Starting decode, width={}, height={}", self.width, self.height);
-        for y in 0..self.height {
+        
+        // CRITICAL: Check !eofb in loop condition to stop when EOFB encountered
+        while y < self.height && !eofb {
             eprintln!("DEBUG MMR: === Decoding line {} of {} ===", y, self.height);
             // Decode 2D line
-            self.decode_2d_line()?;
-            eprintln!("DEBUG MMR: Line {} decoded successfully", y);
+            self.decode_2d_line(&mut eofb)?;
+            eprintln!("DEBUG MMR: Line {} decoded successfully, eofb={}", y, eofb);
+            
             // Copy current line to bitmap
             for x in 0..self.width {
                 bitmap.set_pixel(x, y, self.curr_line[x]);
@@ -551,10 +558,24 @@ impl CCITTFaxDecoder {
             // Swap reference and current lines
             std::mem::swap(&mut self.ref_line, &mut self.curr_line);
             self.curr_line.fill(0);
+            
+            y += 1;
         }
-        eprintln!("DEBUG MMR: All {} lines decoded, exiting", self.height);
-        // EOFB is detected during line decode via read_mode_code, not after
-        // No need for post-loop EOFB checking
+        
+        // If EOFB was encountered before reaching height, pad remaining lines with zeros
+        if eofb && y < self.height {
+            eprintln!("DEBUG MMR: EOFB at line {}, padding {} remaining lines with zeros", y, self.height - y);
+            while y < self.height {
+                // Lines are already initialized to 0 in Bitmap::new, so just increment
+                y += 1;
+            }
+        }
+        
+        eprintln!("DEBUG MMR: All {} lines decoded ({} actual, {} padded), exiting", 
+                  self.height, 
+                  if eofb { y.saturating_sub(1) } else { y },
+                  if eofb { self.height - y.saturating_sub(1) } else { 0 });
+        
         Ok(bitmap)
     }
 }
