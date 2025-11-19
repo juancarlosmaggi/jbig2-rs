@@ -357,51 +357,56 @@ impl SimpleSegmentVisitor {
         let template = ((params.dictionary_flags >> 10) & 3) as usize;
         let refinement_template = ((params.dictionary_flags >> 12) & 1) as usize;
 
-        // Parse AT parameters if not Huffman
+        // Parse AT parameters from the segment data if needed
+        // NOTE: params.start already points AFTER flags, AT pixels, and counts!
+        // So we need to look BACKWARDS in the data to find AT values
         let mut at = Vec::new();
         let mut refinement_at = Vec::new();
-        let mut pos = params.start;
-        println!("Initial pos: {}", pos);
-
-        if huffman {
-            pos = params.start + 4;
-            println!("After huffman adjustment pos: {}", pos);
-        }
-
-        let data_len = params.end.saturating_sub(pos);
-        println!("data_len: {}", data_len);
-
+        
         if !huffman {
+            // AT pixels are at fixed offset: 2 bytes after flags
+            let at_offset = 2;  // Right after 2-byte flags in segment data
             let at_length = if template == 0 { 4 } else { 1 };
-            let required = at_length * 2;
-            if data_len >= required {
-                at = parse_at_parameters(params.data, pos, at_length)?;
-                pos += required;
-                println!("After AT parse pos: {}", pos);
-            } // else default empty
+            
+            // Parse from original segment data (params.data contains full segment)
+            // params.start points to decode data, so we need to calculate backwards
+            let segment_data_start = params.start - 8;  // Back past counts (8 bytes)
+            let at_bytes_count = if template == 0 { 8 } else { 2 };
+            let at_data_start = segment_data_start - at_bytes_count;
+            
+            if at_data_start >= 0 && at_data_start + at_bytes_count <= params.data.len() {
+                for i in 0..at_length {
+                    let x = params.data[at_data_start + i * 2] as i8;
+                    let y = params.data[at_data_start + i * 2 + 1] as i8;
+                    at.push((x, y));
+                }
+            }
         }
 
         if refinement && refinement_template == 0 {
-            let required = 4;
-            if data_len >= required {
-                for _ in 0..2 {
-                    let x = params.data[pos] as i8;
-                    let y = params.data[pos + 1] as i8;
+            // Similar backward calculation for refinement AT
+            // These come after direct coding AT (if present) and before counts
+            let segment_data_start = params.start - 8;
+            let at_bytes_count = if !huffman {
+                if template == 0 { 8 } else { 2 }
+            } else {
+                0
+            };
+            let refinement_at_start = segment_data_start - 4;  // 4 bytes for refinement AT
+            
+            if refinement_at_start >= at_bytes_count && refinement_at_start + 4 <= params.data.len() {
+                for i in 0..2 {
+                    let x = params.data[refinement_at_start + i * 2] as i8;
+                    let y = params.data[refinement_at_start + i * 2 + 1] as i8;
                     refinement_at.push((x, y));
-                    pos += 2;
                 }
-                println!("After refinement AT parse pos: {}", pos);
-            } // else default empty
+            }
         }
 
-        let slice = &params.data[pos.min(params.end)..params.end];
-        println!("Slicing from {} to {}", pos.min(params.end), params.end);
-        println!(
-            "After adjustments: pos={}, data_len={}, slice_len={}",
-            pos,
-            data_len,
-            slice.len()
-        );
+        // Create decoding context starting at params.start (which is AFTER all parameters!)
+        let slice = &params.data[params.start..params.end];
+        eprintln!("Symbol dict decode: Creating context from offset {}, length {}", 
+                  params.start, slice.len());
 
         let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
 

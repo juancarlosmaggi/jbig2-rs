@@ -65,7 +65,10 @@ pub fn decode_symbol_dictionary(
                     .decode(huffman_input.as_mut().unwrap())?
             } else {
                 match decode_integer_context(decoding_context, "IADW")? {
-                    Some(dw) => dw,
+                    Some(dw) => {
+                        eprintln!("DEBUG: DW = {}", dw);
+                        dw
+                    },
                     None => break, // OOB
                 }
             };

@@ -290,19 +290,19 @@ const QE_TABLE: [QeEntry; 47] = [
     },
 ];
 pub struct ArithmeticDecoder {
-    data: Vec<u8>,
-    bp: usize,
-    data_end: usize,
-    chigh: u32,
-    clow: u32,
-    ct: i8,
-    a: u16,
+    pub data: Vec<u8>,
+    pub bp: usize,
+    pub data_end: usize,
+    pub chigh: u32,
+    pub clow: u32,
+    pub ct: i8,
+    pub a: u16,
 }
 impl ArithmeticDecoder {
     pub fn new(data: &[u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data: data.to_vec(),
-            bp: 0,
+            bp: 1, // Start at 1 because data[0] is already read into chigh
             data_end: data.len(),
             chigh: data[0] as u32,
             clow: 0,
@@ -312,7 +312,7 @@ impl ArithmeticDecoder {
         decoder.byte_in();
         decoder.chigh = ((decoder.chigh << 7) & 0xffff) | ((decoder.clow >> 9) & 0x7f);
         decoder.clow = (decoder.clow << 7) & 0xffff;
-        decoder.ct -= 7;
+        decoder.ct = 0;
         decoder.a = 0x8000;
         decoder
     }

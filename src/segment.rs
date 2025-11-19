@@ -543,6 +543,17 @@ pub fn process_segment<'a>(
             let number_of_exported_symbols = read_u32(data, offset);
             let number_of_new_symbols = read_u32(data, offset + 4);
             
+            eprintln!("Symbol Dict Segment {}:", header.number);
+            eprintln!("  Flags: 0x{:04x}", dictionary_flags);
+            eprintln!("  SDHUFF: {}", sdhuff);
+            eprintln!("  SDREFAGG: {}", sdrefagg);
+            eprintln!("  SDTEMPLATE: {}", sdtemplate);
+            eprintln!("  Offset after flags: {}", start + 2);
+            eprintln!("  Offset for counts: {}", offset);
+            eprintln!("  SDNUMEXSYMS: {}", number_of_exported_symbols);
+            eprintln!("  SDNUMNEWSYMS: {}", number_of_new_symbols);
+            eprintln!("  Data start: {}", offset + 8);
+
             // Sanity check to catch parsing errors early
             if number_of_new_symbols > 1_000_000 {
                 return Err(Jbig2Error::new(&format!(
