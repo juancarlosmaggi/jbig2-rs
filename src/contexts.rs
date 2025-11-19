@@ -59,6 +59,11 @@ impl ContextCache {
         if !self.initialized[index] {
             self.contexts[index] = vec![0i8; 65536];
             self.initialized[index] = true;
+            eprintln!("DEBUG: Initialized context '{}' with {} zeros. First values: [{}, {}, {}]", 
+                id, self.contexts[index].len(),
+                self.contexts[index][0], 
+                self.contexts[index][1],
+                self.contexts[index].get(2).copied().unwrap_or(-1));
         }
         &mut self.contexts[index]
     }

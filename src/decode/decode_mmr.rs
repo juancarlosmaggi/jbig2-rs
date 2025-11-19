@@ -39,7 +39,14 @@ impl CCITTFaxDecoder {
         let mut x = 0; // Current position in current line
         let mut current_color = 0; // Start with White run
 
-        while x < self.width {
+        loop {
+            // CRITICAL FIX: Check line completion BEFORE reading mode code
+            // This prevents reading extra bits after line is complete
+            if a0 != -1 && (a0 as usize) >= self.width {
+                eprintln!("DEBUG: MMR line complete, a0={} >= width={}", a0, self.width);
+                break;
+            }
+            
             let b1 = self.find_changing_element_of_color(&self.ref_line, (a0 + 1) as usize, self.width, 1 - current_color);
             let b2 = self.find_changing_element(&self.ref_line, b1, self.width);
             // Read mode code
@@ -542,23 +549,8 @@ impl CCITTFaxDecoder {
             std::mem::swap(&mut self.ref_line, &mut self.curr_line);
             self.curr_line.fill(0);
         }
-        // Handle EOFB if required
-        if self.end_of_block {
-            // Look for EOFB pattern: two consecutive EOL codes (000000000001)
-            let mut eol_count = 0;
-            while eol_count < 2 {
-                let mut code = 0u16;
-                for _ in 0..12 {
-                    let bit = self.read_bit()? as u16;
-                    code = (code << 1) | bit;
-                }
-                if code & 1 == 1 {
-                    eol_count += 1;
-                } else {
-                    eol_count = 0;
-                }
-            }
-        }
+        // EOFB is detected during line decode via read_mode_code, not after
+        // No need for post-loop EOFB checking
         Ok(bitmap)
     }
 }

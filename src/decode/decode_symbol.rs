@@ -230,8 +230,16 @@ pub fn decode_symbol_dictionary(
                 } else {
                     match decode_integer_context(decoding_context, "IADW")? {
                         Some(dw) => {
-                            eprintln!("DEBUG: DW = {}", dw);
-                            dw
+                            let delta_width = dw;
+                            let old_width = current_width;
+                            current_width = current_width.wrapping_add(delta_width);
+                            eprintln!("DEBUG: Symbol {}: DW = {}, width: {} -> {}", 
+                                new_symbols.len(), delta_width, old_width, current_width);
+                                
+                            if current_width < 0 {
+                                eprintln!("ERROR: Negative width detected!");
+                            }
+                            delta_width
                         },
                         None => break, // OOB
                     }
@@ -239,7 +247,6 @@ pub fn decode_symbol_dictionary(
                 if delta_width < 0 && params.huffman {
                     break; // OOB for Huffman
                 }
-                current_width += delta_width;
                 total_width += current_width;
                 eprintln!("DEBUG: current_width={}, total_width={}", current_width, total_width);
                 if params.refinement {
