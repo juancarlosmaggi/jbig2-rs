@@ -128,6 +128,8 @@ pub struct SymbolDictionaryParams<'a> {
     pub data: &'a [u8],
     pub start: usize,
     pub end: usize,
+    pub at_pixels: Vec<(i8, i8)>,
+    pub refinement_at_pixels: Vec<(i8, i8)>,
 }
 pub fn read_u32(data: &[u8], pos: usize) -> u32 {
     ((data[pos] as u32) << 24)
@@ -571,6 +573,8 @@ pub fn process_segment<'a>(
                 data,
                 start: offset + 8,  // Data starts after both counts
                 end,
+                at_pixels: Vec::new(),
+                refinement_at_pixels: Vec::new(),
             };
             visitor.on_symbol_dictionary(&params)?;
         }

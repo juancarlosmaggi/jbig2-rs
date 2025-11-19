@@ -449,7 +449,7 @@ pub fn get_symbol_dictionary_huffman_tables(
     }
 
     let table_delta_width = match huffman_dw_selector {
-        0 | 1 => get_standard_table(huffman_dw_selector as u32 + 2)?,
+        0 | 1 => get_standard_table(huffman_dw_selector as u32 + 14)?,
         3 => get_custom_huffman_table(custom_index, referred_to, custom_tables)?,
         _ => return Err(Jbig2Error::new("invalid Huffman DW selector")),
     };

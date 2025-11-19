@@ -61,4 +61,24 @@ impl Reader {
     pub fn get_end(&self) -> usize {
         self.end
     }
+
+    pub fn read_byte(&mut self) -> Option<u8> {
+        if self.position >= self.end {
+            return None;
+        }
+        let b = self.data[self.position];
+        self.position += 1;
+        Some(b)
+    }
+
+    pub fn skip(&mut self, amount: usize) {
+        self.position += amount;
+    }
+
+    pub fn set_limit(&mut self, limit: usize) {
+        self.end = self.position + limit;
+        if self.end > self.data.len() {
+             self.end = self.data.len();
+        }
+    }
 }

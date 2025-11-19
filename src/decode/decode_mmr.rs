@@ -32,84 +32,122 @@ impl CCITTFaxDecoder {
     fn decode_2d_line(&mut self) -> Result<(), Jbig2Error> {
         let mut a0 = -1i32; // Current position in reference line
         let mut x = 0; // Current position in current line
+        let mut current_color = 0; // Start with White run
+
         while x < self.width {
-            let b1 = self.find_changing_element(&self.ref_line, (a0 + 1) as usize, self.width);
-            let b2 = self.find_changing_element(&self.ref_line, b1 + 1, self.width);
+            let b1 = self.find_changing_element_of_color(&self.ref_line, (a0 + 1) as usize, self.width, 1 - current_color);
+            let b2 = self.find_changing_element(&self.ref_line, b1, self.width);
             // Read mode code
             let mode = self.read_mode_code()?;
+            eprintln!("DEBUG: MMR x={} a0={} mode={} color={} b1={} b2={}", x, a0, mode, current_color, b1, b2);
             match mode {
                 0 => {
                     // Pass mode
-                    let color = if a0 >= 0 {
-                        self.ref_line[a0 as usize]
-                    } else {
-                        0
-                    };
+                    // Fill with current_color from x to b2
                     for i in x..b2 {
-                        self.curr_line[i] = color;
+                        self.curr_line[i] = current_color;
                     }
                     x = b2;
-                    a0 = x as i32 - 1;
+                    a0 = x as i32; // Implicitly updated to new a0 (which is b2)
+                    // Color does not change
                 }
                 1 => {
                     // Vertical mode (-1)
-                    self.write_run(x, a0, -1);
-                    x = self.find_changing_element(&self.curr_line, x, self.width);
-                    a0 = x as i32 - 1;
+                    x = self.write_run(x, b1 as i32, -1, current_color);
+                    a0 = x as i32;
+                    current_color = 1 - current_color;
                 }
                 2 => {
                     // Vertical mode (0)
-                    self.write_run(x, a0, 0);
-                    x = self.find_changing_element(&self.curr_line, x, self.width);
-                    a0 = x as i32 - 1;
+                    x = self.write_run(x, b1 as i32, 0, current_color);
+                    a0 = x as i32;
+                    current_color = 1 - current_color;
                 }
                 3 => {
                     // Vertical mode (+1)
-                    self.write_run(x, a0, 1);
-                    x = self.find_changing_element(&self.curr_line, x, self.width);
-                    a0 = x as i32 - 1;
+                    x = self.write_run(x, b1 as i32, 1, current_color);
+                    a0 = x as i32;
+                    current_color = 1 - current_color;
                 }
                 4 => {
                     // Horizontal mode
-                    let run1 = self.decode_run_length(true)? as usize; // White run
-                    let run2 = self.decode_run_length(false)? as usize; // Black run
-                    for i in 0..run1 {
-                        if x + i < self.width {
-                            self.curr_line[x + i] = 0; // White
+                    let mut a1;
+                    if current_color == 0 {
+                        // White, then Black
+                        let run1 = self.decode_run_length(true)? as usize;
+                        let run2 = self.decode_run_length(false)? as usize;
+                        eprintln!("DEBUG: MMR Horizontal White={} Black={}", run1, run2);
+                        
+                        // Write White Run
+                        for i in 0..run1 {
+                            if x + i < self.width {
+                                self.curr_line[x + i] = 0;
+                            }
                         }
-                    }
-                    x += run1;
-                    for i in 0..run2 {
-                        if x + i < self.width {
-                            self.curr_line[x + i] = 1; // Black
+                        x += run1;
+                        a1 = x;
+                        
+                        // Write Black Run
+                        for i in 0..run2 {
+                            if x + i < self.width {
+                                self.curr_line[x + i] = 1;
+                            }
                         }
+                        x += run2;
+                    } else {
+                        // Black, then White
+                        let run1 = self.decode_run_length(false)? as usize;
+                        let run2 = self.decode_run_length(true)? as usize;
+                        eprintln!("DEBUG: MMR Horizontal Black={} White={}", run1, run2);
+                        
+                        // Write Black Run
+                        for i in 0..run1 {
+                            if x + i < self.width {
+                                self.curr_line[x + i] = 1;
+                            }
+                        }
+                        x += run1;
+                        a1 = x;
+                        
+                        // Write White Run
+                        for i in 0..run2 {
+                            if x + i < self.width {
+                                self.curr_line[x + i] = 0;
+                            }
+                        }
+                        x += run2;
                     }
-                    x += run2;
-                    a0 = x as i32 - 1;
+                    a0 = x as i32;
+                    // Color does not change (flipped twice)
                 }
                 5 => {
                     // Vertical mode (-2)
-                    self.write_run(x, a0, -2);
-                    x = self.find_changing_element(&self.curr_line, x, self.width);
-                    a0 = x as i32 - 1;
+                    x = self.write_run(x, b1 as i32, -2, current_color);
+                    a0 = x as i32;
+                    current_color = 1 - current_color;
                 }
                 6 => {
                     // Vertical mode (-3)
-                    self.write_run(x, a0, -3);
-                    x = self.find_changing_element(&self.curr_line, x, self.width);
-                    a0 = x as i32 - 1;
+                    x = self.write_run(x, b1 as i32, -3, current_color);
+                    a0 = x as i32;
+                    current_color = 1 - current_color;
                 }
                 7 => {
                     // Vertical mode (+2)
-                    self.write_run(x, a0, 2);
-                    x = self.find_changing_element(&self.curr_line, x, self.width);
-                    a0 = x as i32 - 1;
+                    x = self.write_run(x, b1 as i32, 2, current_color);
+                    a0 = x as i32;
+                    current_color = 1 - current_color;
                 }
                 8 => {
                     // Vertical mode (+3)
-                    self.write_run(x, a0, 3);
-                    x = self.find_changing_element(&self.curr_line, x, self.width);
-                    a0 = x as i32 - 1;
+                    x = self.write_run(x, b1 as i32, 3, current_color);
+                    a0 = x as i32;
+                    current_color = 1 - current_color;
+                }
+                9 => {
+                    // EOFB
+                    eprintln!("DEBUG: MMR EOFB encountered");
+                    return Ok(());
                 }
                 _ => return Err(Jbig2Error::new("invalid MMR mode")),
             }
@@ -121,7 +159,8 @@ impl CCITTFaxDecoder {
         let mut code = 0u32;
         for length in 1..=7 {
             let bit = self.read_bit()? as u32;
-            code |= bit << (length - 1);
+            code = (code << 1) | bit;
+            // eprintln!("DEBUG: read_mode_code length={} code={:b}", length, code);
             match (code, length) {
                 (0b0001, 4) => return Ok(0),    // Pass
                 (0b010, 3) => return Ok(1),     // VL(1)
@@ -132,9 +171,25 @@ impl CCITTFaxDecoder {
                 (0b0000010, 7) => return Ok(6), // VL(3)
                 (0b000011, 6) => return Ok(7),  // VR(2)
                 (0b0000011, 7) => return Ok(8), // VR(3)
-                _ => {}                         // Continue reading
+                _ => {
+                    // Check for EOFB: 0x001001 (24 bits)
+                    // We have read 'length' bits so far.
+                    // If we have read 24 bits and it matches, return EOFB code (e.g., 9)
+                    if length == 24 && code == 0x001001 {
+                        return Ok(9); // EOFB
+                    }
+                } 
             }
         }
+        // Continue reading up to 24 bits for EOFB if needed
+        for length in 8..=24 {
+             let bit = self.read_bit()? as u32;
+             code = (code << 1) | bit;
+             if length == 24 && code == 0x001001 {
+                 return Ok(9); // EOFB
+             }
+        }
+        eprintln!("DEBUG: Invalid MMR mode code: {:b} (len=24)", code);
         Err(Jbig2Error::new("invalid MMR mode code"))
     }
     fn find_changing_element(&self, line: &[u8], start: usize, end: usize) -> usize {
@@ -147,25 +202,51 @@ impl CCITTFaxDecoder {
         }
         end
     }
-    fn write_run(&mut self, x: usize, a0: i32, offset: i32) {
-        let a1 = if a0 >= 0 { a0 + offset } else { offset - 1 };
-        let color = if a1 >= 0 {
-            self.ref_line[a1 as usize]
-        } else {
-            0
-        };
-        // Find the next changing element in reference line
-        let mut a1_pos = if a1 >= 0 { a1 as usize } else { 0 };
-        while a1_pos < self.width
-            && (a1_pos == 0 || self.ref_line[a1_pos] == self.ref_line[a1_pos - 1])
-        {
-            a1_pos += 1;
+    fn find_changing_element_of_color(&self, line: &[u8], start: usize, end: usize, color: u8) -> usize {
+        let mut i = start;
+        // First, skip pixels that are NOT the target color (if we are currently on !color)
+        // But wait, the definition is "first pixel of color !c".
+        // If we are at `start`, and line[start] == color, we are good?
+        // No, changing element means the *transition* to that color.
+        // But jbig2dec says: "It searches the reference line starting from a0 for the first pixel of color !c".
+        // This implies it's looking for the *start* of a run of color !c.
+        
+        // If line[i] is already color, then i is the start?
+        // No, a changing element is defined as an element whose color is different from the previous element.
+        // "b1 is the first changing element on the reference line to the right of a0 and of color opposite to a0"
+        // Actually, "opposite to current color".
+        
+        // Let's implement a simple search:
+        // Find the first `i >= start` such that `line[i] == color` AND (`i==0` OR `line[i-1] != color`).
+        // But since we are scanning from left to right, we just need to find the first `i` where `line[i] == color`?
+        // Wait, if we are inside a run of `color`, the first changing element is the *end* of this run (start of next).
+        // If we are inside a run of `!color`, the first changing element is the *start* of the next run (which is `color`).
+        
+        // jbig2dec implementation:
+        // while (x < w) { if (line[x] == color && (x==0 || line[x-1] != color)) return x; x++; }
+        
+        while i < end {
+            if line[i] == color {
+                if i == 0 || line[i-1] != color {
+                    return i;
+                }
+            }
+            i += 1;
         }
+        end
+    }
+    fn write_run(&mut self, x: usize, b1: i32, offset: i32, color: u8) -> usize {
+        // a1 = b1 + offset
+        let a1 = (b1 + offset) as usize;
+        
         // Write pixels
-        let end = a1_pos.min(self.width);
-        for i in x..end {
-            self.curr_line[i] = color;
+        let end = a1.min(self.width);
+        if end > x {
+            for i in x..end {
+                self.curr_line[i] = color;
+            }
         }
+        end
     }
     // Decode run length for horizontal mode
     fn decode_run_length(&mut self, white: bool) -> Result<i32, Jbig2Error> {
@@ -212,9 +293,11 @@ impl CCITTFaxDecoder {
                         return Ok(total);
                     }
                 }
+                eprintln!("DEBUG: Invalid terminating code after makeup: {:b} (len={}) white={}", code, length, white);
                 return Err(Jbig2Error::new("invalid terminating code after makeup"));
             }
         }
+        eprintln!("DEBUG: Run length code too long: {:b} (len={}) white={}", code, length, white);
         Err(Jbig2Error::new("run length code too long"))
     }
     // White run length terminating codes
@@ -487,6 +570,9 @@ pub fn decode_mmr_bitmap(
     height: usize,
     end_of_block: bool,
 ) -> Result<Bitmap, Jbig2Error> {
+    if width == 0 || height == 0 {
+        return Ok(Bitmap::new(width, height));
+    }
     let reader_clone = Reader::new(
         input.get_data().to_vec(),
         input.get_position(),

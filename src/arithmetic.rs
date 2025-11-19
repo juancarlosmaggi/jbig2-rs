@@ -302,18 +302,73 @@ impl ArithmeticDecoder {
     pub fn new(data: &[u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data: data.to_vec(),
-            bp: 1, // Start at 1 because data[0] is already read into chigh
+            bp: 0,
             data_end: data.len(),
-            chigh: data[0] as u32,
+            chigh: 0,
             clow: 0,
             ct: 0,
-            a: 0x8000,
+            a: 0,
         };
+
+        // jbig2dec initialization sequence:
+        // 1. Read first 4 bytes into a temporary buffer (next_word equivalent)
+        let mut next_word = 0u32;
+        for i in 0..4 {
+            if i < decoder.data.len() {
+                next_word = (next_word << 8) | (decoder.data[i] as u32);
+            } else {
+                next_word <<= 8;
+            }
+        }
+
+        // 2. Initialize C (Step 1): result->C = (~(result->next_word >> 8)) & 0xFF0000;
+        // This takes the first byte, inverts it, and places it in the MSB of the 24-bit C register.
+        // Note: We use chigh/clow to represent C. 
+        // C is effectively (chigh << 16) | clow.
+        // So 0xFF0000 corresponds to chigh's lower 8 bits (if chigh is 16-bit) or just chigh.
+        // Let's follow the bit manipulation carefully.
+        
+        // In our implementation:
+        // chigh is top 16 bits of C register
+        // clow is bottom 16 bits of C register
+        // But jbig2dec uses a single 32-bit C register where only 24 bits are active?
+        // Actually jbig2dec uses `uint32_t C;`
+        
+        // Let's map jbig2dec's C to our chigh/clow.
+        // Our `decode_bit` uses:
+        // chigh = C >> 16
+        // clow = C & 0xFFFF
+        
+        // jbig2dec: C = (~(next_word >> 8)) & 0xFF0000;
+        // This means C has the inverted first byte in bits 16-23.
+        // So chigh = (~first_byte) & 0xFF
+        // clow = 0
+        
+        let first_byte = (next_word >> 24) & 0xFF;
+        decoder.chigh = (!first_byte) & 0xFF;
+        decoder.clow = 0;
+        decoder.bp = 1; // Consumed first byte
+
+        // 3. Byte In (Step 2)
         decoder.byte_in();
-        decoder.chigh = ((decoder.chigh << 7) & 0xffff) | ((decoder.clow >> 9) & 0x7f);
-        decoder.clow = (decoder.clow << 7) & 0xffff;
-        decoder.ct = 0;
+
+        // 4. Finalize Init (Step 3)
+        // result->C <<= 7;
+        // result->CT -= 7;
+        // result->A = 0x8000;
+        
+        // Shift C left by 7
+        let c = (decoder.chigh << 16) | decoder.clow;
+        let c = c << 7;
+        decoder.chigh = (c >> 16) & 0xFFFF;
+        decoder.clow = c & 0xFFFF;
+        
+        // CT -= 7
+        // byte_in sets CT to 8. So CT becomes 1.
+        decoder.ct -= 7;
+        
         decoder.a = 0x8000;
+        
         decoder
     }
     fn byte_in(&mut self) {
@@ -338,8 +393,8 @@ impl ArithmeticDecoder {
                 return;
             }
             self.bp += 1;
-            self.clow = self.clow.wrapping_add((b1 as u32) << 8);
-            self.ct = 8;
+            self.clow = self.clow.wrapping_add(0xff00 | (b1 as u32));
+            self.ct = 7;
         } else {
             self.clow = self.clow.wrapping_add((b0 as u32) << 8);
             self.ct = 8;

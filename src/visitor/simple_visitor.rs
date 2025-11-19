@@ -380,6 +380,7 @@ impl SimpleSegmentVisitor {
                     let y = params.data[at_data_start + i * 2 + 1] as i8;
                     at.push((x, y));
                 }
+                eprintln!("DEBUG: Parsed AT pixels: {:?}", at);
             }
         }
 
