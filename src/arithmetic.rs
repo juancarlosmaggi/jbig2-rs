@@ -461,16 +461,38 @@ impl ArithmeticDecoder {
         let mut cx_mps = (contexts[pos] & 1) as u8;
         let qe_entry = &QE_TABLE[cx_index];
         let qe_icx = qe_entry.qe;
-        let d;
-        let new_cx_index;
+        let d: u8;
+        let new_cx_index: usize;
         
-        // CRITICAL FIX: Update self.a FIRST, then compare chigh to updated A
+        // Figure F.2: Subtract Qe from A
         self.a = self.a.wrapping_sub(qe_icx as u32);
         
         // Figure F.2: Compare C (top 16 bits) to updated A
         if self.chigh < self.a {
-            // LPS path - C < A means we decoded the Less Probable Symbol
-            // Subtract (A << 16) from C
+            // MPS path (C < A)
+            if (self.a & 0x8000) == 0 {
+                // Need renormalization
+                // MPS_EXCHANGE (Figure E.16)
+                if self.a < qe_icx as u32 {
+                    d = 1 ^ cx_mps;  // Return LPS
+                    if qe_entry.switch_flag == 1 {
+                        cx_mps = d;
+                    }
+                    new_cx_index = qe_entry.nlps as usize;
+                } else {
+                    d = cx_mps;  // Return MPS
+                    new_cx_index = qe_entry.nmps as usize;
+                }
+                // renormD will follow below
+            } else {
+                // Don't need renormalization - fast path
+                // Update context and return MPS immediately
+                contexts[pos] = ((qe_entry.nmps as i8) << 1) | (cx_mps as i8);
+                return Ok(cx_mps);
+            }
+        } else {
+            // LPS path (C >= A)
+            // Subtract A from C FIRST
             let c_full = ((self.chigh as u32) << 16) | (self.clow as u32);
             let c_full = c_full.wrapping_sub(self.a << 16);
             self.chigh = ((c_full >> 16) & 0xFFFF) as u32;
@@ -479,52 +501,34 @@ impl ArithmeticDecoder {
             // LPS_EXCHANGE (Figure E.17)
             if self.a < qe_icx as u32 {
                 self.a = qe_icx as u32;
-                d = cx_mps;
+                d = cx_mps;  // Return MPS (even though we're in LPS path!)
                 new_cx_index = qe_entry.nmps as usize;
             } else {
                 self.a = qe_icx as u32;
-                d = 1 ^ cx_mps;
+                d = 1 ^ cx_mps;  // Return LPS
                 if qe_entry.switch_flag == 1 {
                     cx_mps = d;
                 }
                 new_cx_index = qe_entry.nlps as usize;
             }
-        } else {
-            // MPS path - C >= A means we decoded the More Probable Symbol
-            if (self.a & 0x8000) == 0 {
-                // Renormalization needed - MPS_EXCHANGE (Figure E.16)
-                if self.a < qe_icx as u32 {
-                    d = 1 ^ cx_mps;
-                    if qe_entry.switch_flag == 1 {
-                        cx_mps = d;
-                    }
-                    new_cx_index = qe_entry.nlps as usize;
-                } else {
-                    d = cx_mps;
-                    new_cx_index = qe_entry.nmps as usize;
-                }
-            } else {
-                // No renormalization needed - fast path
-                contexts[pos] = ((qe_entry.nmps as i8) << 1) | (cx_mps as i8);
-                return Ok(cx_mps);
-            }
+            // renormD will follow below
         }
         
-        // renormD - Figure E.18 from JBIG2 spec
+        // renormD (Figure E.18) - only reached if renormalization needed
         loop {
-            // CRITICAL: Check ct BEFORE decrementing (matches jbig2dec)
             if self.ct == 0 {
-                self.byte_in();  // Sets ct = 8 or 7
+                self.byte_in();
             }
             self.a <<= 1;
             self.chigh = ((self.chigh << 1) & 0xffff) | ((self.clow >> 15) & 1);
             self.clow = (self.clow << 1) & 0xffff;
-            self.ct -= 1;  // Safe: ct was >= 1
+            self.ct -= 1;
             if (self.a & 0x8000) != 0 {
                 break;
             }
         }
-        self.a = self.a;
+        
+        // Update context
         contexts[pos] = ((new_cx_index as i8) << 1) | (cx_mps as i8);
         Ok(d)
     }

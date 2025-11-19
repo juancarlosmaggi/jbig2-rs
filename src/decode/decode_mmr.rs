@@ -538,9 +538,12 @@ impl CCITTFaxDecoder {
     }
     fn decode(&mut self) -> Result<Bitmap, Jbig2Error> {
         let mut bitmap = Bitmap::new(self.width, self.height);
+        eprintln!("DEBUG MMR: Starting decode, width={}, height={}", self.width, self.height);
         for y in 0..self.height {
+            eprintln!("DEBUG MMR: === Decoding line {} of {} ===", y, self.height);
             // Decode 2D line
             self.decode_2d_line()?;
+            eprintln!("DEBUG MMR: Line {} decoded successfully", y);
             // Copy current line to bitmap
             for x in 0..self.width {
                 bitmap.set_pixel(x, y, self.curr_line[x]);
@@ -549,6 +552,7 @@ impl CCITTFaxDecoder {
             std::mem::swap(&mut self.ref_line, &mut self.curr_line);
             self.curr_line.fill(0);
         }
+        eprintln!("DEBUG MMR: All {} lines decoded, exiting", self.height);
         // EOFB is detected during line decode via read_mode_code, not after
         // No need for post-loop EOFB checking
         Ok(bitmap)
