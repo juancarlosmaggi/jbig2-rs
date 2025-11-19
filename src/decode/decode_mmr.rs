@@ -177,15 +177,17 @@ impl CCITTFaxDecoder {
             }
         }
         // Only check for EOFB if we didn't match a mode code
-        // EOFB is 000000000001 (12 bits, not 24)
-        for length in 8..=12 {
+        // CRITICAL FIX: EOFB is 24 bits (0x001001), not 12 bits!
+        // From jbig2_mmr.c:1191: EOFB = 0x001001 (24 bits)
+        for length in 8..=24 {
             let bit = self.read_bit()? as u32;
             code = (code << 1) | bit;
-            if length == 12 && code == 0b000000000001 {
+            if length == 24 && code == 0x001001 {
+                eprintln!("DEBUG: MMR EOFB detected (24 bits: 0x{:06X})", code);
                 return Ok(9); // EOFB
             }
         }
-        eprintln!("DEBUG: Invalid MMR mode code: {:b} (len=12)", code);
+        eprintln!("DEBUG: Invalid MMR mode code: {:b} (len=24)", code);
         Err(Jbig2Error::new("invalid MMR mode code"))
     }
     fn find_changing_element(&self, line: &[u8], start: usize, end: usize) -> usize {
