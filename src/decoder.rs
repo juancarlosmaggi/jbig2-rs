@@ -83,18 +83,18 @@ pub fn decode_integer_context(
     procedure: &str,
 ) -> Result<Option<i32>, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
-    let mut decoder = decoding_context.decoder.borrow_mut();
-    let decoder = decoder.as_mut().unwrap();
-    decode_integer(&mut context_cache, procedure, decoder)
+    // Use get_decoder() which auto-initializes if None
+    let mut decoder = decoding_context.get_decoder();
+    decode_integer(&mut context_cache, procedure, &mut decoder)
 }
 pub fn decode_iaid_context(
     decoding_context: &mut DecodingContext,
     code_length: usize,
 ) -> Result<u32, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
-    let mut decoder = decoding_context.decoder.borrow_mut();
-    let decoder = decoder.as_mut().unwrap();
-    decode_iaid(&mut context_cache, decoder, code_length)
+    // Use get_decoder() which auto-initializes if None
+    let mut decoder = decoding_context.get_decoder();
+    decode_iaid(&mut context_cache, &mut decoder, code_length)
 }
 pub fn decode_i32_huffman_or_arith<F>(
     huffman: bool,

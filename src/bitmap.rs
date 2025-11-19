@@ -8,8 +8,21 @@ pub struct Bitmap {
 
 impl Bitmap {
     pub fn new(width: usize, height: usize) -> Self {
-        let stride = (width + 7) >> 3;
-        let data = vec![0; stride * height];
+        // Sanity check dimensions before any arithmetic
+        if width > 100_000 || height > 100_000 {
+            panic!("Bitmap dimensions unreasonable: {}x{} (likely decode error)", width, height);
+        }
+        
+        // Use checked arithmetic to prevent overflow
+        let stride = width.checked_add(7)
+            .expect("width too large for stride calculation")
+            >> 3;
+        
+        let buffer_size = stride.checked_mul(height)
+            .expect("buffer size overflow");
+        
+        let data = vec![0; buffer_size];
+        
         Bitmap {
             data,
             width,

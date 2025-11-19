@@ -519,8 +519,38 @@ pub fn process_segment<'a>(
     match header.segment_type {
         0 => {
             let dictionary_flags = read_u16(data, start);
-            let number_of_exported_symbols = read_u32_le(data, start + 2);
-            let number_of_new_symbols = read_u32_le(data, start + 6);
+            
+            // Parse all relevant flags
+            let sdhuff = (dictionary_flags & 1) != 0;
+            let sdrefagg = ((dictionary_flags >> 1) & 1) != 0;
+            let sdtemplate = ((dictionary_flags >> 10) & 3) as usize;
+            let sdrtemplate = ((dictionary_flags >> 12) & 1) != 0;
+            
+            let mut offset = start + 2;
+            
+            // AT pixels for direct coding (only if not Huffman)
+            if !sdhuff {
+                let sdat_bytes = if sdtemplate == 0 { 8 } else { 2 };
+                offset += sdat_bytes;
+            }
+            
+            // Refinement AT pixels (Table 18 in JBIG2 spec)
+            if sdrefagg && !sdrtemplate {
+                offset += 4;  // 4 bytes for refinement AT
+            }
+            
+            // NOW read symbol counts (BIG-ENDIAN!)
+            let number_of_exported_symbols = read_u32(data, offset);
+            let number_of_new_symbols = read_u32(data, offset + 4);
+            
+            // Sanity check to catch parsing errors early
+            if number_of_new_symbols > 1_000_000 {
+                return Err(Jbig2Error::new(&format!(
+                    "Unreasonable symbol count: {} (likely parameter parsing error)",
+                    number_of_new_symbols
+                )));
+            }
+            
             let params = SymbolDictionaryParams {
                 dictionary_flags,
                 number_of_exported_symbols,
@@ -528,7 +558,7 @@ pub fn process_segment<'a>(
                 current_segment: header.number,
                 referred_segments: &header.referred_to,
                 data,
-                start: start + 10,
+                start: offset + 8,  // Data starts after both counts
                 end,
             };
             visitor.on_symbol_dictionary(&params)?;

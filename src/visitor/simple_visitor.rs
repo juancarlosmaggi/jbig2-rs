@@ -80,11 +80,19 @@ impl SimpleSegmentVisitor {
 
     fn collect_input_symbols(&self, referred_segments: &[u32]) -> Vec<Bitmap> {
         let mut input_symbols = Vec::new();
+        eprintln!("collect_input_symbols: Looking for symbols in referred segments: {:?}", referred_segments);
+        eprintln!("  Currently stored symbol dictionaries: {:?}", self.symbols.keys().collect::<Vec<_>>());
+        
         for &segment_id in referred_segments {
+            eprintln!("  Checking segment {}", segment_id);
             if let Some(symbols) = self.symbols.get(&segment_id) {
+                eprintln!("    → Found {} symbols in segment {}", symbols.len(), segment_id);
                 input_symbols.extend(symbols.clone());
+            } else {
+                eprintln!("    → Segment {} not found in symbol storage", segment_id);
             }
         }
+        eprintln!("  Total symbols collected: {}", input_symbols.len());
         input_symbols
     }
 
@@ -326,9 +334,21 @@ impl SimpleSegmentVisitor {
             "Entering on_symbol_dictionary, start: {}, end: {}",
             params.start, params.end
         );
+        eprintln!("DEBUG: Segment {}, new_symbols={}, exported_symbols={}", 
+                  params.current_segment, params.number_of_new_symbols, params.number_of_exported_symbols);
+
+        if params.start >= params.end {
+            eprintln!("Skipping: Invalid bounds");
+            println!(
+                "Skipping symbol dictionary due to invalid bounds: start={}, end={}",
+                params.start, params.end
+            );
+            return Ok(());
+        }
 
         // Skip processing if too many symbols to prevent errors
         if params.number_of_new_symbols > 10000 {
+            eprintln!("Skipping: Too many new symbols: {}", params.number_of_new_symbols);
             return Ok(());
         }
 
@@ -418,14 +438,29 @@ impl SimpleSegmentVisitor {
             None
         };
 
-        let exported_symbols = decode_symbol_dictionary(
+        eprintln!("About to decode symbol dictionary for segment {}", params.current_segment);
+        
+        let exported_symbols = match decode_symbol_dictionary(
             &symbol_params,
             &mut decoding_context,
             huffman_input.as_mut(),
-        )?;
-
+        ) {
+            Ok(symbols) => {
+                eprintln!("Symbol dictionary {}: Successfully decoded {} exported symbols", 
+                          params.current_segment, symbols.len());
+                symbols
+            }
+            Err(e) => {
+                eprintln!("Symbol dictionary {}: FAILED to decode: {}", params.current_segment, e);
+                return Err(e);
+            }
+        };
+        
         self.symbols
-            .insert(params.current_segment, exported_symbols);
+            .insert(params.current_segment, exported_symbols.clone());
+        
+        eprintln!("  Stored in self.symbols[{}], total dicts now: {}", 
+                  params.current_segment, self.symbols.len());
 
         Ok(())
     }
