@@ -162,36 +162,30 @@ impl CCITTFaxDecoder {
         for length in 1..=7 {
             let bit = self.read_bit()? as u32;
             code = (code << 1) | bit;
-            // eprintln!("DEBUG: read_mode_code length={} code={:b}", length, code);
+            // CRITICAL: Return IMMEDIATELY after matching, don't continue reading
             match (code, length) {
-                (0b0001, 4) => return Ok(0),    // Pass
-                (0b010, 3) => return Ok(1),     // VL(1)
-                (0b1, 1) => return Ok(2),       // V(0)
-                (0b011, 3) => return Ok(3),     // VR(1)
-                (0b001, 3) => return Ok(4),     // Horizontal
-                (0b000010, 6) => return Ok(5),  // VL(2)
-                (0b0000010, 7) => return Ok(6), // VL(3)
-                (0b000011, 6) => return Ok(7),  // VR(2)
-                (0b0000011, 7) => return Ok(8), // VR(3)
-                _ => {
-                    // Check for EOFB: 0x001001 (24 bits)
-                    // We have read 'length' bits so far.
-                    // If we have read 24 bits and it matches, return EOFB code (e.g., 9)
-                    if length == 24 && code == 0x001001 {
-                        return Ok(9); // EOFB
-                    }
-                } 
+                (0b1, 1) => return Ok(2),       // V(0) - 1 bit
+                (0b001, 3) => return Ok(4),     // Horizontal - 3 bits
+                (0b010, 3) => return Ok(1),     // VL(1) - 3 bits
+                (0b011, 3) => return Ok(3),     // VR(1) - 3 bits
+                (0b0001, 4) => return Ok(0),    // Pass - 4 bits
+                (0b000010, 6) => return Ok(5),  // VL(2) - 6 bits
+                (0b000011, 6) => return Ok(7),  // VR(2) - 6 bits
+                (0b0000010, 7) => return Ok(6), // VL(3) - 7 bits
+                (0b0000011, 7) => return Ok(8), // VR(3) - 7 bits
+                _ => {} // Continue reading
             }
         }
-        // Continue reading up to 24 bits for EOFB if needed
-        for length in 8..=24 {
-             let bit = self.read_bit()? as u32;
-             code = (code << 1) | bit;
-             if length == 24 && code == 0x001001 {
-                 return Ok(9); // EOFB
-             }
+        // Only check for EOFB if we didn't match a mode code
+        // EOFB is 000000000001 (12 bits, not 24)
+        for length in 8..=12 {
+            let bit = self.read_bit()? as u32;
+            code = (code << 1) | bit;
+            if length == 12 && code == 0b000000000001 {
+                return Ok(9); // EOFB
+            }
         }
-        eprintln!("DEBUG: Invalid MMR mode code: {:b} (len=24)", code);
+        eprintln!("DEBUG: Invalid MMR mode code: {:b} (len=12)", code);
         Err(Jbig2Error::new("invalid MMR mode code"))
     }
     fn find_changing_element(&self, line: &[u8], start: usize, end: usize) -> usize {

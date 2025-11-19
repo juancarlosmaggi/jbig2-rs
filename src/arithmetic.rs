@@ -396,7 +396,12 @@ impl ArithmeticDecoder {
             self.clow = self.clow.wrapping_add(0xff00 | (b1 as u32));
             self.ct = 7;
         } else {
-            self.clow = self.clow.wrapping_add((b0 as u32) << 8);
+            // CRITICAL FIX: Operate on full 32-bit C register
+            // Formula from jbig2dec: C = C + 0xFF00 - (B << 8)
+            let full_c = ((self.chigh as u32) << 16) | (self.clow as u32);
+            let full_c = full_c.wrapping_add(0xFF00 - ((b0 as u32) << 8));
+            self.chigh = ((full_c >> 16) & 0xFFFF) as u32;
+            self.clow = (full_c & 0xFFFF) as u32;
             self.ct = 8;
         }
         if self.clow > 0xffff {
