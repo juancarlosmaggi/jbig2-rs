@@ -7,7 +7,7 @@ mod tests {
         // Data from symbol_dictionary.jb2 trace
         // 0x94, 0x4F, 0x06, 0x7B
         let data = vec![0x94, 0x4F, 0x06, 0x7B];
-        let mut decoder = ArithmeticDecoder::new(&data);
+        let decoder = ArithmeticDecoder::new(&data);
         
         println!("After new():");
         println!("  chigh: {:08x}", decoder.chigh);

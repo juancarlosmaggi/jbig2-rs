@@ -30,6 +30,11 @@ impl CCITTFaxDecoder {
     }
     // Decode a 2D MMR line
     fn decode_2d_line(&mut self) -> Result<(), Jbig2Error> {
+        // Handle width=0 case immediately to prevent infinite loop
+        if self.width == 0 {
+            return Ok(());
+        }
+        
         let mut a0 = -1i32; // Current position in reference line
         let mut x = 0; // Current position in current line
         let mut current_color = 0; // Start with White run
@@ -71,7 +76,6 @@ impl CCITTFaxDecoder {
                 }
                 4 => {
                     // Horizontal mode
-                    let mut a1;
                     if current_color == 0 {
                         // White, then Black
                         let run1 = self.decode_run_length(true)? as usize;
@@ -85,7 +89,6 @@ impl CCITTFaxDecoder {
                             }
                         }
                         x += run1;
-                        a1 = x;
                         
                         // Write Black Run
                         for i in 0..run2 {
@@ -107,7 +110,6 @@ impl CCITTFaxDecoder {
                             }
                         }
                         x += run1;
-                        a1 = x;
                         
                         // Write White Run
                         for i in 0..run2 {

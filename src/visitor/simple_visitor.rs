@@ -365,7 +365,7 @@ impl SimpleSegmentVisitor {
         
         if !huffman {
             // AT pixels are at fixed offset: 2 bytes after flags
-            let at_offset = 2;  // Right after 2-byte flags in segment data
+            let _at_offset = 2;  // Right after 2-byte flags in segment data
             let at_length = if template == 0 { 4 } else { 1 };
             
             // Parse from original segment data (params.data contains full segment)
@@ -374,7 +374,7 @@ impl SimpleSegmentVisitor {
             let at_bytes_count = if template == 0 { 8 } else { 2 };
             let at_data_start = segment_data_start - at_bytes_count;
             
-            if at_data_start >= 0 && at_data_start + at_bytes_count <= params.data.len() {
+            if at_data_start + at_bytes_count <= params.data.len() {
                 for i in 0..at_length {
                     let x = params.data[at_data_start + i * 2] as i8;
                     let y = params.data[at_data_start + i * 2 + 1] as i8;

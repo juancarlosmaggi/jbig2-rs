@@ -58,7 +58,7 @@ pub fn decode_symbol_dictionary(
             current_height = height;
             let mut current_width = 0;
             let mut total_width = 0;
-            let first_symbol_index = new_symbols.len();
+            let _first_symbol_index = new_symbols.len();
             let mut symbol_widths = Vec::new();
 
             // 2) Decode symbols in this height class
@@ -130,42 +130,72 @@ pub fn decode_symbol_dictionary(
                 huffman_input.as_mut().unwrap().byte_align();
                 
                 if bitmap_size == 0 {
-                    // BMSIZE = 0 means the symbol bitmap is not coded yet.
-                    // We just accumulate the width and continue to the next symbol.
-                    eprintln!("DEBUG: BMSIZE=0, accumulating width");
-                    continue;
-                }
-
-                // MMR collective bitmap
-                let start_pos = huffman_input.as_ref().unwrap().get_position();
-                eprintln!("DEBUG: MMR start_pos = {}, length = {}, width = {}, height = {}", 
-                    start_pos, bitmap_size, total_width, current_height);
-                
-                let mut mmr_reader = huffman_input.as_mut().unwrap().clone();
-                // Limit reader to BMSIZE
-                mmr_reader.set_limit(bitmap_size as usize);
-                
-                let collective_bitmap = decode_mmr_bitmap(
-                    &mut mmr_reader,
-                    total_width as usize,
-                    current_height as usize,
-                    false,
-                )?;
-                
-                huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
-
-                // Split collective bitmap into individual symbol bitmaps
-                let mut current_x = 0;
-                for width in symbol_widths.iter() {
-                    let mut symbol_bitmap = Bitmap::new(*width as usize, current_height as usize);
-                    for y in 0..current_height {
-                        for x in 0..*width {
-                            let pixel = collective_bitmap.get_pixel((current_x + x) as usize, y as usize);
-                            symbol_bitmap.set_pixel(x as usize, y as usize, pixel);
-                        }
+                    // BMSIZE = 0 means uncompressed bitmap (not MMR-coded)
+                    // jbig2dec: If BMSIZE == 0, bitmap is uncompressed
+                    eprintln!("DEBUG: BMSIZE=0, reading uncompressed bitmap");
+                    
+                    if total_width == 0 || current_height == 0 {
+                        eprintln!("DEBUG: Zero-size collective bitmap, skipping");
+                        continue;
                     }
-                    new_symbols.push(symbol_bitmap);
-                    current_x += *width;
+                    
+                    let collective_bitmap = read_uncompressed_bitmap(
+                        huffman_input.as_mut().unwrap(),
+                        total_width as usize,
+                        current_height as usize,
+                    )?;
+                    
+                    // Split collective bitmap into individual symbol bitmaps
+                    let mut current_x = 0;
+                    for width in symbol_widths.iter() {
+                        let mut symbol_bitmap = Bitmap::new(*width as usize, current_height as usize);
+                        for y in 0..current_height {
+                            for x in 0..*width {
+                                let pixel = collective_bitmap.get_pixel((current_x + x) as usize, y as usize);
+                                symbol_bitmap.set_pixel(x as usize, y as usize, pixel);
+                            }
+                        }
+                        new_symbols.push(symbol_bitmap);
+                        current_x += *width;
+                    }
+                } else {
+                    // BMSIZE > 0 means MMR-coded collective bitmap
+                    let start_pos = huffman_input.as_ref().unwrap().get_position();
+                    eprintln!("DEBUG: MMR start_pos = {}, length = {}, width = {}, height = {}", 
+                        start_pos, bitmap_size, total_width, current_height);
+                    
+                    if total_width == 0 || current_height == 0 {
+                        eprintln!("DEBUG: Zero-size MMR bitmap, skipping {} bytes", bitmap_size);
+                        huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
+                        continue;
+                    }
+                    
+                    let mut mmr_reader = huffman_input.as_mut().unwrap().clone();
+                    // Limit reader to BMSIZE
+                    mmr_reader.set_limit(bitmap_size as usize);
+                    
+                    let collective_bitmap = decode_mmr_bitmap(
+                        &mut mmr_reader,
+                        total_width as usize,
+                        current_height as usize,
+                        false,
+                    )?;
+                    
+                    huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
+
+                    // Split collective bitmap into individual symbol bitmaps
+                    let mut current_x = 0;
+                    for width in symbol_widths.iter() {
+                        let mut symbol_bitmap = Bitmap::new(*width as usize, current_height as usize);
+                        for y in 0..current_height {
+                            for x in 0..*width {
+                                let pixel = collective_bitmap.get_pixel((current_x + x) as usize, y as usize);
+                                symbol_bitmap.set_pixel(x as usize, y as usize, pixel);
+                            }
+                        }
+                        new_symbols.push(symbol_bitmap);
+                        current_x += *width;
+                    }
                 }
                 // Decoding of this height class is complete
                 break;
