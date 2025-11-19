@@ -405,6 +405,14 @@ impl SimpleSegmentVisitor {
         }
 
         // Create decoding context starting at params.start (which is AFTER all parameters!)
+        eprintln!("Symbol dict decode: params.start={} (0x{:X}), params.end={}", 
+                  params.start, params.start, params.end);
+        eprintln!("First 20 bytes at params.start in ORIGINAL file data:");
+        for i in 0..20.min(params.end - params.start) {
+            eprint!("{:02X} ", params.data[params.start + i]);
+        }
+        eprintln!();
+        
         let slice = &params.data[params.start..params.end];
         eprintln!("Symbol dict decode: Creating context from offset {}, length {}", 
                   params.start, slice.len());

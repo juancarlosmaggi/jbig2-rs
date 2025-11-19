@@ -74,6 +74,16 @@ pub struct DecodingContext {
 
 impl DecodingContext {
     pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
+        // DEBUG: Print arithmetic stream location for jbig2dec verification
+        eprintln!("=== ARITHMETIC STREAM DEBUG ===");
+        eprintln!("SEGMENT ARITHMETIC OFFSET: 0x{:X} ({})", start, start);
+        eprint!("First 20 bytes: ");
+        for i in 0..20.min(data.len()) {
+            eprint!("{:02X} ", data[i]);
+        }
+        eprintln!();
+        eprintln!("===============================");
+        
         DecodingContext {
             data,
             start,

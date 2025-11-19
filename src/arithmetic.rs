@@ -312,62 +312,48 @@ impl ArithmeticDecoder {
 
         // jbig2dec initialization sequence:
         // 1. Read first 4 bytes into a temporary buffer (next_word equivalent)
-        let mut next_word = 0u32;
-        for i in 0..4 {
-            if i < decoder.data.len() {
-                next_word = (next_word << 8) | (decoder.data[i] as u32);
-            } else {
-                next_word <<= 8;
-            }
-        }
+        // CRITICAL: JBIG2 uses BIG-ENDIAN byte order!
+        let first_4 = [
+            if decoder.data.len() > 0 { decoder.data[0] } else { 0 },
+            if decoder.data.len() > 1 { decoder.data[1] } else { 0 },
+            if decoder.data.len() > 2 { decoder.data[2] } else { 0 },
+            if decoder.data.len() > 3 { decoder.data[3] } else { 0 },
+        ];
+        
+        // DEBUG: Verify byte order
+        eprintln!("=== ARITHMETIC INIT DEBUG ===");
+        eprintln!("First 4 bytes: {:02X} {:02X} {:02X} {:02X}", 
+                  first_4[0], first_4[1], first_4[2], first_4[3]);
+        
+        let next_word = u32::from_be_bytes(first_4);  // BIG-ENDIAN!
+        eprintln!("After step 1: next_word = 0x{:08X}", next_word);
 
-        // 2. Initialize C (Step 1): result->C = (~(result->next_word >> 8)) & 0xFF0000;
-        // This takes the first byte, inverts it, and places it in the MSB of the 24-bit C register.
-        // Note: We use chigh/clow to represent C. 
-        // C is effectively (chigh << 16) | clow.
-        // So 0xFF0000 corresponds to chigh's lower 8 bits (if chigh is 16-bit) or just chigh.
-        // Let's follow the bit manipulation carefully.
+        // 2. Initialize C (Step 1): C = (~(next_word >> 8)) & 0xFF0000
+        let c = (!(next_word >> 8)) & 0xFF0000;
+        eprintln!("After step 2: C = 0x{:08X}", c);
         
-        // In our implementation:
-        // chigh is top 16 bits of C register
-        // clow is bottom 16 bits of C register
-        // But jbig2dec uses a single 32-bit C register where only 24 bits are active?
-        // Actually jbig2dec uses `uint32_t C;`
-        
-        // Let's map jbig2dec's C to our chigh/clow.
-        // Our `decode_bit` uses:
-        // chigh = C >> 16
-        // clow = C & 0xFFFF
-        
-        // jbig2dec: C = (~(next_word >> 8)) & 0xFF0000;
-        // This means C has the inverted first byte in bits 16-23.
-        // So chigh = (~first_byte) & 0xFF
-        // clow = 0
-        
-        let first_byte = (next_word >> 24) & 0xFF;
-        decoder.chigh = (!first_byte) & 0xFF;
-        decoder.clow = 0;
-        decoder.bp = 1; // Consumed first byte
+        decoder.chigh = ((c >> 16) & 0xFFFF) as u32;
+        decoder.clow = (c & 0xFFFF) as u32;
+        decoder.bp = 4; // Consumed first 4 bytes (not just 1!)
 
         // 3. Byte In (Step 2)
         decoder.byte_in();
+        let c_after_bytein = ((decoder.chigh as u32) << 16) | decoder.clow;
+        eprintln!("After step 3 (bytein): C = 0x{:08X}, CT = {}", c_after_bytein, decoder.ct);
 
         // 4. Finalize Init (Step 3)
-        // result->C <<= 7;
-        // result->CT -= 7;
-        // result->A = 0x8000;
-        
-        // Shift C left by 7
-        let c = (decoder.chigh << 16) | decoder.clow;
+        // C <<= 7, CT -= 7, A = 0x8000
+        let c = ((decoder.chigh as u32) << 16) | decoder.clow;
         let c = c << 7;
-        decoder.chigh = (c >> 16) & 0xFFFF;
-        decoder.clow = c & 0xFFFF;
-        
-        // CT -= 7
-        // byte_in sets CT to 8. So CT becomes 1.
+        decoder.chigh = ((c >> 16) & 0xFFFF) as u32;
+        decoder.clow = (c & 0xFFFF) as u32;
         decoder.ct -= 7;
-        
         decoder.a = 0x8000;
+        
+        let c_final = ((decoder.chigh as u32) << 16) | decoder.clow;
+        eprintln!("After step 4 (finalize): A=0x{:04X}, C=0x{:08X}, CT={}", 
+                  decoder.a, c_final, decoder.ct);
+        eprintln!("============================");
         
         decoder
     }
