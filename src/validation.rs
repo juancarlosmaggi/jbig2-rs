@@ -4,10 +4,21 @@ use crate::error::{
 };
 
 pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbig2Error> {
-    // Allow 0 dimensions (empty bitmap)
-    if width > 65535 || height > 65535 {
+    // Zero dimensions are allowed (empty bitmaps)
+    if width == 0 && height == 0 {
+        return Ok(());
+    }
+    
+    // Check for overflow matching jbig2dec: height > INT32_MAX / stride
+    // stride calculation: ((width - 1) / 8) + 1
+    let width_u32 = width as u32;
+    let height_u32 = height as u32;
+    let stride = if width_u32 == 0 { 1 } else { ((width_u32 - 1) / 8) + 1 };
+    
+    if height_u32 > (i32::MAX as u32) / stride {
         return Err(Jbig2Error::new(ERR_DIMENSIONS_TOO_LARGE));
     }
+    
     Ok(())
 }
 

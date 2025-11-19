@@ -195,8 +195,10 @@ impl SimpleSegmentVisitor {
         if region_info.width == 0 || region_info.height == 0 {
             return Ok(());
         }
-        if region_info.width > 10000 || region_info.height > 10000 {
-            return Ok(());
+        // Check for overflow matching jbig2dec: height > INT32_MAX / stride
+        let stride = ((region_info.width - 1) / 8) + 1;
+        if region_info.height > (i32::MAX as u32) / stride {
+            return Err(Jbig2Error::new("bitmap size causes integer overflow"));
         }
         if self.current_page_info.is_none() {
             self.on_page_information(PageInfo {
@@ -630,8 +632,10 @@ impl SimpleSegmentVisitor {
         if region_info.width == 0 || region_info.height == 0 {
             return Ok(());
         }
-        if region_info.width > 10000 || region_info.height > 10000 {
-            return Ok(());
+        // Check for overflow matching jbig2dec: height > INT32_MAX / stride
+        let stride = ((region_info.width - 1) / 8) + 1;
+        if region_info.height > (i32::MAX as u32) / stride {
+            return Err(Jbig2Error::new("bitmap size causes integer overflow"));
         }
 
         if self.current_page_info.is_none() {

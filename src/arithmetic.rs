@@ -318,6 +318,9 @@ impl ArithmeticDecoder {
     }
     fn byte_in(&mut self) {
         if self.bp >= self.data_end {
+            // Out of data - set ct to prevent underflow, add 0xFF00 to maintain state
+            self.clow = self.clow.wrapping_add(0xff00u32);
+            self.ct = 8;
             return;
         }
         let b0 = self.data[self.bp];
@@ -396,15 +399,16 @@ impl ArithmeticDecoder {
                 new_cx_index = qe_entry.nmps as usize;
             }
         }
-        // renormD
+        // renormD - Figure E.18 from JBIG2 spec
         loop {
-            if self.ct <= 0 {
-                self.byte_in();
+            // CRITICAL: Check ct BEFORE decrementing (matches jbig2dec)
+            if self.ct == 0 {
+                self.byte_in();  // Sets ct = 8
             }
             a <<= 1;
             self.chigh = ((self.chigh << 1) & 0xffff) | ((self.clow >> 15) & 1);
             self.clow = (self.clow << 1) & 0xffff;
-            self.ct -= 1;
+            self.ct -= 1;  // Safe: ct was >= 1
             if (a & 0x8000) != 0 {
                 break;
             }
