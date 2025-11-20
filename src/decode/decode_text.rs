@@ -260,7 +260,10 @@ pub fn decode_text_region(
             } else {
                 0
             };
-            current_s += increment + delta_s.unwrap() + params.ds_offset;
+            current_s = current_s
+                .wrapping_add(increment)
+                .wrapping_add(delta_s.unwrap())
+                .wrapping_add(params.ds_offset);
         }
     }
     Ok(bitmap)
