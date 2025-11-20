@@ -9,7 +9,7 @@ pub struct Bitmap {
 impl Bitmap {
     pub fn new(width: usize, height: usize) -> Self {
         // Sanity check dimensions before any arithmetic
-        if width > 100_000 || height > 100_000 {
+        if width > 200_000_000 || height > 200_000_000 {
             panic!("Bitmap dimensions unreasonable: {}x{} (likely decode error)", width, height);
         }
         

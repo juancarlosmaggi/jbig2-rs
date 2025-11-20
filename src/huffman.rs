@@ -100,18 +100,19 @@ impl HuffmanTreeNode {
         }
     }
 
-    pub fn decode_node(&self, reader: &mut Reader) -> Result<i32, Jbig2Error> {
+    pub fn decode_node(&self, reader: &mut Reader) -> Result<(i32, bool), Jbig2Error> {
         if self.is_leaf {
             if self.is_oob {
-                return Ok(-1); // OOB
+                return Ok((0, true)); // OOB
             }
             let ht_offset = reader.read_bits(self.range_length)?;
-            Ok(self.range_low
+            let val = self.range_low
                 + if self.is_lower_range {
                     -(ht_offset as i32)
                 } else {
                     ht_offset as i32
-                })
+                };
+            Ok((val, false))
         } else {
             let bit = reader.read_bit()? as usize;
             if let Some(ref child) = self.children[bit] {
@@ -705,6 +706,10 @@ impl HuffmanTable {
     }
 
     pub fn decode(&self, reader: &mut Reader) -> Result<i32, Jbig2Error> {
+        self.root_node.decode_node(reader).map(|(val, _)| val)
+    }
+
+    pub fn decode_entry(&self, reader: &mut Reader) -> Result<(i32, bool), Jbig2Error> {
         self.root_node.decode_node(reader)
     }
 

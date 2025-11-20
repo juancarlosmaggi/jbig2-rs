@@ -38,7 +38,7 @@ pub fn decode_integer(
             if read_bits(1, contexts, &mut prev, decoder)? != 0 {
                 if read_bits(1, contexts, &mut prev, decoder)? != 0 {
                     if read_bits(1, contexts, &mut prev, decoder)? != 0 {
-                        read_bits(32, contexts, &mut prev, decoder)? + 4436
+                        (read_bits(32, contexts, &mut prev, decoder)? as u64 + 4436) as u32
                     } else {
                         read_bits(12, contexts, &mut prev, decoder)? + 340
                     }

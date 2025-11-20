@@ -39,7 +39,12 @@ impl CCITTFaxDecoder {
         let mut x = 0; // Current position in current line
         let mut current_color = 0; // Start with White run
 
+        let mut loop_count = 0;
         loop {
+            loop_count += 1;
+            if loop_count > self.width * 2 + 1000 {
+                 return Err(Jbig2Error::new("Infinite loop detected in decode_2d_line"));
+            }
             // Check line completion BEFORE reading mode code
             if a0 != -1 && (a0 as usize) >= self.width {
                 break;

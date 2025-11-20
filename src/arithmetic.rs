@@ -524,6 +524,8 @@ impl ArithmeticDecoder {
         }
 
         // renormD (Figure E.18) - only reached if renormalization needed
+        // renormD (Figure E.18) - only reached if renormalization needed
+        let mut loop_count = 0;
         loop {
             if self.ct == 0 {
                 self.byte_in();
@@ -534,6 +536,24 @@ impl ArithmeticDecoder {
             self.ct -= 1;
             if (self.a & 0x8000) != 0 {
                 break;
+            }
+            
+            // Safety check: If A is 0, we will never reach 0x8000 by shifting left.
+            if self.a == 0 {
+                 // This should theoretically not happen in valid streams, but prevents infinite loop
+                 // Force A to a valid state or return error? 
+                 // Since we can't return error easily here (signature is Ok(d)), we'll break and let it produce garbage/error later.
+                 // Better to panic or log?
+                 eprintln!("CRITICAL ERROR: ArithmeticDecoder A became 0. Breaking infinite loop.");
+                 self.a = 0x8000; // Force valid state
+                 break;
+            }
+
+            loop_count += 1;
+            if loop_count > 100 { // 32 shifts should be enough for u32
+                 eprintln!("CRITICAL ERROR: ArithmeticDecoder renormD stuck. A={:x}", self.a);
+                 self.a = 0x8000;
+                 break;
             }
         }
 

@@ -137,7 +137,7 @@ pub fn decode_bitmap(
     // Validate parameters (now allows zero via updated validation)
     validation::validate_generic_decode_params(params.width, params.height, params.template_index)?;
 
-    eprintln!("decode_bitmap: mmr={}, template={}", params.mmr, params.template_index);
+
 
     if params.mmr {
         let mut reader = Reader::new(
