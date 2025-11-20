@@ -15,8 +15,8 @@ mod tests {
 
         // Verify coordinates are within reasonable bounds
         for &(x, y) in template {
-            assert!(x >= -4 && x <= 2);
-            assert!(y >= -2 && y <= 0);
+            assert!((-4..=2).contains(&x));
+            assert!((-2..=0).contains(&y));
         }
     }
 

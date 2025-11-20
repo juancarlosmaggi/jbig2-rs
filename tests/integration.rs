@@ -4,7 +4,7 @@ mod tests {
     use std::fs;
 
     fn load_file(path: &str) -> Vec<u8> {
-        fs::read(path).expect(&format!("Failed to read file: {}", path))
+        fs::read(path).unwrap_or_else(|_| panic!("Failed to read file: {}", path))
     }
 
     #[test]

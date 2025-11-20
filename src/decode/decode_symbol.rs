@@ -1,7 +1,7 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode::decode_utils::read_uncompressed_bitmap;
 use crate::decode::decode_mmr::decode_mmr_bitmap;
+use crate::decode::decode_utils::read_uncompressed_bitmap;
 use crate::decoder::{decode_i32_huffman_or_arith, decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
@@ -25,7 +25,12 @@ pub fn decode_symbol_dictionary(
     decoding_context: &mut DecodingContext,
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
-    println!("decode_symbol_dictionary: context.data.len()={}, context.start={}, context.end={}", decoding_context.data.len(), decoding_context.start, decoding_context.end);
+    println!(
+        "decode_symbol_dictionary: context.data.len()={}, context.start={}, context.end={}",
+        decoding_context.data.len(),
+        decoding_context.start,
+        decoding_context.end
+    );
     // Validate parameters
     if params.number_of_new_symbols == 0 {
         return Err(Jbig2Error::new("number of new symbols must be positive"));
@@ -42,13 +47,14 @@ pub fn decode_symbol_dictionary(
         ));
     }
     while new_symbols.len() < params.number_of_new_symbols {
-
         // 6.5.6 Huffman coded symbol dictionary
         if params.huffman {
             let tables = huffman_tables.as_ref().unwrap();
 
             // 1) Decode HCDH (Height Class Delta Height)
-            let hcdh = tables.table_delta_height.decode(huffman_input.as_mut().unwrap())?;
+            let hcdh = tables
+                .table_delta_height
+                .decode(huffman_input.as_mut().unwrap())?;
             if hcdh < 0 {
                 // OOB - End of symbol dictionary
                 return Ok(new_symbols);
@@ -63,7 +69,9 @@ pub fn decode_symbol_dictionary(
 
             // 2) Decode symbols in this height class
             loop {
-                let dw = tables.table_delta_width.decode(huffman_input.as_mut().unwrap())?;
+                let dw = tables
+                    .table_delta_width
+                    .decode(huffman_input.as_mut().unwrap())?;
 
                 if dw < 0 {
                     // OOB - End of height class
@@ -75,7 +83,9 @@ pub fn decode_symbol_dictionary(
 
                 if params.refinement {
                     // Refinement/aggregate-coded symbol bitmap (6.5.8.2)
-                    let number_of_instances = tables.table_aggregate_instances.decode(huffman_input.as_mut().unwrap())?;
+                    let number_of_instances = tables
+                        .table_aggregate_instances
+                        .decode(huffman_input.as_mut().unwrap())?;
                     if number_of_instances > 1 {
                         // Aggregate symbol logic (unchanged)
                         let mut input_symbols = params.symbols.clone();
@@ -125,34 +135,36 @@ pub fn decode_symbol_dictionary(
 
             // 3) Decode Collective Bitmap (6.5.9)
             if !params.refinement {
-                let bitmap_size = tables.table_bitmap_size.decode(huffman_input.as_mut().unwrap())?;
+                let bitmap_size = tables
+                    .table_bitmap_size
+                    .decode(huffman_input.as_mut().unwrap())?;
                 eprintln!("DEBUG: BMSIZE = {}", bitmap_size);
                 huffman_input.as_mut().unwrap().byte_align();
-                
+
                 if bitmap_size == 0 {
                     // BMSIZE = 0 means uncompressed bitmap (not MMR-coded)
                     // jbig2dec: If BMSIZE == 0, bitmap is uncompressed
                     eprintln!("DEBUG: BMSIZE=0, reading uncompressed bitmap");
-                    
+
                     if total_width == 0 || current_height == 0 {
                         eprintln!("DEBUG: Zero-size collective bitmap, skipping");
                         continue;
                     }
-                    
+
                     let collective_bitmap = read_uncompressed_bitmap(
                         huffman_input.as_mut().unwrap(),
                         total_width as usize,
                         current_height as usize,
                     )?;
-                    
+
                     // Split collective bitmap into individual symbol bitmaps
                     let mut current_x = 0;
                     for width in symbol_widths.iter() {
                         let mut symbol_bitmap = Bitmap::new(*width, current_height as usize);
                         for y in 0..(current_height as usize) {
                             for x in 0..*width {
-                                let pixel = collective_bitmap.get_pixel(current_x + x, y as usize);
-                                symbol_bitmap.set_pixel(x, y as usize, pixel);
+                                let pixel = collective_bitmap.get_pixel(current_x + x, y);
+                                symbol_bitmap.set_pixel(x, y, pixel);
                             }
                         }
                         new_symbols.push(symbol_bitmap);
@@ -161,26 +173,31 @@ pub fn decode_symbol_dictionary(
                 } else {
                     // BMSIZE > 0 means MMR-coded collective bitmap
                     let start_pos = huffman_input.as_ref().unwrap().get_position();
-                    eprintln!("DEBUG: MMR start_pos = {}, length = {}, width = {}, height = {}", 
-                        start_pos, bitmap_size, total_width, current_height);
-                    
+                    eprintln!(
+                        "DEBUG: MMR start_pos = {}, length = {}, width = {}, height = {}",
+                        start_pos, bitmap_size, total_width, current_height
+                    );
+
                     if total_width == 0 || current_height == 0 {
-                        eprintln!("DEBUG: Zero-size MMR bitmap, skipping {} bytes", bitmap_size);
+                        eprintln!(
+                            "DEBUG: Zero-size MMR bitmap, skipping {} bytes",
+                            bitmap_size
+                        );
                         huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
                         continue;
                     }
-                    
+
                     let mut mmr_reader = huffman_input.as_mut().unwrap().clone();
                     // Limit reader to BMSIZE
                     mmr_reader.set_limit(bitmap_size as usize);
-                    
+
                     let collective_bitmap = decode_mmr_bitmap(
                         &mut mmr_reader,
                         total_width as usize,
                         current_height as usize,
                         false,
                     )?;
-                    
+
                     huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
 
                     // Split collective bitmap into individual symbol bitmaps
@@ -189,8 +206,8 @@ pub fn decode_symbol_dictionary(
                         let mut symbol_bitmap = Bitmap::new(*width, current_height as usize);
                         for y in 0..(current_height as usize) {
                             for x in 0..*width {
-                                let pixel = collective_bitmap.get_pixel(current_x + x, y as usize);
-                                symbol_bitmap.set_pixel(x, y as usize, pixel);
+                                let pixel = collective_bitmap.get_pixel(current_x + x, y);
+                                symbol_bitmap.set_pixel(x, y, pixel);
                             }
                         }
                         new_symbols.push(symbol_bitmap);
@@ -232,7 +249,7 @@ pub fn decode_symbol_dictionary(
                         Some(dw) => {
                             current_width = current_width.wrapping_add(dw);
                             dw
-                        },
+                        }
                         None => break, // OOB
                     }
                 };
@@ -240,7 +257,10 @@ pub fn decode_symbol_dictionary(
                     break; // OOB for Huffman
                 }
                 total_width += current_width;
-                eprintln!("DEBUG: current_width={}, total_width={}", current_width, total_width);
+                eprintln!(
+                    "DEBUG: current_width={}, total_width={}",
+                    current_width, total_width
+                );
                 if params.refinement {
                     // 6.5.8.2 Refinement/aggregate-coded symbol bitmap
                     let number_of_instances =
@@ -372,7 +392,7 @@ pub fn decode_symbol_dictionary(
                         for y in 0..current_height as usize {
                             for x in 0..bitmap_width {
                                 let pixel = collective_bitmap.get_pixel(x_min + x, y);
-                                symbol_bitmap.set_pixel(x, y as usize, pixel);
+                                symbol_bitmap.set_pixel(x, y, pixel);
                             }
                         }
                         new_symbols.push(symbol_bitmap);

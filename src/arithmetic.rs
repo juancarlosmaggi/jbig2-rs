@@ -291,7 +291,7 @@ const QE_TABLE: [QeEntry; 47] = [
 ];
 pub struct ArithmeticDecoder {
     data: Vec<u8>,
-    offset: usize,          // Position in data array  
+    offset: usize, // Position in data array
     data_end: usize,
     next_word: u32,         // Buffer containing up to 4 bytes
     next_word_bytes: usize, // Number of valid bytes in next_word
@@ -333,13 +333,17 @@ impl ArithmeticDecoder {
         }
 
         eprintln!("=== ARITHMETIC INIT DEBUG ===");
-        eprintln!("First 4 bytes in buffer: {:02X} {:02X} {:02X} {:02X}",
-                  (decoder.next_word >> 24) & 0xFF,
-                  (decoder.next_word >> 16) & 0xFF,
-                  (decoder.next_word >> 8) & 0xFF,
-                  decoder.next_word & 0xFF);
-        eprintln!("After step 1: next_word = 0x{:08X}, next_word_bytes = {}, offset = {}",
-                  decoder.next_word, decoder.next_word_bytes, decoder.offset);
+        eprintln!(
+            "First 4 bytes in buffer: {:02X} {:02X} {:02X} {:02X}",
+            (decoder.next_word >> 24) & 0xFF,
+            (decoder.next_word >> 16) & 0xFF,
+            (decoder.next_word >> 8) & 0xFF,
+            decoder.next_word & 0xFF
+        );
+        eprintln!(
+            "After step 1: next_word = 0x{:08X}, next_word_bytes = {}, offset = {}",
+            decoder.next_word, decoder.next_word_bytes, decoder.offset
+        );
 
         // 2. Initialize C: C = (~(next_word >> 8)) & 0xFF0000
         let c = (!(decoder.next_word >> 8)) & 0xFF0000;
@@ -350,7 +354,10 @@ impl ArithmeticDecoder {
         // 3. Call byte_in (operates on buffer!)
         decoder.byte_in();
         let c_after = (decoder.chigh << 16) | decoder.clow;
-        eprintln!("After step 3 (bytein): C = 0x{:08X}, CT = {}", c_after, decoder.ct);
+        eprintln!(
+            "After step 3 (bytein): C = 0x{:08X}, CT = {}",
+            c_after, decoder.ct
+        );
 
         // 4. Finalize: C <<= 7, CT -= 7, A = 0x8000
         let c = (decoder.chigh << 16) | decoder.clow;
@@ -359,43 +366,45 @@ impl ArithmeticDecoder {
         decoder.clow = c & 0xFFFF;
         decoder.ct -= 7;
         decoder.a = 0x8000;
-        
+
         let c_final = (decoder.chigh << 16) | decoder.clow;
-        eprintln!("After step 4 (finalize): A=0x{:04X}, C=0x{:08X}, CT={}",
-                  decoder.a, c_final, decoder.ct);
+        eprintln!(
+            "After step 4 (finalize): A=0x{:04X}, C=0x{:08X}, CT={}",
+            decoder.a, c_final, decoder.ct
+        );
         eprintln!("============================");
 
         decoder
     }
-    
+
     fn byte_in(&mut self) {
         // CRITICAL: This operates on the buffered next_word, NOT on data[offset]!
         // Based on jbig2_arith.c:92-183
-        
+
         // Line 92: Get current top byte from buffer
         let b_check = ((self.next_word >> 24) & 0xFF) as u8;
-        
+
         if b_check == 0xFF {
             // Special 0xFF handling (jbig2_arith.c:93-149)
             // Shift buffer
             self.next_word <<= 8;
             self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
-            
+
             // Refill buffer if needed
             if self.next_word_bytes == 0 {
                 self.refill_buffer();
             }
-            
+
             // Get next byte from buffer
             let b1 = ((self.next_word >> 24) & 0xFF) as u8;
-            
+
             if b1 > 0x8F {
                 // Marker byte stuffing
                 self.clow = self.clow.wrapping_add(0xFF00);
                 self.ct = 8;
                 return;
             }
-            
+
             // Normal 0xFF processing
             self.clow = self.clow.wrapping_add(0xFF00 | (b1 as u32));
             self.ct = 7;
@@ -404,15 +413,15 @@ impl ArithmeticDecoder {
             // Line 154: Shift buffer left
             self.next_word <<= 8;
             self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
-            
+
             // Refill buffer if exhausted
             if self.next_word_bytes == 0 {
                 self.refill_buffer();
             }
-            
+
             // Line 177: Get NEW top byte from buffer (after shift!)
             let b = ((self.next_word >> 24) & 0xFF) as u8;
-            
+
             // Line 178: Update C
             let full_c = (self.chigh << 16) | self.clow;
             let full_c = full_c.wrapping_add(0xFF00 - ((b as u32) << 8));
@@ -420,29 +429,29 @@ impl ArithmeticDecoder {
             self.clow = full_c & 0xFFFF;
             self.ct = 8;
         }
-        
+
         // Handle overflow from clow to chigh
         if self.clow > 0xFFFF {
             self.chigh = self.chigh.wrapping_add(self.clow >> 16);
             self.clow &= 0xFFFF;
         }
     }
-    
+
     fn refill_buffer(&mut self) {
         // Read up to 4 bytes from data into next_word
         let mut bytes_read = 0;
         let mut new_word = 0u32;
-        
+
         for _i in 0..4 {
             if self.offset < self.data_end {
                 new_word = (new_word << 8) | (self.data[self.offset] as u32);
                 self.offset += 1;
                 bytes_read += 1;
             } else {
-                new_word <<= 8;  // Pad with zeros
+                new_word <<= 8; // Pad with zeros
             }
         }
-        
+
         self.next_word = new_word;
         self.next_word_bytes = bytes_read;
     }
@@ -463,10 +472,10 @@ impl ArithmeticDecoder {
         let qe_icx = qe_entry.qe;
         let d: u8;
         let new_cx_index: usize;
-        
+
         // Figure F.2: Subtract Qe from A
         self.a = self.a.wrapping_sub(qe_icx as u32);
-        
+
         // Figure F.2: Compare C (top 16 bits) to updated A
         if self.chigh < self.a {
             // MPS path (C < A)
@@ -474,13 +483,13 @@ impl ArithmeticDecoder {
                 // Need renormalization
                 // MPS_EXCHANGE (Figure E.16)
                 if self.a < qe_icx as u32 {
-                    d = 1 ^ cx_mps;  // Return LPS
+                    d = 1 ^ cx_mps; // Return LPS
                     if qe_entry.switch_flag == 1 {
                         cx_mps = d;
                     }
                     new_cx_index = qe_entry.nlps as usize;
                 } else {
-                    d = cx_mps;  // Return MPS
+                    d = cx_mps; // Return MPS
                     new_cx_index = qe_entry.nmps as usize;
                 }
                 // renormD will follow below
@@ -495,17 +504,17 @@ impl ArithmeticDecoder {
             // Subtract A from C FIRST
             let c_full = (self.chigh << 16) | self.clow;
             let c_full = c_full.wrapping_sub(self.a << 16);
-            self.chigh = ((c_full >> 16) & 0xFFFF);
-            self.clow = (c_full & 0xFFFF);
-            
+            self.chigh = (c_full >> 16) & 0xFFFF;
+            self.clow = c_full & 0xFFFF;
+
             // LPS_EXCHANGE (Figure E.17)
             if self.a < qe_icx as u32 {
                 self.a = qe_icx as u32;
-                d = cx_mps;  // Return MPS (even though we're in LPS path!)
+                d = cx_mps; // Return MPS (even though we're in LPS path!)
                 new_cx_index = qe_entry.nmps as usize;
             } else {
                 self.a = qe_icx as u32;
-                d = 1 ^ cx_mps;  // Return LPS
+                d = 1 ^ cx_mps; // Return LPS
                 if qe_entry.switch_flag == 1 {
                     cx_mps = d;
                 }
@@ -513,7 +522,7 @@ impl ArithmeticDecoder {
             }
             // renormD will follow below
         }
-        
+
         // renormD (Figure E.18) - only reached if renormalization needed
         loop {
             if self.ct == 0 {
@@ -527,7 +536,7 @@ impl ArithmeticDecoder {
                 break;
             }
         }
-        
+
         // Update context
         contexts[pos] = ((new_cx_index as i8) << 1) | (cx_mps as i8);
         Ok(d)
