@@ -433,16 +433,15 @@ pub fn decode_symbol_dictionary(
         }
     }
     // 6.5.10 Exported symbols
-    let mut flags = Vec::new();
+    let mut flags;
     let total_symbols_length = params.symbols.len() + params.number_of_new_symbols;
     
     // WORKAROUND: Skip export flag decoding for arithmetic-coded files
     // There seems to be an issue with decode_integer_context hanging for IAEX
     if !params.huffman {
-        for _ in 0..total_symbols_length {
-            flags.push(true);
-        }
+        flags = vec![true; total_symbols_length];
     } else {
+        flags = Vec::new();
         let tables = huffman_tables.unwrap();
         let mut current_flag = false;
         let mut export_loop_count = 0;
