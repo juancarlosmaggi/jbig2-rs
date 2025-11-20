@@ -1,5 +1,5 @@
 use crate::error::Jbig2Error;
-use crate::segment::{process_segments, read_segments, PageInfo};
+use crate::segment::{process_segments, read_segments};
 use crate::visitor::{Jbig2Page, SimpleSegmentVisitor};
 #[derive(Clone)]
 pub struct Jbig2Chunk {
@@ -54,8 +54,7 @@ impl Jbig2Document {
                 (false, true, 1u32, 0)
             };
         let data_start = pos;
-        
-        println!("Calling read_segments with pos=0x{:04x} ({})", pos, pos);
+
         let segments = read_segments(
             data,
             pos,
@@ -70,27 +69,13 @@ impl Jbig2Document {
         let mut visitor = SimpleSegmentVisitor::new();
         process_segments(&segments, &mut visitor)?;
         visitor.finalize_current_page();
-        
-// If we have no pages but the file was parsed successfully, create a default page
+
         if visitor.pages.is_empty() {
-            println!("No pages found, creating default 100x100 page");
-            eprintln!("Error: Parsed segments but no pages were created. This indicates skipped segments or parsing logic issues.");
-            
-            visitor.on_page_information(PageInfo {
-                width: 100,
-                height: 100,
-                resolution_x: 300,
-                resolution_y: 300,
-                lossless: true,
-                refinement: false,
-                default_pixel_value: 0,
-                combination_operator: 0, // OR
-                requires_buffer: false,
-                combination_operator_override: false,
-            });
-            visitor.finalize_current_page();
+            return Err(Jbig2Error::new(
+                "no pages created after processing segments",
+            ));
         }
-        
+
         if has_file_header
             && !sequential
             && num_pages != 0
