@@ -138,16 +138,11 @@ pub fn decode_symbol_dictionary(
                 let bitmap_size = tables
                     .table_bitmap_size
                     .decode(huffman_input.as_mut().unwrap())?;
-                eprintln!("DEBUG: BMSIZE = {}", bitmap_size);
                 huffman_input.as_mut().unwrap().byte_align();
 
                 if bitmap_size == 0 {
                     // BMSIZE = 0 means uncompressed bitmap (not MMR-coded)
-                    // jbig2dec: If BMSIZE == 0, bitmap is uncompressed
-                    eprintln!("DEBUG: BMSIZE=0, reading uncompressed bitmap");
-
-                    if total_width == 0 || current_height == 0 {
-                        eprintln!("DEBUG: Zero-size collective bitmap, skipping");
+                    if symbol_widths.is_empty() || total_width == 0 || current_height == 0 {
                         continue;
                     }
 
@@ -173,16 +168,8 @@ pub fn decode_symbol_dictionary(
                 } else {
                     // BMSIZE > 0 means MMR-coded collective bitmap
                     let start_pos = huffman_input.as_ref().unwrap().get_position();
-                    eprintln!(
-                        "DEBUG: MMR start_pos = {}, length = {}, width = {}, height = {}",
-                        start_pos, bitmap_size, total_width, current_height
-                    );
 
-                    if total_width == 0 || current_height == 0 {
-                        eprintln!(
-                            "DEBUG: Zero-size MMR bitmap, skipping {} bytes",
-                            bitmap_size
-                        );
+                    if symbol_widths.is_empty() || total_width == 0 || current_height == 0 {
                         huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
                         continue;
                     }
@@ -214,11 +201,10 @@ pub fn decode_symbol_dictionary(
                         current_x += *width;
                     }
                 }
-                // Decoding of this height class is complete
-                break;
+                // Decoding of this height class is complete, continue to next height class
             }
         } else {
-            // Arithmetic coding path (unchanged)
+            // Arithmetic coding path
             let delta_height = decode_i32_huffman_or_arith(
                 params.huffman,
                 || {
@@ -236,14 +222,11 @@ pub fn decode_symbol_dictionary(
             let first_symbol = if params.huffman { new_symbols.len() } else { 0 };
             let mut symbol_widths = Vec::new();
             loop {
-                eprintln!("DEBUG: Loop start, huffman={}", params.huffman);
                 let delta_width = if params.huffman {
                     let tables = huffman_tables.unwrap();
-                    let dw = tables
+                    tables
                         .table_delta_width
-                        .decode(huffman_input.as_mut().unwrap())?;
-                    eprintln!("DEBUG: Huffman DW = {}", dw);
-                    dw
+                        .decode(huffman_input.as_mut().unwrap())?
                 } else {
                     match decode_integer_context(decoding_context, "IADW")? {
                         Some(dw) => {
@@ -257,10 +240,6 @@ pub fn decode_symbol_dictionary(
                     break; // OOB for Huffman
                 }
                 total_width += current_width;
-                eprintln!(
-                    "DEBUG: current_width={}, total_width={}",
-                    current_width, total_width
-                );
                 if params.refinement {
                     // 6.5.8.2 Refinement/aggregate-coded symbol bitmap
                     let number_of_instances =

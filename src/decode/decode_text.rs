@@ -234,6 +234,9 @@ pub fn decode_text_region(
                 }
             }
             i += 1;
+            if i >= params.number_of_symbol_instances {
+                break; // Processed all symbols
+            }
             let delta_s = decode_option_i32_huffman_or_arith(
                 params.huffman,
                 || {
