@@ -167,7 +167,6 @@ pub fn decode_symbol_dictionary(
                     }
                 } else {
                     // BMSIZE > 0 means MMR-coded collective bitmap
-                    let start_pos = huffman_input.as_ref().unwrap().get_position();
 
                     if symbol_widths.is_empty() || total_width == 0 || current_height == 0 {
                         huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
