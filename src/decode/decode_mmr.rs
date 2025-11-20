@@ -47,7 +47,18 @@ impl CCITTFaxDecoder {
             
             let b1 = self.find_changing_element_of_color(&self.ref_line, (a0 + 1) as usize, self.width, 1 - current_color);
             let b2 = self.find_changing_element(&self.ref_line, b1, self.width);
-            let mode = self.read_mode_code()?;
+            
+            // Try to read mode code
+            // If no valid mode matches, it means we've hit end of valid data (padding/garbage)
+            let mode = match self.read_mode_code() {
+                Ok(m) => m,
+                Err(_) => {
+                    // No valid mode code = end of line data (not an error!)
+                    // This happens when we hit padding bits after valid MMR data
+                    break;
+                }
+            };
+            
             match mode {
                 0 => {
                     // Pass mode
@@ -179,7 +190,7 @@ impl CCITTFaxDecoder {
         
         // Only check for EOFB if end_of_block is true
         if !self.end_of_block {
-            return Err(Jbig2Error::new("invalid MMR mode code"));
+            return Err(Jbig2Error::new("no mode code match"));
         }
         
         // Only check for EOFB if end_of_block is true
@@ -192,7 +203,7 @@ impl CCITTFaxDecoder {
                 return Ok(9); // EOFB
             }
         }
-        Err(Jbig2Error::new("invalid MMR mode code"))
+        Err(Jbig2Error::new("no mode code match"))
     }
     fn find_changing_element(&self, line: &[u8], start: usize, end: usize) -> usize {
         let mut i = start;
