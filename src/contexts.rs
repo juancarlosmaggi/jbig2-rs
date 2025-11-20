@@ -59,11 +59,6 @@ impl ContextCache {
         if !self.initialized[index] {
             self.contexts[index] = vec![0i8; 65536];
             self.initialized[index] = true;
-            eprintln!("DEBUG: Initialized context '{}' with {} zeros. First values: [{}, {}, {}]", 
-                id, self.contexts[index].len(),
-                self.contexts[index][0], 
-                self.contexts[index][1],
-                self.contexts[index].get(2).copied().unwrap_or(-1));
         }
         &mut self.contexts[index]
     }
@@ -79,15 +74,6 @@ pub struct DecodingContext {
 
 impl DecodingContext {
     pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
-        // DEBUG: Print arithmetic stream location for jbig2dec verification
-        eprintln!("=== ARITHMETIC STREAM DEBUG ===");
-        eprintln!("SEGMENT ARITHMETIC OFFSET: 0x{:X} ({})", start, start);
-        eprint!("First 20 bytes: ");
-        for i in 0..20.min(data.len()) {
-            eprint!("{:02X} ", data[i]);
-        }
-        eprintln!();
-        eprintln!("===============================");
         
         DecodingContext {
             data,

@@ -12,18 +12,14 @@ pub fn decode_integer(
     let contexts = context_cache.get_contexts(procedure);
     let mut prev = 1;
     
-    eprintln!("DEBUG INT: Starting decode_integer for '{}'", procedure);
-    eprintln!("DEBUG INT: Initial context[0]={}, context[1]={}", contexts[0], contexts[1]);
-    
     let read_bits = |length: u32,
                      contexts: &mut Vec<i8>,
                      prev: &mut usize,
                      decoder: &mut ArithmeticDecoder|
      -> Result<u32, Jbig2Error> {
         let mut v = 0;
-        for i in 0..length {
+        for _ in 0..length {
             let bit = decoder.read_bit(contexts, *prev)? as usize;
-            eprintln!("DEBUG INT:   Bit {}: prev={}, bit={}, v={:b}", i, *prev, bit, v);
             *prev = if *prev < 256 {
                 (*prev << 1) | bit
             } else {
@@ -31,43 +27,31 @@ pub fn decode_integer(
             };
             v = (v << 1) | bit as u32;
         }
-        eprintln!("DEBUG INT:   Read {} bits: value={} (0b{:b})", length, v, v);
         Ok(v)
     };
     
     let sign = read_bits(1, contexts, &mut prev, decoder)?;
-    eprintln!("DEBUG INT: Sign bit = {}", sign);
     
     // The nested ternary from JS
     let value = if read_bits(1, contexts, &mut prev, decoder)? != 0 {
-        eprintln!("DEBUG INT: Decision 1: != 0, continue");
         if read_bits(1, contexts, &mut prev, decoder)? != 0 {
-            eprintln!("DEBUG INT: Decision 2: != 0, continue");
             if read_bits(1, contexts, &mut prev, decoder)? != 0 {
-                eprintln!("DEBUG INT: Decision 3: != 0, continue");
                 if read_bits(1, contexts, &mut prev, decoder)? != 0 {
-                    eprintln!("DEBUG INT: Decision 4: != 0, continue");
                     if read_bits(1, contexts, &mut prev, decoder)? != 0 {
-                        eprintln!("DEBUG INT: Decision 5: != 0, reading 32 bits + 4436");
                         read_bits(32, contexts, &mut prev, decoder)? + 4436
                     } else {
-                        eprintln!("DEBUG INT: Decision 5: == 0, reading 12 bits + 340");
                         read_bits(12, contexts, &mut prev, decoder)? + 340
                     }
                 } else {
-                    eprintln!("DEBUG INT: Decision 4: == 0, reading 8 bits + 84");
                     read_bits(8, contexts, &mut prev, decoder)? + 84
                 }
             } else {
-                eprintln!("DEBUG INT: Decision 3: == 0, reading 6 bits + 20");
                 read_bits(6, contexts, &mut prev, decoder)? + 20
             }
         } else {
-            eprintln!("DEBUG INT: Decision 2: == 0, reading 4 bits + 4");
             read_bits(4, contexts, &mut prev, decoder)? + 4
         }
     } else {
-        eprintln!("DEBUG INT: Decision 1: == 0, reading 2 bits");
         read_bits(2, contexts, &mut prev, decoder)?
     };
     
@@ -78,8 +62,6 @@ pub fn decode_integer(
     } else {
         return Ok(None); // invalid case
     };
-    
-    eprintln!("DEBUG INT: Final value = {}", signed_value);
     Ok(Some(signed_value))
 }
 // A.3 The IAID decoding procedure

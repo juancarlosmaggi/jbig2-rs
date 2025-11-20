@@ -40,18 +40,14 @@ impl CCITTFaxDecoder {
         let mut current_color = 0; // Start with White run
 
         loop {
-            // CRITICAL FIX: Check line completion BEFORE reading mode code
-            // This prevents reading extra bits after line is complete
+            // Check line completion BEFORE reading mode code
             if a0 != -1 && (a0 as usize) >= self.width {
-                eprintln!("DEBUG: MMR line complete, a0={} >= width={}", a0, self.width);
                 break;
             }
             
             let b1 = self.find_changing_element_of_color(&self.ref_line, (a0 + 1) as usize, self.width, 1 - current_color);
             let b2 = self.find_changing_element(&self.ref_line, b1, self.width);
-            // Read mode code
             let mode = self.read_mode_code()?;
-            eprintln!("DEBUG: MMR x={} a0={} mode={} color={} b1={} b2={}", x, a0, mode, current_color, b1, b2);
             match mode {
                 0 => {
                     // Pass mode
@@ -87,7 +83,6 @@ impl CCITTFaxDecoder {
                         // White, then Black
                         let run1 = self.decode_run_length(true)? as usize;
                         let run2 = self.decode_run_length(false)? as usize;
-                        eprintln!("DEBUG: MMR Horizontal White={} Black={}", run1, run2);
                         
                         // Write White Run
                         for i in 0..run1 {
@@ -108,7 +103,6 @@ impl CCITTFaxDecoder {
                         // Black, then White
                         let run1 = self.decode_run_length(false)? as usize;
                         let run2 = self.decode_run_length(true)? as usize;
-                        eprintln!("DEBUG: MMR Horizontal Black={} White={}", run1, run2);
                         
                         // Write Black Run
                         for i in 0..run1 {
@@ -154,10 +148,9 @@ impl CCITTFaxDecoder {
                     current_color = 1 - current_color;
                 }
                 9 => {
-                    // EOFB - End of Fax Block
-                    eprintln!("DEBUG: MMR EOFB encountered, setting eofb flag");
+                    // EOFB
                     *eofb = true;
-                    break;  // Exit line decode immediately
+                    break;
                 }
                 _ => return Err(Jbig2Error::new("invalid MMR mode")),
             }
@@ -165,37 +158,40 @@ impl CCITTFaxDecoder {
         Ok(())
     }
     fn read_mode_code(&mut self) -> Result<u8, Jbig2Error> {
-        // Read up to 7 bits for mode codes
         let mut code = 0u32;
+        
         for length in 1..=7 {
             let bit = self.read_bit()? as u32;
             code = (code << 1) | bit;
-            // CRITICAL: Return IMMEDIATELY after matching, don't continue reading
             match (code, length) {
-                (0b1, 1) => return Ok(2),       // V(0) - 1 bit
-                (0b001, 3) => return Ok(4),     // Horizontal - 3 bits
-                (0b010, 3) => return Ok(1),     // VL(1) - 3 bits
-                (0b011, 3) => return Ok(3),     // VR(1) - 3 bits
-                (0b0001, 4) => return Ok(0),    // Pass - 4 bits
-                (0b000010, 6) => return Ok(5),  // VL(2) - 6 bits
-                (0b000011, 6) => return Ok(7),  // VR(2) - 6 bits
-                (0b0000010, 7) => return Ok(6), // VL(3) - 7 bits
-                (0b0000011, 7) => return Ok(8), // VR(3) - 7 bits
-                _ => {} // Continue reading
+                (0b1, 1) => return Ok(2),       // V(0)
+                (0b001, 3) => return Ok(4),     // Horizontal
+                (0b010, 3) => return Ok(1),     // VL(1)
+                (0b011, 3) => return Ok(3),     // VR(1)
+                (0b0001, 4) => return Ok(0),    // Pass
+                (0b000010, 6) => return Ok(5),  // VL(2)
+                (0b000011, 6) => return Ok(7),  // VR(2)
+                (0b0000010, 7) => return Ok(6), // VL(3)
+                (0b0000011, 7) => return Ok(8), // VR(3)
+                _ => {}
             }
         }
-        // Only check for EOFB if we didn't match a mode code
-        // CRITICAL FIX: EOFB is 24 bits (0x001001), not 12 bits!
+        
+        // Only check for EOFB if end_of_block is true
+        if !self.end_of_block {
+            return Err(Jbig2Error::new("invalid MMR mode code"));
+        }
+        
+        // Only check for EOFB if end_of_block is true
+        // EOFB is 24 bits (0x001001)
         // From jbig2_mmr.c:1191: EOFB = 0x001001 (24 bits)
         for length in 8..=24 {
             let bit = self.read_bit()? as u32;
             code = (code << 1) | bit;
             if length == 24 && code == 0x001001 {
-                eprintln!("DEBUG: MMR EOFB detected (24 bits: 0x{:06X})", code);
                 return Ok(9); // EOFB
             }
         }
-        eprintln!("DEBUG: Invalid MMR mode code: {:b} (len=24)", code);
         Err(Jbig2Error::new("invalid MMR mode code"))
     }
     fn find_changing_element(&self, line: &[u8], start: usize, end: usize) -> usize {
@@ -542,14 +538,8 @@ impl CCITTFaxDecoder {
         let mut eofb = false;
         let mut y = 0;
         
-        eprintln!("DEBUG MMR: Starting decode, width={}, height={}", self.width, self.height);
-        
-        // CRITICAL: Check !eofb in loop condition to stop when EOFB encountered
         while y < self.height && !eofb {
-            eprintln!("DEBUG MMR: === Decoding line {} of {} ===", y, self.height);
-            // Decode 2D line
             self.decode_2d_line(&mut eofb)?;
-            eprintln!("DEBUG MMR: Line {} decoded successfully, eofb={}", y, eofb);
             
             // Copy current line to bitmap
             for x in 0..self.width {
@@ -563,18 +553,7 @@ impl CCITTFaxDecoder {
         }
         
         // If EOFB was encountered before reaching height, pad remaining lines with zeros
-        if eofb && y < self.height {
-            eprintln!("DEBUG MMR: EOFB at line {}, padding {} remaining lines with zeros", y, self.height - y);
-            while y < self.height {
-                // Lines are already initialized to 0 in Bitmap::new, so just increment
-                y += 1;
-            }
-        }
-        
-        eprintln!("DEBUG MMR: All {} lines decoded ({} actual, {} padded), exiting", 
-                  self.height, 
-                  if eofb { y.saturating_sub(1) } else { y },
-                  if eofb { self.height - y.saturating_sub(1) } else { 0 });
+        // (Lines are already initialized to 0 in Bitmap::new)
         
         Ok(bitmap)
     }
