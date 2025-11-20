@@ -54,7 +54,7 @@ pub fn decode_symbol_dictionary(
                 return Ok(new_symbols);
             }
 
-            let height = current_height + hcdh as i32;
+            let height = current_height + hcdh;
             current_height = height;
             let mut current_width = 0;
             let mut total_width = 0;
@@ -70,7 +70,7 @@ pub fn decode_symbol_dictionary(
                     break;
                 }
 
-                current_width += dw as i32;
+                current_width += dw;
                 total_width += current_width;
 
                 if params.refinement {
@@ -148,11 +148,11 @@ pub fn decode_symbol_dictionary(
                     // Split collective bitmap into individual symbol bitmaps
                     let mut current_x = 0;
                     for width in symbol_widths.iter() {
-                        let mut symbol_bitmap = Bitmap::new(*width as usize, current_height as usize);
-                        for y in 0..current_height {
+                        let mut symbol_bitmap = Bitmap::new(*width, current_height as usize);
+                        for y in 0..(current_height as usize) {
                             for x in 0..*width {
-                                let pixel = collective_bitmap.get_pixel((current_x + x) as usize, y as usize);
-                                symbol_bitmap.set_pixel(x as usize, y as usize, pixel);
+                                let pixel = collective_bitmap.get_pixel(current_x + x, y as usize);
+                                symbol_bitmap.set_pixel(x, y as usize, pixel);
                             }
                         }
                         new_symbols.push(symbol_bitmap);
@@ -186,11 +186,11 @@ pub fn decode_symbol_dictionary(
                     // Split collective bitmap into individual symbol bitmaps
                     let mut current_x = 0;
                     for width in symbol_widths.iter() {
-                        let mut symbol_bitmap = Bitmap::new(*width as usize, current_height as usize);
-                        for y in 0..current_height {
+                        let mut symbol_bitmap = Bitmap::new(*width, current_height as usize);
+                        for y in 0..(current_height as usize) {
                             for x in 0..*width {
-                                let pixel = collective_bitmap.get_pixel((current_x + x) as usize, y as usize);
-                                symbol_bitmap.set_pixel(x as usize, y as usize, pixel);
+                                let pixel = collective_bitmap.get_pixel(current_x + x, y as usize);
+                                symbol_bitmap.set_pixel(x, y as usize, pixel);
                             }
                         }
                         new_symbols.push(symbol_bitmap);
@@ -372,7 +372,7 @@ pub fn decode_symbol_dictionary(
                         for y in 0..current_height as usize {
                             for x in 0..bitmap_width {
                                 let pixel = collective_bitmap.get_pixel(x_min + x, y);
-                                symbol_bitmap.set_pixel(x, y, pixel);
+                                symbol_bitmap.set_pixel(x, y as usize, pixel);
                             }
                         }
                         new_symbols.push(symbol_bitmap);

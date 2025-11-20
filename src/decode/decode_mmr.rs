@@ -239,11 +239,7 @@ impl CCITTFaxDecoder {
         // while (x < w) { if (line[x] == color && (x==0 || line[x-1] != color)) return x; x++; }
         
         while i < end {
-            if line[i] == color {
-                if i == 0 || line[i-1] != color {
-                    return i;
-                }
-            }
+if line[i] == color && (i == 0 || line[i-1] != color) {\n                    return i;\n                }
             i += 1;
         }
         end

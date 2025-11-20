@@ -344,23 +344,23 @@ impl ArithmeticDecoder {
         // 2. Initialize C: C = (~(next_word >> 8)) & 0xFF0000
         let c = (!(decoder.next_word >> 8)) & 0xFF0000;
         eprintln!("After step 2: C = 0x{:08X}", c);
-        decoder.chigh = ((c >> 16) & 0xFFFF) as u32;
-        decoder.clow = (c & 0xFFFF) as u32;
+        decoder.chigh = (c >> 16) & 0xFFFF;
+        decoder.clow = c & 0xFFFF;
 
         // 3. Call byte_in (operates on buffer!)
         decoder.byte_in();
-        let c_after = ((decoder.chigh as u32) << 16) | decoder.clow;
+        let c_after = (decoder.chigh << 16) | decoder.clow;
         eprintln!("After step 3 (bytein): C = 0x{:08X}, CT = {}", c_after, decoder.ct);
 
         // 4. Finalize: C <<= 7, CT -= 7, A = 0x8000
-        let c = ((decoder.chigh as u32) << 16) | decoder.clow;
+        let c = (decoder.chigh << 16) | decoder.clow;
         let c = c << 7;
-        decoder.chigh = ((c >> 16) & 0xFFFF) as u32;
-        decoder.clow = (c & 0xFFFF) as u32;
+        decoder.chigh = (c >> 16) & 0xFFFF;
+        decoder.clow = c & 0xFFFF;
         decoder.ct -= 7;
         decoder.a = 0x8000;
         
-        let c_final = ((decoder.chigh as u32) << 16) | decoder.clow;
+        let c_final = (decoder.chigh << 16) | decoder.clow;
         eprintln!("After step 4 (finalize): A=0x{:04X}, C=0x{:08X}, CT={}",
                   decoder.a, c_final, decoder.ct);
         eprintln!("============================");
@@ -414,10 +414,10 @@ impl ArithmeticDecoder {
             let b = ((self.next_word >> 24) & 0xFF) as u8;
             
             // Line 178: Update C
-            let full_c = ((self.chigh as u32) << 16) | (self.clow as u32);
+            let full_c = (self.chigh << 16) | self.clow;
             let full_c = full_c.wrapping_add(0xFF00 - ((b as u32) << 8));
-            self.chigh = ((full_c >> 16) & 0xFFFF) as u32;
-            self.clow = (full_c & 0xFFFF) as u32;
+            self.chigh = full_c >> 16 & 0xFFFF;
+            self.clow = full_c & 0xFFFF;
             self.ct = 8;
         }
         
@@ -493,10 +493,10 @@ impl ArithmeticDecoder {
         } else {
             // LPS path (C >= A)
             // Subtract A from C FIRST
-            let c_full = ((self.chigh as u32) << 16) | (self.clow as u32);
+            let c_full = (self.chigh << 16) | self.clow;
             let c_full = c_full.wrapping_sub(self.a << 16);
-            self.chigh = ((c_full >> 16) & 0xFFFF) as u32;
-            self.clow = (c_full & 0xFFFF) as u32;
+            self.chigh = ((c_full >> 16) & 0xFFFF);
+            self.clow = (c_full & 0xFFFF);
             
             // LPS_EXCHANGE (Figure E.17)
             if self.a < qe_icx as u32 {
