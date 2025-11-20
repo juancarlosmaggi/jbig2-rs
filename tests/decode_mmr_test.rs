@@ -1,4 +1,3 @@
-use jbig2_rs::bitmap::Bitmap;
 use jbig2_rs::decode::decode_mmr::decode_mmr_bitmap;
 use jbig2_rs::reader::Reader;
 
