@@ -1,7 +1,4 @@
-use crate::error::{
-    ERR_DIMENSIONS_TOO_LARGE, ERR_INVALID_COMBINATION_OPERATOR, ERR_INVALID_REFERENCE_CORNER,
-    ERR_INVALID_TEMPLATE_INDEX, ERR_TOO_MANY_SYMBOLS, Jbig2Error,
-};
+use crate::error::{Jbig2Error};
 
 pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbig2Error> {
     // Zero dimensions are allowed (empty bitmaps)
@@ -16,7 +13,7 @@ pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbi
     let stride = if width_u32 == 0 { 1 } else { ((width_u32 - 1) / 8) + 1 };
     
     if height_u32 > (i32::MAX as u32) / stride {
-        return Err(Jbig2Error::new(ERR_DIMENSIONS_TOO_LARGE));
+        return Err(Jbig2Error::dimensions_too_large(width, height, i32::MAX as usize));
     }
     
     Ok(())
@@ -24,29 +21,29 @@ pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbi
 
 pub fn validate_template_index(index: usize) -> Result<(), Jbig2Error> {
     if index > 3 {
-        return Err(Jbig2Error::new(ERR_INVALID_TEMPLATE_INDEX));
+        return Err(Jbig2Error::invalid_template_index(index, 3));
     }
     Ok(())
 }
 
 pub fn validate_symbol_count(count: usize) -> Result<(), Jbig2Error> {
-    if count > 16777215 {
-        // 2^24 - 1, maximum for 3-byte field
-        return Err(Jbig2Error::new(ERR_TOO_MANY_SYMBOLS));
+    const MAX_SYMBOLS: usize = 16777215; // 2^24 - 1, maximum for 3-byte field
+    if count > MAX_SYMBOLS {
+        return Err(Jbig2Error::too_many_symbols(count, MAX_SYMBOLS));
     }
     Ok(())
 }
 
 pub fn validate_reference_corner(corner: usize) -> Result<(), Jbig2Error> {
     if corner > 3 {
-        return Err(Jbig2Error::new(ERR_INVALID_REFERENCE_CORNER));
+        return Err(Jbig2Error::invalid_reference_corner(corner as u8));
     }
     Ok(())
 }
 
 pub fn validate_combination_operator(operator: usize) -> Result<(), Jbig2Error> {
     if operator > 7 {
-        return Err(Jbig2Error::new(ERR_INVALID_COMBINATION_OPERATOR));
+        return Err(Jbig2Error::invalid_combination_operator(operator as u8));
     }
     Ok(())
 }

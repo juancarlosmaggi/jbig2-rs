@@ -49,36 +49,52 @@ This document outlines potential improvements and future work for the jbig2-rs p
 
 **Impact:** Improved production performance by eliminating logging overhead
 
-### 2. Improve Error Handling
+### 2. Improve Error Handling 🔄
+
+**Status:** IN PROGRESS - Phase 1 & 2 Complete (November 21, 2025)
 
 **Current State:**
-- Many generic error messages (e.g., "invalid segment")
-- Limited context for debugging failures
-- String-based errors only
+String-based errors migrated to structured error types with context fields.
 
-**Improvements:**
-- Add error context with positions and segment numbers
-- Create structured error types for different failure modes
-- Include diagnostic information in errors
+**Completed:**
+- ✅ Phase 1 (Foundation)
+  - Created `Jbig2ErrorKind` enum with 16 error variants
+  - Added `ErrorContext` struct with position/segment tracking
+  - Implemented builder pattern for easy error construction
+  - Enhanced `Display` impl to show context information
 
-**Example:**
+- ✅ Phase 2 (High-Value Migration)
+  - Migrated all validation errors (`validation.rs`)
+  - Started segment parser migration (`segment/parser.rs`)
+
+**Remaining Work:**
+- Phase 3: Migrate decoder error sites (~40 remaining)
+  - MMR decoder
+  - Symbol decoder  
+  - Text/Halftone/Pattern decoders
+- Phase 4: Remove legacy string constants
+- Add examples of error handling to docs
+
+**Benefits Achieved:**
+- Better debugging with positions and segment numbers in errors
+- Specific error types (e.g., `InvalidTemplateIndex { index: 5, max: 3 }`)
+- Programmatic error handling (can match on specific error kinds)
+- Type-safe error construction
+
+**Example Before/After:**
 ```rust
-// Current
-Err(Jbig2Error::new("invalid segment"))
+// Before
+Err(Jbig2Error::new("invalid template index"))
 
-// Improved  
-Err(Jbig2Error::InvalidSegment {
-    segment_number: header.number,
-    segment_type: header.segment_type,
-    position: start,
-    reason: "insufficient data"
-})
+// After
+Err(Jbig2Error::invalid_template_index(5, 3))
+// Displays: "Jbig2Error: Invalid template index: 5 (max: 3)"
 ```
 
-**Benefits:**
-- Better debugging experience
-- More helpful error messages for users
-- Easier to handle specific error cases
+**Verification:**
+- ✅ All 64 tests passing
+- ✅ Zero clippy warnings
+- ✅ Backward compatible (kept `new()` method)
 
 ## Medium-Priority Improvements
 

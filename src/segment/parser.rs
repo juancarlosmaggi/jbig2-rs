@@ -10,7 +10,8 @@ pub fn read_segment_header(
     has_file_header: bool,
 ) -> Result<SegmentHeader, Jbig2Error> {
     if data.len().saturating_sub(start) < 11 {
-        return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
+        return Err(Jbig2Error::insufficient_data(11, data.len().saturating_sub(start))
+            .with_position(start));
     }
     let mut pos = start;
     let number = read_u32(data, pos);
@@ -19,7 +20,8 @@ pub fn read_segment_header(
     pos += 1;
     let segment_type = (flags & 0x3f) as usize;
     if segment_type >= SEGMENT_TYPES.len() {
-        return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
+        return Err(Jbig2Error::invalid_segment("segment type out of range")
+            .with_position(start));
     }
     let type_name = SEGMENT_TYPES[segment_type].to_string();
     let deferred_non_retain = (flags & 0x80) != 0;
