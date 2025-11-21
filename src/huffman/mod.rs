@@ -1,5 +1,48 @@
-// Huffman module - organized into focused submodules
+//! Huffman Decoding for JBIG2
+//!
+//! This module implements Huffman decoding used in JBIG2 for various encoding tasks,
+//! including symbol widths, height deltas, and text region symbol IDs.
+//!
+//! ## Overview
+//!
+//! JBIG2 uses Huffman coding as one of its entropy coding methods (alongside arithmetic coding).
+//! Huffman tables can be either predefined standard tables or custom tables defined within
+//! the data stream.
+//!
+//! ## Standard Tables
+//!
+//! The JBIG2 specification defines 16 standard Huffman tables (ITU T.88 Annex B):
+//! - Tables A-D: Out-of-band (OOB) values supported
+//! - Table E: Special table for HCHEIGHT
+//! - Tables 1-16: Various standard encodings
+//!
+//! Standard tables are accessed via [`get_standard_table`].
+//!
+//! ## Custom Tables
+//!
+//! Custom Huffman tables can be defined in Table segments (type 53) and referenced
+//! by other segments. Custom tables are parsed via [`decode_tables_segment`].
+//!
+//! ## Module Structure
+//!
+//! - **`standard_tables`** - Predefined standard Huffman tables
+//! - **`table_selectors`** - Table selection logic for symbol dictionaries and text regions
+//!
+//! ## Usage
+//!
+//! ```no_run
+//! use jbig2_rs::huffman::get_standard_table;
+//! use jbig2_rs::reader::Reader;
+//!
+//! # fn example() -> Result<(), jbig2_rs::Jbig2Error> {
+//! let table = get_standard_table(1)?;
+//! let mut reader = Reader::new(vec![0x12, 0x34], 0, 2);
+//! let value = table.decode(&mut reader)?;
+//! # Ok(())
+//! # }
+//! ```
 
+// Huffman module - organized into focused submodules
 mod standard_tables;
 mod table_selectors;
 

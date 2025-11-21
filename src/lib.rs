@@ -1,3 +1,112 @@
+//! # jbig2-rs
+//!
+//! A pure Rust implementation of the JBIG2 image compression standard (ITU-T T.88).
+//!
+//! JBIG2 is a lossy or lossless compression standard for bi-level (1-bit monochrome) images,
+//! commonly used in PDF files and document scanning applications. This library provides
+//! complete decoding capabilities for JBIG2 data streams.
+//!
+//! ## Features
+//!
+//! - **Complete JBIG2 decoding** - Supports all major segment types and encoding modes
+//! - **Multiple encoding modes** - MMR, arithmetic coding, Huffman encoding
+//! - **Standards compliant** - Follows ITU-T T.88 specification
+//! - **Pure Rust** - No external C dependencies
+//! - **Multi-page support** - Handle documents with multiple pages
+//!
+//! ## Quick Start
+//!
+//! Decode a JBIG2 file and convert to raw bitmap data:
+//!
+//! ```no_run
+//! use jbig2_rs::{Jbig2Document, Jbig2Error};
+//!
+//! fn decode_jbig2(data: &[u8]) -> Result<Vec<u8>, Jbig2Error> {
+//!     // Parse the JBIG2 document
+//!     let document = Jbig2Document::parse(data)?;
+//!     
+//!     // Get the first page
+//!     if let Some(page) = document.get_page(0) {
+//!         Ok(page.to_image_data())
+//!     } else {
+//!         Err(Jbig2Error::new("no pages in document"))
+//!     }
+//! }
+//! ```
+//!
+//! ## Architecture
+//!
+//! The library is organized into focused modules:
+//!
+//! ```mermaid
+//! graph TD
+//!     A[jbig2-rs] --> B[segment]
+//!     A --> C[huffman]
+//!     A --> D[visitor]
+//!     A --> E[decode]
+//!     A --> F[image]
+//!     
+//!     B --> B1[types]
+//!     B --> B2[parser]
+//!     B --> B3[processor]
+//!     B --> B4[utils]
+//!     
+//!     C --> C1[standard_tables]
+//!     C --> C2[table_selectors]
+//!     
+//!     D --> D1[page_handler]
+//!     D --> D2[symbol_handler]
+//!     D --> D3[text_handler]
+//!     D --> D4[region_handlers]
+//!     
+//!     E --> E1[decode_mmr]
+//!     E --> E2[decode_symbol]
+//!     E --> E3[decode_text]
+//!     E --> E4[arithmetic]
+//! ```
+//!
+//! ## Module Organization
+//!
+//! - **[`segment`]** - Segment parsing and processing (ITU T.88 section 7)
+//! - **[`huffman`]** - Huffman decoding with standard and custom tables
+//! - **[`visitor`]** - Segment handler pattern for processing decoded segments
+//! - **[`decode`]** - Format-specific decoders (MMR, symbol dictionary, text region, etc.)
+//! - **[`image`]** - High-level API for document and page management
+//! - **[`error`]** - Structured error types with context
+//! - **[`bitmap`]** - Bitmap data structures and operations
+//! - **[`arithmetic`]** - Arithmetic decoder implementation
+//!
+//! ## Main Types
+//!
+//! - [`Jbig2Document`] - Represents a complete JBIG2 document with one or more pages
+//! - [`Jbig2Image`] - Type alias for a single page (backward compatibility)
+//! - [`Jbig2Error`] - Structured error type with context information
+//!
+//! ## Decoding Process
+//!
+//! 1. **Parse file header** - Detect file format and extract metadata
+//! 2. **Read segments** - Parse segment headers and data
+//! 3. **Process segments** - Dispatch to appropriate decoders
+//! 4. **Build pages** - Assemble decoded regions into complete pages
+//!
+//! ## Standards Compliance
+//!
+//! This implementation follows:
+//! - **ITU-T T.88** - JBIG2 specification
+//! - **ITU-T T.6** - CCITT Group 4 (MMR) specification
+//! - **ITU-T T.82** - Arithmetic coding specification references
+//!
+//! ## Error Handling
+//!
+//! The library uses structured error types that include position and segment context:
+//!
+//! ```no_run
+//! # use jbig2_rs::Jbig2Error;
+//! // Errors include helpful context
+//! let err = Jbig2Error::invalid_template_index(5, 3);
+//! // Displays: "Jbig2Error: Invalid template index: 5 (max: 3)"
+//! ```
+
 pub mod arithmetic;
 pub mod arithmetic_tables;
 pub mod bitmap;
@@ -14,7 +123,7 @@ pub mod segment;
 pub mod validation;
 pub mod visitor;
 pub use error::Jbig2Error;
-pub use image::{Jbig2Document, Jbig2Image};
+pub use image::{Jbig2Chunk, Jbig2Document, Jbig2Image};
 
 #[cfg(test)]
 mod tests {

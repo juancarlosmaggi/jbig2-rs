@@ -325,9 +325,9 @@ pub fn process_segment<'a>(
             visitor.on_tables(header.number, data, start, end)?;
         }
         62 => {
-            // Extension segment - ignore completely (as jbig2dec does)
-
-            // Don't process anything from extension segments
+            // Extension segment (ITU T.88 section 7.4.14)
+            // Extension segments are used for vendor-specific features
+            // and can be safely ignored for standard decoding
         }
         _ => {} // Unknown segment types
     }

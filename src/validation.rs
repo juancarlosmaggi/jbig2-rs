@@ -6,8 +6,9 @@ pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbi
         return Ok(());
     }
     
-    // Check for overflow matching jbig2dec: height > INT32_MAX / stride
-    // stride calculation: ((width - 1) / 8) + 1
+    // Prevent integer overflow when calculating bitmap buffer size
+    // stride = ((width - 1) / 8) + 1 bytes per row
+    // total_size = stride * height must not exceed INT32_MAX
     let width_u32 = width as u32;
     let height_u32 = height as u32;
     let stride = if width_u32 == 0 { 1 } else { ((width_u32 - 1) / 8) + 1 };

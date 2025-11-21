@@ -1,6 +1,25 @@
+//! Arithmetic Decoder Module
+//!
+//! This module implements the MQ arithmetic decoder used in JBIG2, as specified in
+//! ITU-T T.88 and T.82. It provides context-based adaptive binary arithmetic decoding.
+//!
+//! # Overview
+//!
+//! The arithmetic decoder maintains an internal state (A, C, CT) and updates probability
+//! estimates (contexts) based on decoded bits. It handles:
+//!
+//! - Byte stream consumption (with 0xFF stuffing handling)
+//! - Probability estimation using the QE table
+//! - Renormalization of the A and C registers
+//! - Conditional exchange of MPS (More Probable Symbol) and LPS (Less Probable Symbol)
+
 // Import QE table from separate module
 use crate::arithmetic_tables::QE_TABLE;
 
+/// MQ Arithmetic Decoder implementation.
+///
+/// Maintains the state of the arithmetic decoding process, including the current
+/// interval (A), code register (C), and bit counter (CT).
 pub struct ArithmeticDecoder {
     data: Vec<u8>,
     offset: usize, // Position in data array
@@ -14,6 +33,13 @@ pub struct ArithmeticDecoder {
 }
 
 impl ArithmeticDecoder {
+    /// Creates a new arithmetic decoder instance.
+    ///
+    /// Initializes the decoder state (A, C, CT) and pre-fills the buffer from the input data.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The byte slice containing the arithmetic coded data stream
     pub fn new(data: &[u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data: data.to_vec(),
@@ -138,6 +164,21 @@ impl ArithmeticDecoder {
         self.next_word = new_word;
         self.next_word_bytes = bytes_read;
     }
+
+    /// Decodes a single bit using the specified context.
+    ///
+    /// This is the core decoding function. It uses the probability estimate associated
+    /// with the given context to decode the next bit and updates the context state.
+    ///
+    /// # Arguments
+    ///
+    /// * `contexts` - Mutable slice of context states (indices into QE table)
+    /// * `pos` - Index of the context to use for this bit
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(u8)` - The decoded bit (0 or 1)
+    /// - `Err(Jbig2Error)` - If context index is invalid
     pub fn read_bit(
         &mut self,
         contexts: &mut [i8],

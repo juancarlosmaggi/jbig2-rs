@@ -235,26 +235,21 @@ impl CCITTFaxDecoder {
         color: u8,
     ) -> usize {
         let mut i = start;
-        // First, skip pixels that are NOT the target color (if we are currently on !color)
-        // But wait, the definition is "first pixel of color !c".
-        // If we are at `start`, and line[start] == color, we are good?
-        // No, changing element means the *transition* to that color.
-        // But jbig2dec says: "It searches the reference line starting from a0 for the first pixel of color !c".
-        // This implies it's looking for the *start* of a run of color !c.
+        // ITU-T T.6 defines a "changing element" as a pixel whose color differs from
+        // the preceding pixel. This function finds the first changing element of the
+        // specified color, starting from the given position.
+        // For the first pixel (i==0), it's considered a changing element if it matches
+        // the target color, regardless of any previous pixel.
 
         // If line[i] is already color, then i is the start?
         // No, a changing element is defined as an element whose color is different from the previous element.
         // "b1 is the first changing element on the reference line to the right of a0 and of color opposite to a0"
         // Actually, "opposite to current color".
 
-        // Let's implement a simple search:
-        // Find the first `i >= start` such that `line[i] == color` AND (`i==0` OR `line[i-1] != color`).
-        // But since we are scanning from left to right, we just need to find the first `i` where `line[i] == color`?
-        // Wait, if we are inside a run of `color`, the first changing element is the *end* of this run (start of next).
-        // If we are inside a run of `!color`, the first changing element is the *start* of the next run (which is `color`).
-
-        // jbig2dec implementation:
-        // while (x < w) { if (line[x] == color && (x==0 || line[x-1] != color)) return x; x++; }
+        // ITU-T T.6 section 4.2: Search for the first pixel position i where:
+        // 1. line[i] == color (matches target color)
+        // 2. i == 0 OR line[i-1] != color (represents a color transition)
+        // This identifies the start of a run of the target color.
 
         while i < end {
             if line[i] == color && (i == 0 || line[i - 1] != color) {

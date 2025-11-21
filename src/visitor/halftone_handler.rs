@@ -34,7 +34,9 @@ pub(super) fn on_immediate_halftone_region(
     if region_info.width == 0 || region_info.height == 0 {
         return Ok(());
     }
-    // Check for overflow matching jbig2dec: height > INT32_MAX / stride
+    // Prevent integer overflow when calculating bitmap buffer size
+    // stride = ((width - 1) / 8) + 1 bytes per row
+    // total_size = stride * height must not exceed INT32_MAX
     let stride = ((region_info.width - 1) / 8) + 1;
     if region_info.height > (i32::MAX as u32) / stride {
         return Err(Jbig2Error::new("bitmap size causes integer overflow"));
