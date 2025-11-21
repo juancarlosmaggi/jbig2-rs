@@ -52,7 +52,7 @@ fn process_page_segments<'a>(
     segments: &[&Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
 ) -> Result<(), Jbig2Error> {
-    let mut retain_segments = Vec::new();
+    let mut retain_segments = Vec::with_capacity(segments.len());
     let mut non_retain_segments = Vec::new();
     for &segment in segments {
         if segment.header.deferred_non_retain {

@@ -22,3 +22,7 @@ harness = false
 [[bench]]
 name = "decoder_bench"
 harness = false
+
+[[bench]]
+name = "full_bench"
+harness = false

@@ -32,7 +32,7 @@ pub fn decode_symbol_dictionary(
         return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
     validation::validate_symbol_decode_params(params.template_index, params.number_of_new_symbols)?;
-    let mut new_symbols = Vec::new();
+    let mut new_symbols = Vec::with_capacity(params.number_of_new_symbols as usize);
     let mut current_height = 0i32;
     let symbol_code_length =
         crate::core_utils::log2((params.symbols.len() + params.number_of_new_symbols) as u32);
@@ -64,7 +64,7 @@ pub fn decode_symbol_dictionary(
             let mut current_width = 0;
             let mut total_width = 0;
             let _first_symbol_index = new_symbols.len();
-            let mut symbol_widths = Vec::new();
+            let mut symbol_widths = Vec::with_capacity(params.number_of_new_symbols as usize);
 
             // 2) Decode symbols in this height class
             let mut height_class_loop_count = 0;
@@ -217,7 +217,7 @@ pub fn decode_symbol_dictionary(
             let mut current_width = 0i32;
             let mut total_width = 0i32;
             let first_symbol = if params.huffman { new_symbols.len() } else { 0 };
-            let mut symbol_widths = Vec::new();
+            let mut symbol_widths = Vec::with_capacity(params.number_of_new_symbols as usize);
             let mut height_class_loop_count = 0;
             loop {
                 height_class_loop_count += 1;
@@ -380,7 +380,7 @@ pub fn decode_symbol_dictionary(
     if !params.huffman {
         flags = vec![true; total_symbols_length];
     } else {
-        flags = Vec::new();
+        flags = Vec::with_capacity(total_symbols_length);
         let tables = huffman_tables.unwrap();
         let mut current_flag = false;
         let mut export_loop_count = 0;
@@ -411,7 +411,7 @@ pub fn decode_symbol_dictionary(
     if flags.len() > total_symbols_length {
         flags.truncate(total_symbols_length);
     }
-    let mut exported_symbols = Vec::new();
+    let mut exported_symbols = Vec::with_capacity(params.number_of_exported_symbols as usize);
     for (i, &flag) in flags.iter().enumerate() {
         if flag {
             if i < params.symbols.len() {

@@ -179,6 +179,7 @@ impl ArithmeticDecoder {
     ///
     /// - `Ok(u8)` - The decoded bit (0 or 1)
     /// - `Err(Jbig2Error)` - If context index is invalid
+    #[inline(always)]
     pub fn read_bit(
         &mut self,
         contexts: &mut [i8],
@@ -187,12 +188,25 @@ impl ArithmeticDecoder {
         if pos >= contexts.len() {
             return Err(crate::error::Jbig2Error::new("invalid context position"));
         }
-        let cx_index = (contexts[pos] >> 1) as usize;
+        
+        // SAFETY: We checked pos < contexts.len() above.
+        // cx_index is derived from the context value which is an i8.
+        // The context value is updated only within this function using values from QE_TABLE.
+        // QE_TABLE indices are within bounds by design of the table.
+        // However, initial context values come from outside.
+        // We should check cx_index bounds once, but we can use get_unchecked for the table lookup
+        // if we verify it's within bounds.
+        
+        let ctx_val = unsafe { *contexts.get_unchecked(pos) };
+        let cx_index = (ctx_val >> 1) as usize;
+        
         if cx_index >= QE_TABLE.len() {
-            return Err(crate::error::Jbig2Error::new("invalid context index"));
+             return Err(crate::error::Jbig2Error::new("invalid context index"));
         }
-        let mut cx_mps = (contexts[pos] & 1) as u8;
-        let qe_entry = &QE_TABLE[cx_index];
+
+        let mut cx_mps = (ctx_val & 1) as u8;
+        // SAFETY: We checked cx_index < QE_TABLE.len() above.
+        let qe_entry = unsafe { QE_TABLE.get_unchecked(cx_index) };
         let qe_icx = qe_entry.qe;
         let d: u8;
         let new_cx_index: usize;
@@ -220,7 +234,8 @@ impl ArithmeticDecoder {
             } else {
                 // Don't need renormalization - fast path
                 // Update context and return MPS immediately
-                contexts[pos] = ((qe_entry.nmps as i8) << 1) | (cx_mps as i8);
+                // SAFETY: pos is within bounds as checked at start
+                unsafe { *contexts.get_unchecked_mut(pos) = ((qe_entry.nmps as i8) << 1) | (cx_mps as i8) };
                 return Ok(cx_mps);
             }
         } else {
@@ -280,7 +295,8 @@ impl ArithmeticDecoder {
         }
 
         // Update context
-        contexts[pos] = ((new_cx_index as i8) << 1) | (cx_mps as i8);
+        // SAFETY: pos is within bounds as checked at start
+        unsafe { *contexts.get_unchecked_mut(pos) = ((new_cx_index as i8) << 1) | (cx_mps as i8) };
         Ok(d)
     }
 }
