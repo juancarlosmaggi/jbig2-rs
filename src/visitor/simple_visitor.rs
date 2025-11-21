@@ -1,65 +1,11 @@
 use crate::bitmap::Bitmap;
-use crate::bitmap_utils;
-use crate::contexts::DecodingContext;
-use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
-use crate::decode::decode_halftone::decode_halftone_region;
-use crate::decode::decode_pattern::decode_pattern_dictionary;
-use crate::decode::decode_symbol::decode_symbol_dictionary;
-use crate::decode::decode_text::decode_text_region;
 use crate::error::Jbig2Error;
-use crate::huffman::{HuffmanTable, TextRegionHuffmanParams, decode_tables_segment};
-use crate::reader::Reader;
-use crate::segment::{
-    GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams, parse_at_parameters, read_u16,
-};
+use crate::huffman::HuffmanTable;
+use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams};
 use std::collections::HashMap;
 
-fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
-    let width = bitmap.width;
-    let height = bitmap.height;
-    let row_size = width.div_ceil(8); // bytes per row
-    let mut packed = vec![0u8; row_size * height];
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = bitmap.get_pixel(x, y);
-            if pixel != 0 {
-                let byte_index = y * row_size + (x / 8);
-                let bit_index = 7 - (x % 8); // MSB first
-                packed[byte_index] |= 1 << bit_index;
-            }
-        }
-    }
-    packed
-}
-
-#[derive(Clone)]
-pub struct Jbig2Page {
-    pub page_info: PageInfo,
-    pub bitmap: Bitmap,
-    pub bit_packed_data: Vec<u8>,
-}
-
-impl Jbig2Page {
-    pub fn to_image_data(&self) -> Vec<u8> {
-        let width = self.page_info.width as usize;
-        let height = self.page_info.height as usize;
-        let mut img_data = vec![0u8; width * height];
-        let row_size = width.div_ceil(8);
-        for y in 0..height {
-            for x in 0..width {
-                let byte_index = y * row_size + (x / 8);
-                let bit_index = 7 - (x % 8);
-                let pixel = if (self.bit_packed_data[byte_index] & (1 << bit_index)) != 0 {
-                    255
-                } else {
-                    0
-                };
-                img_data[y * width + x] = pixel;
-            }
-        }
-        img_data
-    }
-}
+// Re-export Jbig2Page from page_handler
+pub use super::page_handler::Jbig2Page;
 
 #[derive(Default)]
 pub struct SimpleSegmentVisitor {
@@ -78,63 +24,18 @@ impl SimpleSegmentVisitor {
         Self::default()
     }
 
-    fn collect_input_symbols(&self, referred_segments: &[u32]) -> Vec<Bitmap> {
-        let mut input_symbols = Vec::new();
-        eprintln!("collect_input_symbols: Looking for symbols in referred segments: {:?}", referred_segments);
-        eprintln!("  Currently stored symbol dictionaries: {:?}", self.symbols.keys().collect::<Vec<_>>());
-        
-        for &segment_id in referred_segments {
-            eprintln!("  Checking segment {}", segment_id);
-            if let Some(symbols) = self.symbols.get(&segment_id) {
-                eprintln!("    → Found {} symbols in segment {}", symbols.len(), segment_id);
-                input_symbols.extend(symbols.clone());
-            } else {
-                eprintln!("    → Segment {} not found in symbol storage", segment_id);
-            }
-        }
-        eprintln!("  Total symbols collected: {}", input_symbols.len());
-        input_symbols
-    }
-
     pub fn on_page_information(&mut self, info: PageInfo) {
-        // Validate dimensions: only check for zero, not for max size
-        // Large dimensions are allowed - allocation will naturally fail if too large
-        if info.width == 0 || info.height == 0 {
-            println!(
-                "Skipping invalid page dimensions (zero): {}x{}",
-                info.width, info.height
-            );
-            return;
-        }
-
-        println!(
-            "Page info: width={}, height={}, xres={}, yres={}",
-            info.width, info.height, info.resolution_x, info.resolution_y
+        super::page_handler::on_page_information(
+            &mut self.current_page_info,
+            &mut self.current_bitmap,
+            &mut self.current_y,
+            &mut self.pages,
+            info,
         );
-
-        // If we have a previous page, finalize it
-        if let (Some(page_info), Some(bitmap)) =
-            (self.current_page_info.take(), self.current_bitmap.take())
-        {
-            let bit_packed_data = bitmap_to_bit_packed(&bitmap);
-            self.pages.push(Jbig2Page {
-                page_info,
-                bitmap,
-                bit_packed_data,
-            });
-        }
-
-        self.current_page_info = Some(info.clone());
-        self.current_y = 0;
-        let width = info.width as usize;
-        let height = info.height as usize;
-        let bitmap =
-            bitmap_utils::create_initialized_bitmap(width, height, info.default_pixel_value);
-        self.current_bitmap = Some(bitmap);
     }
 
     pub fn on_end_of_stripe(&mut self, height: usize) {
-        self.current_y += height;
+        super::page_handler::on_end_of_stripe(&mut self.current_y, height);
     }
 
     pub fn draw_bitmap(
@@ -142,50 +43,13 @@ impl SimpleSegmentVisitor {
         region_info: &RegionInfo,
         src_bitmap: &Bitmap,
     ) -> Result<(), Jbig2Error> {
-        let page_info = self
-            .current_page_info
-            .as_ref()
-            .ok_or(Jbig2Error::new("no current page info"))?;
-        let page_width = page_info.width as usize;
-        let page_height = page_info.height as usize;
-        let combo_op = if page_info.combination_operator_override {
-            region_info.combination_operator
-        } else {
-            page_info.combination_operator
-        };
-        let dst = self
-            .current_bitmap
-            .as_mut()
-            .ok_or(Jbig2Error::new("no current bitmap"))?;
-
-        // Region coordinates are validated by checking bounds below
-        let reg_x = region_info.x as usize;
-        let reg_y = region_info.y as usize + self.current_y;
-
-        // Check if region is completely outside page bounds
-        if reg_x >= page_width || reg_y >= page_height {
-            return Ok(()); // Nothing to draw
-        }
-
-        let width = (region_info.width as usize).min(page_width - reg_x);
-        let height = (region_info.height as usize).min(page_height - reg_y);
-
-        // Validate source bitmap dimensions
-        if src_bitmap.width < width || src_bitmap.height < height {
-            return Err(Jbig2Error::new("source bitmap too small for region"));
-        }
-
-        for i in 0..height {
-            for j in 0..width {
-                let src = src_bitmap.get_pixel(j, i);
-                let dx = reg_x + j;
-                let dy = reg_y + i;
-                let old_dst = dst.get_pixel(dx, dy);
-                let new_val = bitmap_utils::apply_combination_operator(old_dst, src, combo_op);
-                dst.set_pixel(dx, dy, new_val);
-            }
-        }
-        Ok(())
+        super::region_handlers::draw_bitmap(
+            &self.current_page_info,
+            &mut self.current_bitmap,
+            self.current_y,
+            region_info,
+            src_bitmap,
+        )
     }
 
     pub fn on_immediate_generic_region(
@@ -195,56 +59,15 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        let region_info = &region.info;
-        println!(
-            "Generic region: width={}, height={}",
-            region_info.width, region_info.height
-        );
-        if region_info.width == 0 || region_info.height == 0 {
-            return Ok(());
-        }
-        // Check for overflow matching jbig2dec: height > INT32_MAX / stride
-        let stride = ((region_info.width - 1) / 8) + 1;
-        if region_info.height > (i32::MAX as u32) / stride {
-            return Err(Jbig2Error::new("bitmap size causes integer overflow"));
-        }
-        if self.current_page_info.is_none() {
-            self.on_page_information(PageInfo {
-                width: region_info.width.max(1),
-                height: region_info.height.max(1),
-                resolution_x: 300,
-                resolution_y: 300,
-                lossless: true,
-                refinement: false,
-                default_pixel_value: 0,
-                combination_operator: 0, // OR
-                requires_buffer: false,
-                combination_operator_override: false,
-            });
-        }
-
-        let at_bytes = region.at.len() * 2;
-        let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
-        if decoding_start > end {
-            return Ok(()); // Allow short data for minimal test
-        }
-
-        let slice = &data[decoding_start..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let params = DecodeBitmapParams {
-            mmr: region.mmr,
-            width: region_info.width as usize,
-            height: region_info.height as usize,
-            template_index: region.template,
-            prediction: region.prediction,
-            skip: None,
-            at: region.at.clone(),
-        };
-
-        let bitmap = decode_bitmap(&params, &mut decoding_context)?;
-        self.draw_bitmap(region_info, &bitmap)?;
-        Ok(())
+        super::region_handlers::on_immediate_generic_region(
+            &mut self.current_page_info,
+            &mut self.current_bitmap,
+            self.current_y,
+            region,
+            data,
+            start,
+            end,
+        )
     }
 
     pub fn on_immediate_generic_refinement_region(
@@ -255,228 +78,24 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        if self.current_page_info.is_none() {
-            self.on_page_information(PageInfo {
-                width: region_info.width,
-                height: region_info.height,
-                resolution_x: 0,
-                resolution_y: 0,
-                lossless: true,
-                refinement: false,
-                default_pixel_value: 0,
-                combination_operator: 0, // OR
-                requires_buffer: false,
-                combination_operator_override: false,
-            });
-        }
-
-        // Parse refinement region parameters
-        let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
-        let generic_region_segment_flags = data[pos];
-        pos += 1;
-        let template = ((generic_region_segment_flags >> 1) & 3) as usize;
-        let at_length = if template == 0 { 2 } else { 0 };
-        let at = if at_length > 0 {
-            parse_at_parameters(data, pos, at_length)?
-        } else {
-            Vec::new() // Default to empty if insufficient data
-        };
-        pos += at_length * 2;
-        if pos > end {
-            return Ok(()); // Allow short data
-        }
-
-        // Get reference bitmap from referred segment
-        if referred_to.is_empty() {
-            return Ok(()); // Skip if no referred
-        }
-        let ref_segment = referred_to[0];
-        let reference_bitmap = if let Some(bm) = self.bitmaps.get(&ref_segment) {
-            bm
-        } else {
-            return Ok(()); // Skip if not found
-        };
-
-        let slice = &data[pos..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let bitmap = crate::decode::decode_refinement::decode_refinement(
-            &crate::decode::decode_refinement::RefinementParams {
-                width: region_info.width as usize,
-                height: region_info.height as usize,
-                template_index: template,
-                reference_bitmap,
-                offset_x: 0, // Default offset
-                offset_y: 0,
-                prediction: false,
-                at,
-            },
-            &mut decoding_context,
-        )?;
-
-        self.draw_bitmap(region_info, &bitmap)?;
-        Ok(())
+        super::region_handlers::on_immediate_generic_refinement_region(
+            &mut self.current_page_info,
+            &mut self.current_bitmap,
+            self.current_y,
+            &self.bitmaps,
+            region_info,
+            referred_to,
+            data,
+            start,
+            end,
+        )
     }
 
     pub fn on_symbol_dictionary(
         &mut self,
         params: &SymbolDictionaryParams,
     ) -> Result<(), Jbig2Error> {
-        if params.start >= params.end {
-            println!(
-                "Skipping symbol dictionary due to invalid bounds: start={}, end={}",
-                params.start, params.end
-            );
-            return Ok(());
-        }
-
-        println!(
-            "Entering on_symbol_dictionary, start: {}, end: {}",
-            params.start, params.end
-        );
-        eprintln!("DEBUG: Segment {}, new_symbols={}, exported_symbols={}", 
-                  params.current_segment, params.number_of_new_symbols, params.number_of_exported_symbols);
-
-        if params.start >= params.end {
-            eprintln!("Skipping: Invalid bounds");
-            println!(
-                "Skipping symbol dictionary due to invalid bounds: start={}, end={}",
-                params.start, params.end
-            );
-            return Ok(());
-        }
-
-        // Skip processing if too many symbols to prevent errors
-        if params.number_of_new_symbols > 10000 {
-            eprintln!("Skipping: Too many new symbols: {}", params.number_of_new_symbols);
-            return Ok(());
-        }
-
-        let huffman = (params.dictionary_flags & 1) != 0;
-        let refinement = (params.dictionary_flags & 2) != 0;
-        let template = ((params.dictionary_flags >> 10) & 3) as usize;
-        let refinement_template = ((params.dictionary_flags >> 12) & 1) as usize;
-
-        // Parse AT parameters from the segment data if needed
-        // NOTE: params.start already points AFTER flags, AT pixels, and counts!
-        // So we need to look BACKWARDS in the data to find AT values
-        let mut at = Vec::new();
-        let mut refinement_at = Vec::new();
-        
-        if !huffman {
-            // AT pixels are at fixed offset: 2 bytes after flags
-            let _at_offset = 2;  // Right after 2-byte flags in segment data
-            let at_length = if template == 0 { 4 } else { 1 };
-            
-            // Parse from original segment data (params.data contains full segment)
-            // params.start points to decode data, so we need to calculate backwards
-            let segment_data_start = params.start - 8;  // Back past counts (8 bytes)
-            let at_bytes_count = if template == 0 { 8 } else { 2 };
-            let at_data_start = segment_data_start - at_bytes_count;
-            
-            if at_data_start + at_bytes_count <= params.data.len() {
-                for i in 0..at_length {
-                    let x = params.data[at_data_start + i * 2] as i8;
-                    let y = params.data[at_data_start + i * 2 + 1] as i8;
-                    at.push((x, y));
-                }
-                eprintln!("DEBUG: Parsed AT pixels: {:?}", at);
-            }
-        }
-
-        if refinement && refinement_template == 0 {
-            // Similar backward calculation for refinement AT
-            // These come after direct coding AT (if present) and before counts
-            let segment_data_start = params.start - 8;
-            let at_bytes_count = if !huffman {
-                if template == 0 { 8 } else { 2 }
-            } else {
-                0
-            };
-            let refinement_at_start = segment_data_start - 4;  // 4 bytes for refinement AT
-            
-            if refinement_at_start >= at_bytes_count && refinement_at_start + 4 <= params.data.len() {
-                for i in 0..2 {
-                    let x = params.data[refinement_at_start + i * 2] as i8;
-                    let y = params.data[refinement_at_start + i * 2 + 1] as i8;
-                    refinement_at.push((x, y));
-                }
-            }
-        }
-
-        // Create decoding context starting at params.start (which is AFTER all parameters!)
-        eprintln!("Symbol dict decode: params.start={} (0x{:X}), params.end={}", 
-                  params.start, params.start, params.end);
-        eprintln!("First 20 bytes at params.start in ORIGINAL file data:");
-        for i in 0..20.min(params.end - params.start) {
-            eprint!("{:02X} ", params.data[params.start + i]);
-        }
-        eprintln!();
-        
-        let slice = &params.data[params.start..params.end];
-        eprintln!("Symbol dict decode: Creating context from offset {}, length {}", 
-                  params.start, slice.len());
-
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        // Get Huffman tables if needed
-        let huffman_tables = if huffman {
-            Some(crate::huffman::get_symbol_dictionary_huffman_tables(
-                ((params.dictionary_flags >> 2) & 3) as u8, // huffmanDHSelector
-                ((params.dictionary_flags >> 4) & 3) as u8, // huffmanDWSelector
-                ((params.dictionary_flags >> 6) & 1) != 0,  // bitmapSizeSelector
-                ((params.dictionary_flags >> 7) & 1) != 0,  // aggregationInstancesSelector
-                params.referred_segments,
-                &self.custom_tables,
-            )?)
-        } else {
-            None
-        };
-
-        let symbol_params = crate::decode::decode_symbol::SymbolDictionaryParams {
-            huffman,
-            refinement,
-            symbols: self.collect_input_symbols(params.referred_segments),
-            number_of_new_symbols: params.number_of_new_symbols as usize,
-            number_of_exported_symbols: params.number_of_exported_symbols as usize,
-            template_index: template,
-            at,
-            refinement_template_index: refinement_template,
-            refinement_at,
-            huffman_tables,
-        };
-
-        let mut huffman_input = if huffman {
-            Some(Reader::new(slice.to_vec(), 0, slice.len()))
-        } else {
-            None
-        };
-
-        eprintln!("About to decode symbol dictionary for segment {}", params.current_segment);
-        
-        let exported_symbols = match decode_symbol_dictionary(
-            &symbol_params,
-            &mut decoding_context,
-            huffman_input.as_mut(),
-        ) {
-            Ok(symbols) => {
-                eprintln!("Symbol dictionary {}: Successfully decoded {} exported symbols", 
-                          params.current_segment, symbols.len());
-                symbols
-            }
-            Err(e) => {
-                eprintln!("Symbol dictionary {}: FAILED to decode: {}", params.current_segment, e);
-                return Err(e);
-            }
-        };
-        
-        self.symbols
-            .insert(params.current_segment, exported_symbols.clone());
-        
-        eprintln!("  Stored in self.symbols[{}], total dicts now: {}", 
-                  params.current_segment, self.symbols.len());
-
-        Ok(())
+        super::symbol_handler::on_symbol_dictionary(&mut self.symbols, &self.custom_tables, params)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -490,137 +109,20 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        println!(
-            "Entering on_immediate_text_region, start: {}, end: {}",
-            start, end
-        );
-
-        if self.current_page_info.is_none() {
-            self.on_page_information(PageInfo {
-                width: region_info.width,
-                height: region_info.height,
-                resolution_x: 0,
-                resolution_y: 0,
-                lossless: true,
-                refinement: false,
-                default_pixel_value: 0,
-                combination_operator: 0, // OR
-                requires_buffer: false,
-                combination_operator_override: false,
-            });
-        }
-
-        let huffman = (text_region_segment_flags & 1) != 0;
-        let refinement = (text_region_segment_flags & 2) != 0;
-        let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
-        let strip_size = 1 << log_strip_size;
-        let reference_corner = ((text_region_segment_flags >> 4) & 3) as usize;
-        let transposed = (text_region_segment_flags & 64) != 0;
-        let combination_operator = ((text_region_segment_flags >> 7) & 3) as usize;
-        let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
-        let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
-        let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
-
-        // Collect input symbols from referred segments
-        let input_symbols = self.collect_input_symbols(referred_to);
-        let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
-
-        // Parse Huffman flags and refinement AT
-        let mut refinement_at = Vec::new();
-        let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
-        println!("Initial pos: {}", pos);
-
-        let mut huffman_fs = 0u8;
-        let mut huffman_ds = 0u8;
-        let mut huffman_dt = 0u8;
-        let mut huffman_refinement_dw = 0u8;
-        let mut huffman_refinement_dh = 0u8;
-        let mut huffman_refinement_dx = 0u8;
-        let mut huffman_refinement_dy = 0u8;
-        let mut huffman_refinement_size_selector = false;
-
-        if huffman && pos + 2 <= end {
-            let huffman_flags = read_u16(data, pos);
-            pos += 2;
-            println!("After huffman_flags pos: {}", pos);
-            huffman_fs = (huffman_flags & 3) as u8;
-            huffman_ds = ((huffman_flags >> 2) & 3) as u8;
-            huffman_dt = ((huffman_flags >> 4) & 3) as u8;
-            huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
-            huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
-            huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
-            huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
-            huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
-        } // else default 0
-
-        if refinement && refinement_template == 0 && pos + 4 <= end {
-            for _ in 0..2 {
-                let x = data[pos] as i8;
-                let y = data[pos + 1] as i8;
-                refinement_at.push((x, y));
-                pos += 2;
-            }
-            println!("After refinement_at pos: {}", pos);
-        } // else default empty
-
-        let slice = &data[pos.min(end)..end];
-        println!("Slicing from {} to {}", pos.min(end), end);
-
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        // Get Huffman tables if needed
-        let mut huffman_reader = if huffman {
-            Some(Reader::new(slice.to_vec(), 0, slice.len()))
-        } else {
-            None
-        };
-
-        let huffman_tables = if let Some(ref mut reader) = huffman_reader {
-            let params = TextRegionHuffmanParams {
-                huffman_fs,
-                huffman_ds,
-                huffman_dt,
-                huffman_refinement_dw,
-                huffman_refinement_dh,
-                huffman_refinement_dx,
-                huffman_refinement_dy,
-                huffman_refinement_size_selector,
-            };
-            Some(crate::huffman::get_text_region_huffman_tables(
-                &params,
-                referred_to,
-                &self.custom_tables,
-                input_symbols.len(),
-                reader,
-            )?)
-        } else {
-            None
-        };
-
-        let params = crate::decode::decode_text::TextRegionParams {
-            huffman,
-            refinement,
-            width: region_info.width as usize,
-            height: region_info.height as usize,
-            default_pixel_value,
-            number_of_symbol_instances: number_of_symbol_instances as usize,
-            strip_size,
-            input_symbols,
-            symbol_code_length: symbol_code_length as usize,
-            transposed,
-            ds_offset,
-            reference_corner,
-            combination_operator,
-            log_strip_size,
-            huffman_tables,
-            refinement_template_index: refinement_template,
-            refinement_at,
-        };
-
-        let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
-
-        self.draw_bitmap(region_info, &bitmap)?;
-        Ok(())
+        super::text_handler::on_immediate_text_region(
+            &mut self.current_page_info,
+            &mut self.current_bitmap,
+            self.current_y,
+            &self.symbols,
+            &self.custom_tables,
+            region_info,
+            text_region_segment_flags,
+            number_of_symbol_instances,
+            referred_to,
+            data,
+            start,
+            end,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -636,22 +138,18 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        let slice = &data[start..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let params = crate::decode::decode_pattern::PatternDictionaryParams {
+        super::pattern_handler::on_pattern_dictionary(
+            &mut self.patterns,
             mmr,
             pattern_width,
             pattern_height,
             max_pattern_index,
             template,
-        };
-
-        let patterns = decode_pattern_dictionary(&params, &mut decoding_context)?;
-
-        self.patterns.insert(current_segment, patterns);
-
-        Ok(())
+            current_segment,
+            data,
+            start,
+            end,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -674,69 +172,28 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        println!(
-            "Halftone region: width={}, height={}",
-            region_info.width, region_info.height
-        );
-        if region_info.width == 0 || region_info.height == 0 {
-            return Ok(());
-        }
-        // Check for overflow matching jbig2dec: height > INT32_MAX / stride
-        let stride = ((region_info.width - 1) / 8) + 1;
-        if region_info.height > (i32::MAX as u32) / stride {
-            return Err(Jbig2Error::new("bitmap size causes integer overflow"));
-        }
-
-        if self.current_page_info.is_none() {
-            self.on_page_information(PageInfo {
-                width: region_info.width.max(1),
-                height: region_info.height.max(1),
-                resolution_x: 300,
-                resolution_y: 300,
-                lossless: true,
-                refinement: false,
-                default_pixel_value: 0,
-                combination_operator: 0, // OR
-                requires_buffer: false,
-                combination_operator_override: false,
-            });
-        }
-
-        // Get patterns from referred segment
-        if referred_to.is_empty() {
-            return Ok(()); // Skip if no referred
-        }
-        let pattern_segment = referred_to[0];
-        let patterns = if let Some(p) = self.patterns.get(&pattern_segment) {
-            p.clone()
-        } else {
-            return Ok(()); // Skip if not found
-        };
-
-        let slice = &data[start..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let params = crate::decode::decode_halftone::HalftoneRegionParams {
+        super::halftone_handler::on_immediate_halftone_region(
+            &mut self.current_page_info,
+            &mut self.current_bitmap,
+            self.current_y,
+            &self.patterns,
+            region_info,
             mmr,
-            patterns,
             template,
-            region_width: region_info.width as usize,
-            region_height: region_info.height as usize,
-            default_pixel_value,
             enable_skip,
             combination_operator,
+            default_pixel_value,
             grid_width,
             grid_height,
             grid_offset_x,
             grid_offset_y,
             grid_vector_x,
             grid_vector_y,
-        };
-
-        let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
-
-        self.draw_bitmap(region_info, &bitmap)?;
-        Ok(())
+            referred_to,
+            data,
+            start,
+            end,
+        )
     }
 
     pub fn on_tables(
@@ -746,9 +203,7 @@ impl SimpleSegmentVisitor {
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
-        let table = decode_tables_segment(data, start, end)?;
-        self.custom_tables.insert(segment_number, table);
-        Ok(())
+        super::tables_handler::on_tables(&mut self.custom_tables, segment_number, data, start, end)
     }
 
     pub fn on_intermediate_generic_region(
@@ -760,42 +215,18 @@ impl SimpleSegmentVisitor {
         end: usize,
         segment_number: u32,
     ) -> Result<(), Jbig2Error> {
-        // Basic validation: check that referred segments exist
-        for &seg_id in referred_to {
-            if !self.symbols.contains_key(&seg_id)
-                && !self.patterns.contains_key(&seg_id)
-                && !self.custom_tables.contains_key(&seg_id)
-                && !self.bitmaps.contains_key(&seg_id)
-            {
-                return Err(Jbig2Error::new("referred segment not found"));
-            }
-        }
-
-        let region_info = &region.info;
-
-        let at_bytes = region.at.len() * 2;
-        let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
-        if decoding_start > end {
-            return Ok(()); // Allow short data
-        }
-
-        let slice = &data[decoding_start..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let params = DecodeBitmapParams {
-            mmr: region.mmr,
-            width: region_info.width as usize,
-            height: region_info.height as usize,
-            template_index: region.template,
-            prediction: region.prediction,
-            skip: None,
-            at: region.at.clone(),
-        };
-
-        let bitmap = decode_bitmap(&params, &mut decoding_context)?;
-
-        self.bitmaps.insert(segment_number, bitmap);
-        Ok(())
+        super::region_handlers::on_intermediate_generic_region(
+            &self.symbols,
+            &self.patterns,
+            &self.custom_tables,
+            &mut self.bitmaps,
+            region,
+            referred_to,
+            data,
+            start,
+            end,
+            segment_number,
+        )
     }
 
     pub fn on_intermediate_generic_refinement_region(
@@ -807,52 +238,15 @@ impl SimpleSegmentVisitor {
         end: usize,
         segment_number: u32,
     ) -> Result<(), Jbig2Error> {
-        // Parse refinement region parameters
-        let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
-        let generic_region_segment_flags = data[pos];
-        pos += 1;
-        let template = ((generic_region_segment_flags >> 1) & 3) as usize;
-        let at_length = if template == 0 { 2 } else { 0 };
-        let at = if at_length > 0 && pos + at_length * 2 <= end {
-            parse_at_parameters(data, pos, at_length)?
-        } else {
-            Vec::new()
-        };
-        pos += at_length * 2;
-        if pos > end {
-            return Ok(());
-        }
-
-        // Get reference bitmap from referred segment
-        if referred_to.is_empty() {
-            return Ok(());
-        }
-        let ref_segment = referred_to[0];
-        let reference_bitmap = if let Some(bm) = self.bitmaps.get(&ref_segment) {
-            bm
-        } else {
-            return Ok(());
-        };
-
-        let slice = &data[pos..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let bitmap = crate::decode::decode_refinement::decode_refinement(
-            &crate::decode::decode_refinement::RefinementParams {
-                width: region_info.width as usize,
-                height: region_info.height as usize,
-                template_index: template,
-                reference_bitmap,
-                offset_x: 0, // Default offset
-                offset_y: 0,
-                prediction: false,
-                at,
-            },
-            &mut decoding_context,
-        )?;
-
-        self.bitmaps.insert(segment_number, bitmap);
-        Ok(())
+        super::region_handlers::on_intermediate_generic_refinement_region(
+            &mut self.bitmaps,
+            region_info,
+            referred_to,
+            data,
+            start,
+            end,
+            segment_number,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -867,124 +261,20 @@ impl SimpleSegmentVisitor {
         end: usize,
         _segment_number: u32,
     ) -> Result<(), Jbig2Error> {
-        // Basic validation: check that referred segments exist
-        for &seg_id in referred_to {
-            if !self.symbols.contains_key(&seg_id)
-                && !self.patterns.contains_key(&seg_id)
-                && !self.custom_tables.contains_key(&seg_id)
-                && !self.bitmaps.contains_key(&seg_id)
-            {
-                return Err(Jbig2Error::new("referred segment not found"));
-            }
-        }
-
-        let huffman = (text_region_segment_flags & 1) != 0;
-        let refinement = (text_region_segment_flags & 2) != 0;
-        let log_strip_size = ((text_region_segment_flags >> 2) & 3) as usize;
-        let strip_size = 1 << log_strip_size;
-        let reference_corner = ((text_region_segment_flags >> 4) & 3) as usize;
-        let transposed = (text_region_segment_flags & 64) != 0;
-        let combination_operator = ((text_region_segment_flags >> 7) & 3) as usize;
-        let default_pixel_value = ((text_region_segment_flags >> 9) & 1) as u8;
-        let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
-        let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
-
-        // Collect input symbols from referred segments
-        let input_symbols = self.collect_input_symbols(referred_to);
-        let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
-
-        // Parse Huffman flags and refinement AT
-        let mut refinement_at = Vec::new();
-        let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
-
-        let mut huffman_fs = 0u8;
-        let mut huffman_ds = 0u8;
-        let mut huffman_dt = 0u8;
-        let mut huffman_refinement_dw = 0u8;
-        let mut huffman_refinement_dh = 0u8;
-        let mut huffman_refinement_dx = 0u8;
-        let mut huffman_refinement_dy = 0u8;
-        let mut huffman_refinement_size_selector = false;
-
-        if huffman && pos + 2 <= end {
-            let huffman_flags = read_u16(data, pos);
-            pos += 2;
-            huffman_fs = (huffman_flags & 3) as u8;
-            huffman_ds = ((huffman_flags >> 2) & 3) as u8;
-            huffman_dt = ((huffman_flags >> 4) & 3) as u8;
-            huffman_refinement_dw = ((huffman_flags >> 6) & 3) as u8;
-            huffman_refinement_dh = ((huffman_flags >> 8) & 3) as u8;
-            huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
-            huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
-            huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
-        } // else default 0
-
-        if refinement && refinement_template == 0 && pos + 4 <= end {
-            for _ in 0..2 {
-                let x = data[pos] as i8;
-                let y = data[pos + 1] as i8;
-                refinement_at.push((x, y));
-                pos += 2;
-            }
-        } // else default empty
-
-        let slice = &data[pos.min(end)..end];
-
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        // Get Huffman tables if needed
-        let mut huffman_reader = if huffman {
-            Some(Reader::new(slice.to_vec(), 0, slice.len()))
-        } else {
-            None
-        };
-
-        let huffman_tables = if let Some(ref mut reader) = huffman_reader {
-            let params = TextRegionHuffmanParams {
-                huffman_fs,
-                huffman_ds,
-                huffman_dt,
-                huffman_refinement_dw,
-                huffman_refinement_dh,
-                huffman_refinement_dx,
-                huffman_refinement_dy,
-                huffman_refinement_size_selector,
-            };
-            Some(crate::huffman::get_text_region_huffman_tables(
-                &params,
-                referred_to,
-                &self.custom_tables,
-                input_symbols.len(),
-                reader,
-            )?)
-        } else {
-            None
-        };
-
-        let params = crate::decode::decode_text::TextRegionParams {
-            huffman,
-            refinement,
-            width: region_info.width as usize,
-            height: region_info.height as usize,
-            default_pixel_value,
-            number_of_symbol_instances: number_of_symbol_instances as usize,
-            strip_size,
-            input_symbols,
-            symbol_code_length: symbol_code_length as usize,
-            transposed,
-            ds_offset,
-            reference_corner,
-            combination_operator,
-            log_strip_size,
-            huffman_tables,
-            refinement_template_index: refinement_template,
-            refinement_at,
-        };
-
-        let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
-
-        self.draw_bitmap(region_info, &bitmap)?;
-        Ok(())
+        super::text_handler::on_intermediate_text_region(
+            &self.symbols,
+            &self.patterns,
+            &self.custom_tables,
+            &self.bitmaps,
+            region_info,
+            text_region_segment_flags,
+            number_of_symbol_instances,
+            referred_to,
+            data,
+            start,
+            end,
+            _segment_number,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1008,56 +298,35 @@ impl SimpleSegmentVisitor {
         end: usize,
         segment_number: u32,
     ) -> Result<(), Jbig2Error> {
-        // Get patterns from referred segment
-        if referred_to.is_empty() {
-            return Ok(());
-        }
-        let pattern_segment = referred_to[0];
-        let patterns = if let Some(p) = self.patterns.get(&pattern_segment) {
-            p.clone()
-        } else {
-            return Ok(());
-        };
-
-        let slice = &data[start..end];
-        let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
-
-        let params = crate::decode::decode_halftone::HalftoneRegionParams {
+        super::halftone_handler::on_intermediate_halftone_region(
+            &self.patterns,
+            &mut self.bitmaps,
+            region_info,
             mmr,
-            patterns,
             template,
-            region_width: region_info.width as usize,
-            region_height: region_info.height as usize,
-            default_pixel_value,
             enable_skip,
             combination_operator,
+            default_pixel_value,
             grid_width,
             grid_height,
             grid_offset_x,
             grid_offset_y,
             grid_vector_x,
             grid_vector_y,
-        };
-
-        let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
-
-        self.bitmaps.insert(segment_number, bitmap);
-        Ok(())
+            referred_to,
+            data,
+            start,
+            end,
+            segment_number,
+        )
     }
 
     // Finalize the current page and add it to the pages vector
     pub fn finalize_current_page(&mut self) {
-        if let (Some(page_info), Some(bitmap)) =
-            (self.current_page_info.take(), self.current_bitmap.take())
-        {
-            let bit_packed_data = bitmap_to_bit_packed(&bitmap);
-            self.pages.push(Jbig2Page {
-                page_info,
-                bitmap,
-                bit_packed_data,
-            });
-        }
+        super::page_handler::finalize_current_page(
+            &mut self.current_page_info,
+            &mut self.current_bitmap,
+            &mut self.pages,
+        );
     }
 }
-
-const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
