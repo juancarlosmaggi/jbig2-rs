@@ -1,8 +1,7 @@
-/// Example: Decode JBIG2 from chunks (useful for PDF-embedded JBIG2)
-///
-/// This example demonstrates chunk-based decoding, which is useful when JBIG2 data
-/// is embedded in PDF files or split across multiple buffers.
-
+//! Example: Decode JBIG2 from chunks (useful for PDF-embedded JBIG2)
+//!
+//! This example demonstrates chunk-based decoding, which is useful when JBIG2 data
+//! is embedded in PDF files or split across multiple buffers.
 use jbig2_rs::{Jbig2Chunk, Jbig2Document};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

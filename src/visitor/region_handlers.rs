@@ -39,24 +39,7 @@ pub(super) fn draw_bitmap(
         return Ok(()); // Nothing to draw
     }
 
-    let width = (region_info.width as usize).min(page_width - reg_x);
-    let height = (region_info.height as usize).min(page_height - reg_y);
-
-    // Validate source bitmap dimensions
-    if src_bitmap.width < width || src_bitmap.height < height {
-        return Err(Jbig2Error::new("source bitmap too small for region"));
-    }
-
-    for i in 0..height {
-        for j in 0..width {
-            let src = src_bitmap.get_pixel(j, i);
-            let dx = reg_x + j;
-            let dy = reg_y + i;
-            let old_dst = dst.get_pixel(dx, dy);
-            let new_val = bitmap_utils::apply_combination_operator(old_dst, src, combo_op);
-            dst.set_pixel(dx, dy, new_val);
-        }
-    }
+    dst.combine(src_bitmap, reg_x as isize, reg_y as isize, combo_op);
     Ok(())
 }
 

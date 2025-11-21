@@ -113,14 +113,26 @@ Err(Jbig2Error::invalid_template_index(5, 3))
 - ✅ All examples compile and run
 - ✅ All 64 tests passing
 
-### 4. Performance Optimization
+### 4. Performance Optimization 🔄
 
-**Opportunities:**
-- Profile hot paths in decoding
-- Optimize bitmap operations (currently pixel-by-pixel in many places)
-- Consider bulk operations for copying bitmap regions
-- Evaluate memory allocations in tight loops
-- Benchmark arithmetic decoder performance
+**Status:** IN PROGRESS (November 21, 2025)
+
+**Completed:**
+- ✅ **Benchmarking Infrastructure**: Added `criterion` and initial benchmarks
+- ✅ **Bitmap Optimization**: Implemented byte-aligned `combine` (bitblt)
+  - **Result:** ~8x speedup in symbol drawing (29.2 µs -> 3.6 µs)
+  - **Impact:** Significantly faster page composition
+
+**Missing / Next Steps:**
+- [ ] **Arithmetic Decoder Optimization**:
+  - Profile `decode_bit` and context update hot paths
+  - Investigate look-up table (LUT) approaches for context modeling
+- [ ] **Full File Benchmarking**:
+  - Add benchmarks for real-world JBIG2 files (e.g., `sample.jb2`)
+  - Measure end-to-end decoding time
+- [ ] **Memory Profiling**:
+  - Analyze memory allocation in tight loops (e.g., `Vector` resizing)
+  - Optimize buffer reuse in `processor.rs`
 
 ### 5. Configuration and Features
 
@@ -136,12 +148,10 @@ strict-validation = []  # Extra validation checks
 
 ### 6. Extended Test Coverage
 
-**Add:**
-- More edge case tests for decoders
-- Property-based testing for arithmetic/MMR decoders
-- Malformed file handling tests
-- Performance regression tests
-- More real-world JBIG2 files
+**Missing:**
+- [ ] **Property-Based Testing**: Use `proptest` for arithmetic/MMR decoders
+- [ ] **Malformed File Handling**: Fuzz testing with `cargo-fuzz`
+- [ ] **Performance Regression Tests**: CI checks for performance degradation
 
 ## Low-Priority Enhancements
 
@@ -172,20 +182,18 @@ strict-validation = []  # Extra validation checks
 - Code coverage reporting
 - Automated releases
 
-### 10. Benchmarking
+### 10. Benchmarking (Expanded)
 
 **Add:**
-- Criterion.rs benchmarks for hot paths
 - Regression testing for performance
 - Memory usage profiling
 
 ## Recommended Next Steps (Priority Order)
 
-1. **Remove Debug Prints** - Quick win, improves production performance
-2. **Improve Error Handling** - Better developer experience
-3. **Add Documentation** - Makes the library more accessible
-4. **Performance Profiling** - Identify and optimize bottlenecks
-5. **Extended Test Coverage** - Increase reliability
+1. **Complete Error Handling Migration** (Phase 3 & 4)
+2. **Optimize Arithmetic Decoder** (High impact for compressed files)
+3. **Add Full File Benchmarks** (Measure real-world impact)
+4. **Extended Test Coverage** (Fuzzing/Property testing)
 
 ## Development Guidelines
 
@@ -232,5 +240,5 @@ jbig2-rs/
 
 ---
 
-**Last Updated:** November 21, 2025 (Documentation Complete)  
+**Last Updated:** November 21, 2025 (Performance Optimization Started)  
 **Status:** Actively maintained, well-structured, ready for production use

@@ -1,8 +1,7 @@
-/// Example: Decode a JBIG2 file to raw bitmap data
-///
-/// This example demonstrates the basic usage of jbig2-rs to decode a JBIG2 file.
-/// It reads a .jb2 file, parses it, and saves the first page as raw bitmap data.
-
+//! Example: Decode a JBIG2 file to raw bitmap data
+//!
+//! This example demonstrates the basic usage of jbig2-rs to decode a JBIG2 file.
+//! It reads a .jb2 file, parses it, and saves the first page as raw bitmap data.
 use jbig2_rs::Jbig2Document;
 use std::env;
 use std::fs;
@@ -53,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nThe output file contains raw bitmap data:");
         println!("  - 1 bit per pixel (0=white, 1=black)");
         println!("  - Packed into bytes (8 pixels per byte)");
-        println!("  - Row stride: {} bytes", (page.page_info.width + 7) / 8);
+        println!("Stride: {} bytes", page.page_info.width.div_ceil(8));
         println!("  - Total rows: {}", page.page_info.height);
         
     } else {

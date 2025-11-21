@@ -13,3 +13,12 @@ image = "0.24"
 
 [dev-dependencies]
 rstest = "0.18"
+criterion = "0.5"
+
+[[bench]]
+name = "bitmap_bench"
+harness = false
+
+[[bench]]
+name = "decoder_bench"
+harness = false
