@@ -164,6 +164,119 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
     })
 }
 
+/// Parameters parsed from halftone region segment
+#[derive(Debug)]
+pub struct HalftoneRegionParams {
+    pub region_info: RegionInfo,
+    pub mmr: bool,
+    pub template: usize,
+    pub enable_skip: bool,
+    pub combination_operator: usize,
+    pub default_pixel_value: u8,
+    pub grid_width: usize,
+    pub grid_height: usize,
+    pub grid_offset_x: i32,
+    pub grid_offset_y: i32,
+    pub grid_vector_x: i16,
+    pub grid_vector_y: i16,
+}
+
+/// Parse halftone region parameters (segments 20, 22, 23)
+/// Extracts region info, flags, and grid parameters
+pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegionParams {
+    let region_info = read_region_segment_information(data, start);
+    let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
+    
+    let mmr = (halftone_region_flags & 1) != 0;
+    let template = ((halftone_region_flags >> 1) & 3) as usize;
+    let enable_skip = (halftone_region_flags & 8) != 0;
+    let combination_operator = ((halftone_region_flags >> 4) & 7) as usize;
+    let default_pixel_value = (halftone_region_flags >> 7) & 1;
+    
+    let grid_width =
+        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
+    let grid_height =
+        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
+    let grid_offset_x =
+        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
+    let grid_offset_y =
+        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
+    let grid_vector_x =
+        read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
+    let grid_vector_y =
+        read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
+    
+    HalftoneRegionParams {
+        region_info,
+        mmr,
+        template,
+        enable_skip,
+        combination_operator,
+        default_pixel_value,
+        grid_width,
+        grid_height,
+        grid_offset_x,
+        grid_offset_y,
+        grid_vector_x,
+        grid_vector_y,
+    }
+}
+
+/// Parameters parsed from text region segment
+#[derive(Debug)]
+pub struct TextRegionParams {
+    pub region_info: RegionInfo,
+    pub text_region_segment_flags: u16,
+    pub number_of_symbol_instances: u32,
+}
+
+/// Parse text region common parameters (segments 4, 6, 7)
+/// Returns region info, flags, and symbol instance count
+pub fn parse_text_region_params(data: &[u8], start: usize, referred_size: usize, referred_count: usize) -> TextRegionParams {
+    let mut pos = start;
+    let text_region_segment_flags = read_u16(data, pos);
+    pos += 2;
+    let number_of_symbol_instances = read_u32_le(data, pos);
+    pos += 4;
+    pos += referred_count * referred_size;
+    let region_info = read_region_segment_information(data, pos);
+    
+    TextRegionParams {
+        region_info,
+        text_region_segment_flags,
+        number_of_symbol_instances,
+    }
+}
+
+/// Parameters parsed from pattern dictionary segment
+#[derive(Debug)]
+pub struct PatternDictionaryParams {
+    pub mmr: bool,
+    pub template: usize,
+    pub pattern_width: usize,
+    pub pattern_height: usize,
+    pub max_pattern_index: usize,
+}
+
+/// Parse pattern dictionary parameters (segment 16)
+pub fn parse_pattern_dictionary_params(data: &[u8], start: usize) -> PatternDictionaryParams {
+    let pattern_dictionary_flags = data[start];
+    let mmr = (pattern_dictionary_flags & 1) != 0;
+    let template = ((pattern_dictionary_flags >> 1) & 3) as usize;
+    let pattern_width = data[start + 1] as usize;
+    let pattern_height = data[start + 2] as usize;
+    let max_pattern_index = read_u32(data, start + 3) as usize;
+    
+    PatternDictionaryParams {
+        mmr,
+        template,
+        pattern_width,
+        pattern_height,
+        max_pattern_index,
+    }
+}
+
+
 pub fn read_segments<'a>(
     data: &'a [u8],
     start: usize,

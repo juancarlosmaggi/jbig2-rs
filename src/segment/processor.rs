@@ -4,7 +4,12 @@ use crate::error::Jbig2Error;
 use crate::visitor::SimpleSegmentVisitor;
 use super::types::*;
 use super::utils::*;
-use super::parser::read_region_segment_information;
+use super::parser::{
+    read_region_segment_information, 
+    parse_halftone_region_params,
+    parse_text_region_params,
+    parse_pattern_dictionary_params,
+};
 
 pub fn process_segments<'a>(
     segments: &[Segment<'a>],
@@ -137,11 +142,7 @@ pub fn process_segment<'a>(
             visitor.on_symbol_dictionary(&params)?;
         }
         6 | 7 => {
-            let mut pos = start;
-            let text_region_segment_flags = read_u16(data, pos);
-            pos += 2;
-            let number_of_symbol_instances = read_u32_le(data, pos);
-            pos += 4;
+            // ImmediateTextRegion / ImmediateLosslessTextRegion
             let referred_size = if header.number <= 256 {
                 1
             } else if header.number <= 65536 {
@@ -149,13 +150,14 @@ pub fn process_segment<'a>(
             } else {
                 4
             };
-            pos += header.referred_to.len() * referred_size;
-            let region_info = read_region_segment_information(data, pos);
-            pos += REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+            
+            let params = parse_text_region_params(data, start, referred_size, header.referred_to.len());
+            let pos = start + 2 + 4 + header.referred_to.len() * referred_size + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+            
             visitor.on_immediate_text_region(
-                &region_info,
-                text_region_segment_flags,
-                number_of_symbol_instances,
+                &params.region_info,
+                params.text_region_segment_flags,
+                params.number_of_symbol_instances,
                 &header.referred_to,
                 data,
                 pos,
@@ -211,18 +213,13 @@ pub fn process_segment<'a>(
         }
         16 => {
             // PatternDictionary
-            let pattern_dictionary_flags = data[start];
-            let mmr = (pattern_dictionary_flags & 1) != 0;
-            let template = ((pattern_dictionary_flags >> 1) & 3) as usize;
-            let pattern_width = data[start + 1] as usize;
-            let pattern_height = data[start + 2] as usize;
-            let max_pattern_index = read_u32(data, start + 3) as usize;
+            let params = parse_pattern_dictionary_params(data, start);
             visitor.on_pattern_dictionary(
-                mmr,
-                pattern_width,
-                pattern_height,
-                max_pattern_index,
-                template,
+                params.mmr,
+                params.pattern_width,
+                params.pattern_height,
+                params.max_pattern_index,
+                params.template,
                 header.number,
                 data,
                 start + 7,
@@ -231,38 +228,20 @@ pub fn process_segment<'a>(
         }
         22 | 23 => {
             // ImmediateHalftoneRegion / ImmediateLosslessHalftoneRegion
-            let region_info = read_region_segment_information(data, start);
-            let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
-            let mmr = (halftone_region_flags & 1) != 0;
-            let template = ((halftone_region_flags >> 1) & 3) as usize;
-            let enable_skip = (halftone_region_flags & 8) != 0;
-            let combination_operator = ((halftone_region_flags >> 4) & 7) as usize;
-            let default_pixel_value = (halftone_region_flags >> 7) & 1;
-            let grid_width =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
-            let grid_height =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
-            let grid_offset_x =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
-            let grid_offset_y =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
-            let grid_vector_x =
-                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
-            let grid_vector_y =
-                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
+            let params = parse_halftone_region_params(data, start);
             visitor.on_immediate_halftone_region(
-                &region_info,
-                mmr,
-                template,
-                enable_skip,
-                combination_operator,
-                default_pixel_value,
-                grid_width,
-                grid_height,
-                grid_offset_x,
-                grid_offset_y,
-                grid_vector_x,
-                grid_vector_y,
+                &params.region_info,
+                params.mmr,
+                params.template,
+                params.enable_skip,
+                params.combination_operator,
+                params.default_pixel_value,
+                params.grid_width,
+                params.grid_height,
+                params.grid_offset_x,
+                params.grid_offset_y,
+                params.grid_vector_x,
+                params.grid_vector_y,
                 &header.referred_to,
                 data,
                 start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21,
@@ -288,15 +267,11 @@ pub fn process_segment<'a>(
         }
         4 => {
             // IntermediateTextRegion
-            let region_info = read_region_segment_information(data, start);
-            let text_region_segment_flags =
-                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH);
-            let number_of_symbol_instances =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2);
+            let params = parse_text_region_params(data, start, 0, 0);
             visitor.on_intermediate_text_region(
-                &region_info,
-                text_region_segment_flags,
-                number_of_symbol_instances,
+                &params.region_info,
+                params.text_region_segment_flags,
+                params.number_of_symbol_instances,
                 &header.referred_to,
                 data,
                 start,
@@ -306,38 +281,20 @@ pub fn process_segment<'a>(
         }
         20 => {
             // IntermediateHalftoneRegion
-            let region_info = read_region_segment_information(data, start);
-            let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
-            let mmr = (halftone_region_flags & 1) != 0;
-            let template = ((halftone_region_flags >> 1) & 3) as usize;
-            let enable_skip = (halftone_region_flags & 8) != 0;
-            let combination_operator = ((halftone_region_flags >> 4) & 7) as usize;
-            let default_pixel_value = (halftone_region_flags >> 7) & 1;
-            let grid_width =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
-            let grid_height =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
-            let grid_offset_x =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
-            let grid_offset_y =
-                read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
-            let grid_vector_x =
-                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
-            let grid_vector_y =
-                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
+            let params = parse_halftone_region_params(data, start);
             visitor.on_intermediate_halftone_region(
-                &region_info,
-                mmr,
-                template,
-                enable_skip,
-                combination_operator,
-                default_pixel_value,
-                grid_width,
-                grid_height,
-                grid_offset_x,
-                grid_offset_y,
-                grid_vector_x,
-                grid_vector_y,
+                &params.region_info,
+                params.mmr,
+                params.template,
+                params.enable_skip,
+                params.combination_operator,
+                params.default_pixel_value,
+                params.grid_width,
+                params.grid_height,
+                params.grid_offset_x,
+                params.grid_offset_y,
+                params.grid_vector_x,
+                params.grid_vector_y,
                 &header.referred_to,
                 data,
                 start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21,
