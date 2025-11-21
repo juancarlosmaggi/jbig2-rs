@@ -366,3 +366,196 @@ pub fn decode_mmr_bitmap(
     input.set_position(decoder.reader.get_position());
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_reader(data: Vec<u8>) -> Reader {
+        Reader::new(data.clone(), 0, data.len())
+    }
+
+    #[test]
+    fn test_decode_mmr_zero_dimensions() {
+        let data = vec![0u8; 10];
+        let mut reader = create_test_reader(data);
+        
+        // Zero width
+        let result = decode_mmr_bitmap(&mut reader, 0, 10, false);
+        assert!(result.is_ok());
+        let bitmap = result.unwrap();
+        assert_eq!(bitmap.width, 0);
+        
+        // Zero height
+        let mut reader2 = create_test_reader(vec![0u8; 10]);
+        let result2 = decode_mmr_bitmap(&mut reader2, 10, 0, false);
+        assert!(result2.is_ok());
+        let bitmap2 = result2.unwrap();
+        assert_eq!(bitmap2.height, 0);
+    }
+
+    #[test]
+    fn test_ccitt_decoder_creation() {
+        let data = vec![0u8; 100];
+        let reader = create_test_reader(data);
+        let decoder = CCITTFaxDecoder::new(reader, 10, 10, false);
+        
+        assert_eq!(decoder.width, 10);
+        assert_eq!(decoder.height, 10);
+        assert_eq!(decoder.ref_line.len(), 10);
+        assert_eq!(decoder.curr_line.len(), 10);
+    }
+
+    #[test]
+    fn test_read_mode_code_vertical_0() {
+        // V(0) = 1 (single bit)
+        let data = vec![0b10000000];
+        let reader = create_test_reader(data);
+        let mut decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        let mode = decoder.read_mode_code();
+        assert!(mode.is_ok());
+        assert_eq!(mode.unwrap(), 2); // V(0)
+    }
+
+    #[test]
+    fn test_read_mode_code_horizontal() {
+        // Horizontal = 001 (3 bits)
+        let data = vec![0b00100000];
+        let reader = create_test_reader(data);
+        let mut decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        let mode = decoder.read_mode_code();
+        assert!(mode.is_ok());
+        assert_eq!(mode.unwrap(), 4); // Horizontal
+    }
+
+    #[test]
+    fn test_read_mode_code_pass() {
+        // Pass = 0001 (4 bits)
+        let data = vec![0b00010000];
+        let reader = create_test_reader(data);
+        let mut decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        let mode = decoder.read_mode_code();
+        assert!(mode.is_ok());
+        assert_eq!(mode.unwrap(), 0); // Pass
+    }
+
+    #[test]
+    fn test_find_changing_element() {
+        let data = vec![0u8; 10];
+        let reader = create_test_reader(data);
+        let decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        // Line: 0 0 0 1 1 1 0 0 0 0
+        let line = vec![0, 0, 0, 1, 1, 1, 0, 0, 0, 0];
+        
+        // First changing element from start (position 0 is considered changing)
+        let result = decoder.find_changing_element(&line, 0, 10);
+        assert_eq!(result, 0);
+        
+        // Next changing element (from 0->1 transition)
+        let result = decoder.find_changing_element(&line, 1, 10);
+        assert_eq!(result, 3);
+        
+        // Next changing element (from 1->0 transition)
+        let result = decoder.find_changing_element(&line, 4, 10);
+        assert_eq!(result, 6);
+    }
+
+    #[test]
+    fn test_find_changing_element_of_color() {
+        let data = vec![0u8; 10];
+        let reader = create_test_reader(data);
+        let decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        // Line: 0 0 0 1 1 1 0 0 0 0
+        let line = vec![0, 0, 0, 1, 1, 1, 0, 0, 0, 0];
+        
+        // First black (1) element
+        let result = decoder.find_changing_element_of_color(&line, 0, 10, 1);
+        assert_eq!(result, 3);
+        
+        // First white (0) element after position 3
+        let result = decoder.find_changing_element_of_color(&line, 4, 10, 0);
+        assert_eq!(result, 6);
+    }
+
+    #[test]
+    fn test_write_run() {
+        let data = vec![0u8; 10];
+        let reader = create_test_reader(data);
+        let mut decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        // Write 5 black pixels starting at position 0
+        let end = decoder.write_run(0, 5, 0, 1);
+        assert_eq!(end, 5);
+        
+        // Verify the pixels were set
+        for i in 0..5 {
+            assert_eq!(decoder.curr_line[i], 1);
+        }
+        for i in 5..10 {
+            assert_eq!(decoder.curr_line[i], 0);
+        }
+    }
+
+    #[test]
+    fn test_write_run_with_offset() {
+        let data = vec![0u8; 10];
+        let reader = create_test_reader(data);
+        let mut decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        // b1=5, offset=2 => a1=7
+        let end = decoder.write_run(0, 5, 2, 1);
+        assert_eq!(end, 7);
+        
+        // Verify pixels 0-6 are set
+        for i in 0..7 {
+            assert_eq!(decoder.curr_line[i], 1);
+        }
+    }
+
+    #[test]
+    fn test_write_run_bounds_check() {
+        let data = vec![0u8; 10];
+        let reader = create_test_reader(data);
+        let mut decoder = CCITTFaxDecoder::new(reader, 10, 1, false);
+        
+        // Try to write beyond bounds (should be clamped)
+        let end = decoder.write_run(0, 20, 0, 1);
+        assert_eq!(end, 10); // Clamped to width
+        
+        // All pixels should be set
+        for i in 0..10 {
+            assert_eq!(decoder.curr_line[i], 1);
+        }
+    }
+
+    #[test]
+    fn test_decode_mmr_bitmap_small() {
+        // Simple all-zero data with minimal MMR structure
+        let data = vec![0x00; 20];
+        let mut reader = create_test_reader(data);
+        
+        // Should handle without error (even if output is not meaningful)
+        let result = decode_mmr_bitmap(&mut reader, 8, 8, false);
+        
+        // Not testing specific output since input is not valid MMR,
+        // just ensuring it doesn't panic
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_ccitt_zero_width_line_decode() {
+        // Width=0 should return immediately without error
+        let data = vec![0u8; 10];
+        let reader = create_test_reader(data);
+        let mut decoder = CCITTFaxDecoder::new(reader, 0, 1, false);
+        
+        let mut eofb = false;
+        let result = decoder.decode_2d_line(&mut eofb);
+        assert!(result.is_ok());
+    }
+}

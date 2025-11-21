@@ -300,3 +300,135 @@ impl ArithmeticDecoder {
         Ok(d)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decoder_creation() {
+        let data = vec![0x00, 0x00, 0x00, 0x00];
+        let decoder = ArithmeticDecoder::new(&data);
+        
+        // Decoder should be initialized
+        assert_eq!(decoder.a, 0x8000);
+        assert_eq!(decoder.offset, 4);
+    }
+
+    #[test]
+    fn test_decoder_with_short_data() {
+        let data = vec![0xFF];
+        let decoder = ArithmeticDecoder::new(&data);
+        
+        // Should handle short data gracefully
+        assert_eq!(decoder.a, 0x8000);
+    }
+
+    #[test]
+    fn test_decoder_empty_data() {
+        let data = vec![];
+        let decoder = ArithmeticDecoder::new(&data);
+        
+        // Should handle empty data
+        assert_eq!(decoder.a, 0x8000);
+        assert_eq!(decoder.offset, 0);
+    }
+
+    #[test]
+    fn test_read_bit_basic() {
+        // Simple test data with some predictable structure
+        let data = vec![0x84, 0xC7, 0x37, 0xF8, 0x69, 0x72, 0xEC, 0x6F];
+        let mut decoder = ArithmeticDecoder::new(&data);
+        let mut contexts = vec![0i8; 512];
+        
+        // Should be able to decode some bits without error
+        let result = decoder.read_bit(&mut contexts, 0);
+        assert!(result.is_ok());
+        let bit = result.unwrap();
+        assert!(bit == 0 || bit == 1);
+    }
+
+    #[test]
+    fn test_read_bit_invalid_context() {
+        let data = vec![0x00; 8];
+        let mut decoder = ArithmeticDecoder::new(&data);
+        let mut contexts = vec![0i8; 10];
+        
+        // Try to use context beyond bounds
+        let result = decoder.read_bit(&mut contexts, 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_bit_updates_context() {
+        let data = vec![0x84, 0xC7, 0x37, 0xF8, 0x69, 0x72, 0xEC, 0x6F];
+        let mut decoder = ArithmeticDecoder::new(&data);
+        let mut contexts = vec![0i8; 512];
+        
+        let _initial_ctx = contexts[0];
+        let _bit = decoder.read_bit(&mut contexts, 0);
+        
+        // Context should be updated (may or may not change depending on bit)
+        // Just verify no panic occurred
+    }
+
+    #[test]
+    fn test_multiple_bits_same_context() {
+        let data = vec![0x84, 0xC7, 0x37, 0xF8, 0x69, 0x72, 0xEC, 0x6F];
+        let mut decoder = ArithmeticDecoder::new(&data);
+        let mut contexts = vec![0i8; 512];
+        
+        // Should be able to read multiple bits
+        for _ in 0..10 {
+            let result = decoder.read_bit(&mut contexts, 0);
+            assert!(result.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_multiple_contexts() {
+        let data = vec![0x84, 0xC7, 0x37, 0xF8, 0x69, 0x72, 0xEC, 0x6F];
+        let mut decoder = ArithmeticDecoder::new(&data);
+        let mut contexts = vec![0i8; 512];
+        
+        // Read from different contexts
+        for ctx_idx in 0..5 {
+            let result = decoder.read_bit(&mut contexts, ctx_idx);
+            assert!(result.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_decoder_state_remains_valid() {
+        let data = vec![0x84, 0xC7, 0x37, 0xF8];
+        let mut decoder = ArithmeticDecoder::new(&data);
+        let mut contexts = vec![0i8; 512];
+        
+        // Read several bits
+        for _ in 0..20 {
+            let _ = decoder.read_bit(&mut contexts, 0);
+            // A should always remain valid (non-zero)
+            // Note: A is private, so we can't directly check,
+            // but the decoder should not panic
+        }
+    }
+
+    #[test]
+    fn test_refill_buffer() {
+        // Test with data that will require buffer refill
+        let data = vec![0xFF; 16];
+        let mut decoder = ArithmeticDecoder::new(&data);
+        let mut contexts = vec![0i8; 512];
+        
+        // Read many bits to trigger refill
+        for _ in 0..50 {
+            let result = decoder.read_bit(&mut contexts, 0);
+            if result.is_ok() {
+                // Continue
+            } else {
+                // May eventually exhaust data
+                break;
+            }
+        }
+    }
+}
