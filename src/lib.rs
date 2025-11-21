@@ -1,4 +1,5 @@
 pub mod arithmetic;
+pub mod arithmetic_tables;
 pub mod bitmap;
 pub mod bitmap_utils;
 pub mod contexts;

@@ -1,294 +1,6 @@
-#[derive(Clone)]
-struct QeEntry {
-    qe: u16,
-    nmps: u8,
-    nlps: u8,
-    switch_flag: u8,
-}
-const QE_TABLE: [QeEntry; 47] = [
-    QeEntry {
-        qe: 0x5601,
-        nmps: 1,
-        nlps: 1,
-        switch_flag: 1,
-    },
-    QeEntry {
-        qe: 0x3401,
-        nmps: 2,
-        nlps: 6,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1801,
-        nmps: 3,
-        nlps: 9,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0ac1,
-        nmps: 4,
-        nlps: 12,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0521,
-        nmps: 5,
-        nlps: 29,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0221,
-        nmps: 38,
-        nlps: 33,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x5601,
-        nmps: 7,
-        nlps: 6,
-        switch_flag: 1,
-    },
-    QeEntry {
-        qe: 0x5401,
-        nmps: 8,
-        nlps: 14,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x4801,
-        nmps: 9,
-        nlps: 14,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x3801,
-        nmps: 10,
-        nlps: 14,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x3001,
-        nmps: 11,
-        nlps: 17,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x2401,
-        nmps: 12,
-        nlps: 18,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1c01,
-        nmps: 13,
-        nlps: 20,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1601,
-        nmps: 29,
-        nlps: 21,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x5601,
-        nmps: 15,
-        nlps: 14,
-        switch_flag: 1,
-    },
-    QeEntry {
-        qe: 0x5401,
-        nmps: 16,
-        nlps: 14,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x5101,
-        nmps: 17,
-        nlps: 15,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x4801,
-        nmps: 18,
-        nlps: 16,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x3801,
-        nmps: 19,
-        nlps: 17,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x3401,
-        nmps: 20,
-        nlps: 18,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x3001,
-        nmps: 21,
-        nlps: 19,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x2801,
-        nmps: 22,
-        nlps: 19,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x2401,
-        nmps: 23,
-        nlps: 20,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x2201,
-        nmps: 24,
-        nlps: 21,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1c01,
-        nmps: 25,
-        nlps: 22,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1801,
-        nmps: 26,
-        nlps: 23,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1601,
-        nmps: 27,
-        nlps: 24,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1401,
-        nmps: 28,
-        nlps: 25,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1201,
-        nmps: 29,
-        nlps: 26,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x1101,
-        nmps: 30,
-        nlps: 27,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0ac1,
-        nmps: 31,
-        nlps: 28,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x09c1,
-        nmps: 32,
-        nlps: 29,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x08a1,
-        nmps: 33,
-        nlps: 30,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0521,
-        nmps: 34,
-        nlps: 31,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0441,
-        nmps: 35,
-        nlps: 32,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x02a1,
-        nmps: 36,
-        nlps: 33,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0221,
-        nmps: 37,
-        nlps: 34,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0141,
-        nmps: 38,
-        nlps: 35,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0111,
-        nmps: 39,
-        nlps: 36,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0085,
-        nmps: 40,
-        nlps: 37,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0049,
-        nmps: 41,
-        nlps: 38,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0025,
-        nmps: 42,
-        nlps: 39,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0015,
-        nmps: 43,
-        nlps: 40,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0009,
-        nmps: 44,
-        nlps: 41,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0005,
-        nmps: 45,
-        nlps: 42,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x0001,
-        nmps: 45,
-        nlps: 43,
-        switch_flag: 0,
-    },
-    QeEntry {
-        qe: 0x5601,
-        nmps: 46,
-        nlps: 46,
-        switch_flag: 0,
-    },
-];
+// Import QE table from separate module
+use crate::arithmetic_tables::QE_TABLE;
+
 pub struct ArithmeticDecoder {
     data: Vec<u8>,
     offset: usize, // Position in data array
@@ -315,8 +27,7 @@ impl ArithmeticDecoder {
             a: 0,
         };
 
-        // CRITICAL: Follow jbig2dec initialization exactly
-        // 1. Read first 4 bytes into buffer (BIG-ENDIAN)
+        // Read first 4 bytes into buffer (BIG-ENDIAN)
         if data.len() >= 4 {
             decoder.next_word = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
             decoder.next_word_bytes = 4;
@@ -327,20 +38,20 @@ impl ArithmeticDecoder {
             for (i, &b) in data.iter().enumerate() {
                 bytes[i] = b;
             }
-                        decoder.next_word = u32::from_be_bytes(bytes);
+            decoder.next_word = u32::from_be_bytes(bytes);
             decoder.next_word_bytes = data.len();
             decoder.offset = data.len();
         }
 
-        // 2. Initialize C: C = (~(next_word >> 8)) & 0xFF0000
+        // Initialize C: C = (~(next_word >> 8)) & 0xFF0000
         let c = (!(decoder.next_word >> 8)) & 0xFF0000;
         decoder.chigh = (c >> 16) & 0xFFFF;
         decoder.clow = c & 0xFFFF;
 
-        // 3. Call byte_in (operates on buffer!)
+        // Call byte_in (operates on buffer!)
         decoder.byte_in();
 
-        // 4. Finalize: C <<= 7, CT -= 7, A = 0x8000
+        // Finalize: C <<= 7, CT -= 7, A = 0x8000
         let c = (decoder.chigh << 16) | decoder.clow;
         let c = c << 7;
         decoder.chigh = (c >> 16) & 0xFFFF;
@@ -353,13 +64,12 @@ impl ArithmeticDecoder {
 
     fn byte_in(&mut self) {
         // CRITICAL: This operates on the buffered next_word, NOT on data[offset]!
-        // Based on jbig2_arith.c:92-183
 
-        // Line 92: Get current top byte from buffer
+        // Get current top byte from buffer
         let b_check = ((self.next_word >> 24) & 0xFF) as u8;
 
         if b_check == 0xFF {
-            // Special 0xFF handling (jbig2_arith.c:93-149)
+            // Special 0xFF handling
             // Shift buffer
             self.next_word <<= 8;
             self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
@@ -383,8 +93,7 @@ impl ArithmeticDecoder {
             self.clow = self.clow.wrapping_add(0xFF00 | (b1 as u32));
             self.ct = 7;
         } else {
-            // Normal byte (jbig2_arith.c:154-183)
-            // Line 154: Shift buffer left
+            // Normal byte
             self.next_word <<= 8;
             self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
 
@@ -393,10 +102,10 @@ impl ArithmeticDecoder {
                 self.refill_buffer();
             }
 
-            // Line 177: Get NEW top byte from buffer (after shift!)
+            // Get NEW top byte from buffer (after shift!)
             let b = ((self.next_word >> 24) & 0xFF) as u8;
 
-            // Line 178: Update C
+            // Update C
             let full_c = (self.chigh << 16) | self.clow;
             let full_c = full_c.wrapping_add(0xFF00 - ((b as u32) << 8));
             self.chigh = full_c >> 16 & 0xFFFF;
@@ -497,7 +206,6 @@ impl ArithmeticDecoder {
             // renormD will follow below
         }
 
-        // renormD (Figure E.18) - only reached if renormalization needed
         // renormD (Figure E.18) - only reached if renormalization needed
         let mut loop_count = 0;
         loop {

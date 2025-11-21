@@ -4,5 +4,7 @@ pub mod decode_mmr;
 pub mod decode_pattern;
 pub mod decode_refinement;
 pub mod decode_symbol;
+pub mod decode_symbol_helpers;
 pub mod decode_text;
 pub mod decode_utils;
+pub mod mmr_tables;

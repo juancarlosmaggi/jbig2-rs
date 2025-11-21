@@ -4,6 +4,7 @@ mod types;
 mod utils;
 mod parser;
 mod processor;
+mod segment_params;
 
 // Re-export public types and constants
 pub use types::{
@@ -37,12 +38,16 @@ pub use parser::{
     read_region_segment_information,
     read_generic_region,
     read_segments,
-    HalftoneRegionParams,
-    TextRegionParams,
-    PatternDictionaryParams,
     parse_halftone_region_params,
     parse_text_region_params,
     parse_pattern_dictionary_params,
+};
+
+// Re-export parameter structs
+pub use segment_params::{
+    HalftoneRegionParams,
+    TextRegionParams,
+    PatternDictionaryParams,
 };
 
 // Re-export public processor functions

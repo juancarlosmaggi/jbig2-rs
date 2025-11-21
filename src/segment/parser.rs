@@ -3,6 +3,7 @@
 use crate::error::Jbig2Error;
 use super::types::*;
 use super::utils::*;
+use super::segment_params::{HalftoneRegionParams, TextRegionParams, PatternDictionaryParams};
 
 pub fn read_segment_header(
     data: &[u8],
@@ -162,23 +163,6 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
     })
 }
 
-/// Parameters parsed from halftone region segment
-#[derive(Debug)]
-pub struct HalftoneRegionParams {
-    pub region_info: RegionInfo,
-    pub mmr: bool,
-    pub template: usize,
-    pub enable_skip: bool,
-    pub combination_operator: usize,
-    pub default_pixel_value: u8,
-    pub grid_width: usize,
-    pub grid_height: usize,
-    pub grid_offset_x: i32,
-    pub grid_offset_y: i32,
-    pub grid_vector_x: i16,
-    pub grid_vector_y: i16,
-}
-
 /// Parse halftone region parameters (segments 20, 22, 23)
 /// Extracts region info, flags, and grid parameters
 pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegionParams {
@@ -220,14 +204,6 @@ pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegion
     }
 }
 
-/// Parameters parsed from text region segment
-#[derive(Debug)]
-pub struct TextRegionParams {
-    pub region_info: RegionInfo,
-    pub text_region_segment_flags: u16,
-    pub number_of_symbol_instances: u32,
-}
-
 /// Parse text region common parameters (segments 4, 6, 7)
 /// Returns region info, flags, and symbol instance count
 pub fn parse_text_region_params(data: &[u8], start: usize, referred_size: usize, referred_count: usize) -> TextRegionParams {
@@ -244,16 +220,6 @@ pub fn parse_text_region_params(data: &[u8], start: usize, referred_size: usize,
         text_region_segment_flags,
         number_of_symbol_instances,
     }
-}
-
-/// Parameters parsed from pattern dictionary segment
-#[derive(Debug)]
-pub struct PatternDictionaryParams {
-    pub mmr: bool,
-    pub template: usize,
-    pub pattern_width: usize,
-    pub pattern_height: usize,
-    pub max_pattern_index: usize,
 }
 
 /// Parse pattern dictionary parameters (segment 16)

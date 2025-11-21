@@ -2,6 +2,7 @@ use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
 use crate::decode::decode_mmr::decode_mmr_bitmap;
 use crate::decode::decode_utils::read_uncompressed_bitmap;
+use crate::decode::decode_symbol_helpers::{split_collective_bitmap, decode_aggregate_symbol, AggregateSymbolParams};
 use crate::decoder::{decode_i32_huffman_or_arith, decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
 use crate::huffman::SymbolDictionaryHuffmanTables;
@@ -105,32 +106,21 @@ pub fn decode_symbol_dictionary(
                         .table_aggregate_instances
                         .decode(huffman_input.as_mut().unwrap())?;
                     if number_of_instances > 1 {
-                        // Aggregate symbol logic (unchanged)
-                        let mut input_symbols = params.symbols.clone();
-                        input_symbols.extend(new_symbols.clone());
-                        let text_params = crate::decode::decode_text::TextRegionParams {
-                            huffman: false,
-                            refinement: params.refinement,
-                            width: current_width as usize,
-                            height: current_height as usize,
-                            default_pixel_value: 0,
-                            number_of_symbol_instances: number_of_instances as usize,
-                            strip_size: 1,
-                            input_symbols,
+                        // Aggregate symbol - use helper
+                        let aggregate_params = AggregateSymbolParams {
+                            current_width,
+                            current_height,
+                            number_of_instances,
                             symbol_code_length: symbol_code_length as usize,
-                            transposed: false,
-                            ds_offset: 0,
-                            reference_corner: 1,
-                            combination_operator: 0,
-                            log_strip_size: 0,
-                            huffman_tables: None,
+                            refinement: params.refinement,
                             refinement_template_index: params.refinement_template_index,
                             refinement_at: params.refinement_at.clone(),
                         };
-                        let bitmap = crate::decode::decode_text::decode_text_region(
-                            &text_params,
+                        let bitmap = decode_aggregate_symbol(
+                            &aggregate_params,
+                            &params.symbols,
+                            &new_symbols,
                             decoding_context,
-                            None,
                         )?;
                         new_symbols.push(bitmap);
                     } else {
@@ -171,18 +161,8 @@ pub fn decode_symbol_dictionary(
                     )?;
 
                     // Split collective bitmap into individual symbol bitmaps
-                    let mut current_x = 0;
-                    for width in symbol_widths.iter() {
-                        let mut symbol_bitmap = Bitmap::new(*width, current_height as usize);
-                        for y in 0..(current_height as usize) {
-                            for x in 0..*width {
-                                let pixel = collective_bitmap.get_pixel(current_x + x, y);
-                                symbol_bitmap.set_pixel(x, y, pixel);
-                            }
-                        }
-                        new_symbols.push(symbol_bitmap);
-                        current_x += *width;
-                    }
+                    let symbols = split_collective_bitmap(&collective_bitmap, &symbol_widths, current_height as usize, 0);
+                    new_symbols.extend(symbols);
                 } else {
                     // BMSIZE > 0 means MMR-coded collective bitmap
 
@@ -211,18 +191,8 @@ pub fn decode_symbol_dictionary(
                     huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
 
                     // Split collective bitmap into individual symbol bitmaps
-                    let mut current_x = 0;
-                    for width in symbol_widths.iter() {
-                        let mut symbol_bitmap = Bitmap::new(*width, current_height as usize);
-                        for y in 0..(current_height as usize) {
-                            for x in 0..*width {
-                                let pixel = collective_bitmap.get_pixel(current_x + x, y);
-                                symbol_bitmap.set_pixel(x, y, pixel);
-                            }
-                        }
-                        new_symbols.push(symbol_bitmap);
-                        current_x += *width;
-                    }
+                    let symbols = split_collective_bitmap(&collective_bitmap, &symbol_widths, current_height as usize, 0);
+                    new_symbols.extend(symbols);
                 }
                 // Decoding of this height class is complete, continue to next height class
             }
@@ -285,32 +255,21 @@ pub fn decode_symbol_dictionary(
                     let number_of_instances =
                         decode_integer_context(decoding_context, "IAAI")?.unwrap_or(1);
                     if number_of_instances > 1 {
-                        // Aggregate symbol - decode text region
-                        let mut input_symbols = params.symbols.clone();
-                        input_symbols.extend(new_symbols.clone());
-                        let text_params = crate::decode::decode_text::TextRegionParams {
-                            huffman: false, // Aggregate doesn't use Huffman
-                            refinement: params.refinement,
-                            width: current_width as usize,
-                            height: current_height as usize,
-                            default_pixel_value: 0,
-                            number_of_symbol_instances: number_of_instances as usize,
-                            strip_size: 1,
-                            input_symbols,
+                        // Aggregate symbol - use helper
+                        let aggregate_params = AggregateSymbolParams {
+                            current_width,
+                            current_height,
+                            number_of_instances,
                             symbol_code_length: symbol_code_length as usize,
-                            transposed: false,
-                            ds_offset: 0,
-                            reference_corner: 1,     // top left
-                            combination_operator: 0, // OR
-                            log_strip_size: 0,
-                            huffman_tables: None,
+                            refinement: params.refinement,
                             refinement_template_index: params.refinement_template_index,
                             refinement_at: params.refinement_at.clone(),
                         };
-                        let bitmap = crate::decode::decode_text::decode_text_region(
-                            &text_params,
+                        let bitmap = decode_aggregate_symbol(
+                            &aggregate_params,
+                            &params.symbols,
+                            &new_symbols,
                             decoding_context,
-                            None,
                         )?;
                         new_symbols.push(bitmap);
                     } else {
@@ -405,24 +364,9 @@ pub fn decode_symbol_dictionary(
                     // collectiveBitmap is a single symbol.
                     new_symbols.push(collective_bitmap);
                 } else {
-                    // Divide collectiveBitmap into symbols.
-                    let mut x_min = 0;
-                    for &bitmap_width in symbol_widths
-                        .iter()
-                        .skip(first_symbol)
-                        .take(number_of_symbols_decoded - first_symbol)
-                    {
-                        let x_max = x_min + bitmap_width;
-                        let mut symbol_bitmap = Bitmap::new(bitmap_width, current_height as usize);
-                        for y in 0..current_height as usize {
-                            for x in 0..bitmap_width {
-                                let pixel = collective_bitmap.get_pixel(x_min + x, y);
-                                symbol_bitmap.set_pixel(x, y, pixel);
-                            }
-                        }
-                        new_symbols.push(symbol_bitmap);
-                        x_min = x_max;
-                    }
+                    // Divide collective bitmap into symbols using helper
+                    let symbols = split_collective_bitmap(&collective_bitmap, &symbol_widths, current_height as usize, first_symbol);
+                    new_symbols.extend(symbols);
                 }
             }
         }
