@@ -61,17 +61,8 @@ pub(super) fn on_page_information(
     // Validate dimensions: only check for zero, not for max size
     // Large dimensions are allowed - allocation will naturally fail if too large
     if info.width == 0 || info.height == 0 {
-        println!(
-            "Skipping invalid page dimensions (zero): {}x{}",
-            info.width, info.height
-        );
         return;
     }
-
-    println!(
-        "Page info: width={}, height={}, xres={}, yres={}",
-        info.width, info.height, info.resolution_x, info.resolution_y
-    );
 
     // If we have a previous page, finalize it
     if let (Some(page_info), Some(bitmap)) = (current_page_info.take(), current_bitmap.take()) {

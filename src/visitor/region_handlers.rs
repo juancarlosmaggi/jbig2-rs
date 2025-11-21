@@ -71,10 +71,6 @@ pub(super) fn on_immediate_generic_region(
     end: usize,
 ) -> Result<(), Jbig2Error> {
     let region_info = &region.info;
-    println!(
-        "Generic region: width={}, height={}",
-        region_info.width, region_info.height
-    );
     if region_info.width == 0 || region_info.height == 0 {
         return Ok(());
     }

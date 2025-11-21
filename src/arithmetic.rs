@@ -327,37 +327,18 @@ impl ArithmeticDecoder {
             for (i, &b) in data.iter().enumerate() {
                 bytes[i] = b;
             }
-            decoder.next_word = u32::from_be_bytes(bytes);
+                        decoder.next_word = u32::from_be_bytes(bytes);
             decoder.next_word_bytes = data.len();
             decoder.offset = data.len();
         }
 
-        eprintln!("=== ARITHMETIC INIT DEBUG ===");
-        eprintln!(
-            "First 4 bytes in buffer: {:02X} {:02X} {:02X} {:02X}",
-            (decoder.next_word >> 24) & 0xFF,
-            (decoder.next_word >> 16) & 0xFF,
-            (decoder.next_word >> 8) & 0xFF,
-            decoder.next_word & 0xFF
-        );
-        eprintln!(
-            "After step 1: next_word = 0x{:08X}, next_word_bytes = {}, offset = {}",
-            decoder.next_word, decoder.next_word_bytes, decoder.offset
-        );
-
         // 2. Initialize C: C = (~(next_word >> 8)) & 0xFF0000
         let c = (!(decoder.next_word >> 8)) & 0xFF0000;
-        eprintln!("After step 2: C = 0x{:08X}", c);
         decoder.chigh = (c >> 16) & 0xFFFF;
         decoder.clow = c & 0xFFFF;
 
         // 3. Call byte_in (operates on buffer!)
         decoder.byte_in();
-        let c_after = (decoder.chigh << 16) | decoder.clow;
-        eprintln!(
-            "After step 3 (bytein): C = 0x{:08X}, CT = {}",
-            c_after, decoder.ct
-        );
 
         // 4. Finalize: C <<= 7, CT -= 7, A = 0x8000
         let c = (decoder.chigh << 16) | decoder.clow;
@@ -366,13 +347,6 @@ impl ArithmeticDecoder {
         decoder.clow = c & 0xFFFF;
         decoder.ct -= 7;
         decoder.a = 0x8000;
-
-        let c_final = (decoder.chigh << 16) | decoder.clow;
-        eprintln!(
-            "After step 4 (finalize): A=0x{:04X}, C=0x{:08X}, CT={}",
-            decoder.a, c_final, decoder.ct
-        );
-        eprintln!("============================");
 
         decoder
     }
@@ -538,19 +512,18 @@ impl ArithmeticDecoder {
                 break;
             }
             
-            // Safety check: If A is 0, we will never reach 0x8000 by shifting left.
+            // TODO: Safety check - prevents infinite loop if A becomes 0
+            // Consider returning proper error instead of force-fixing state
             if self.a == 0 {
-                 // This should theoretically not happen in valid streams, but prevents infinite loop
-                 // Force A to a valid state or return error? 
-                 // Since we can't return error easily here (signature is Ok(d)), we'll break and let it produce garbage/error later.
-                 // Better to panic or log?
                  eprintln!("CRITICAL ERROR: ArithmeticDecoder A became 0. Breaking infinite loop.");
                  self.a = 0x8000; // Force valid state
                  break;
             }
 
             loop_count += 1;
-            if loop_count > 100 { // 32 shifts should be enough for u32
+            // TODO: Safety check - prevents stuck renormalization loop
+            // Consider returning proper error instead of force-fixing state
+            if loop_count > 100 {
                  eprintln!("CRITICAL ERROR: ArithmeticDecoder renormD stuck. A={:x}", self.a);
                  self.a = 0x8000;
                  break;

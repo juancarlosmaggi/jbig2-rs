@@ -31,10 +31,6 @@ pub(super) fn on_immediate_halftone_region(
     start: usize,
     end: usize,
 ) -> Result<(), Jbig2Error> {
-    println!(
-        "Halftone region: width={}, height={}",
-        region_info.width, region_info.height
-    );
     if region_info.width == 0 || region_info.height == 0 {
         return Ok(());
     }

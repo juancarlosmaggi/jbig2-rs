@@ -26,11 +26,6 @@ pub(super) fn on_immediate_text_region(
     start: usize,
     end: usize,
 ) -> Result<(), Jbig2Error> {
-    println!(
-        "Entering on_immediate_text_region, start: {}, end: {}",
-        start, end
-    );
-
     if current_page_info.is_none() {
         *current_page_info = Some(PageInfo {
             width: region_info.width,
@@ -67,7 +62,6 @@ pub(super) fn on_immediate_text_region(
     // Parse Huffman flags and refinement AT
     let mut refinement_at = Vec::new();
     let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
-    println!("Initial pos: {}", pos);
 
     let mut huffman_fs = 0u8;
     let mut huffman_ds = 0u8;
@@ -81,7 +75,6 @@ pub(super) fn on_immediate_text_region(
     if huffman && pos + 2 <= end {
         let huffman_flags = read_u16(data, pos);
         pos += 2;
-        println!("After huffman_flags pos: {}", pos);
         huffman_fs = (huffman_flags & 3) as u8;
         huffman_ds = ((huffman_flags >> 2) & 3) as u8;
         huffman_dt = ((huffman_flags >> 4) & 3) as u8;
@@ -99,11 +92,9 @@ pub(super) fn on_immediate_text_region(
             refinement_at.push((x, y));
             pos += 2;
         }
-        println!("After refinement_at pos: {}", pos);
     } // else default empty
 
     let slice = &data[pos.min(end)..end];
-    println!("Slicing from {} to {}", pos.min(end), end);
 
     let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
 
