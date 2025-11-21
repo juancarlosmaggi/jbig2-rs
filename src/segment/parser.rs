@@ -118,11 +118,7 @@ pub fn read_segment_header(
             return Err(Jbig2Error::new(ERR_UNKNOWN_LENGTH));
         }
     }
-    println!("Segment header at {}: number={}, type={}, flags={:02x}, page_assoc={}, length={}, header_end={}", 
-        start, number, segment_type, flags, pa, length, pos);
-    if segment_type == 48 || segment_type == 62 {
-        println!("  -> Segment type {} at 0x{:04x}, data will start at 0x{:04x}", segment_type, start, pos);
-    }
+
     Ok(SegmentHeader {
         number,
         segment_type,
@@ -288,8 +284,7 @@ pub fn read_segments<'a>(
     let mut segments = vec![];
     let mut pos = start;
     
-    println!("read_segments: mode={}, start=0x{:04x}, end=0x{:04x}", 
-        if sequential { "sequential" } else { "random-access" }, start, end);
+
     
     if sequential {
         // SEQUENTIAL MODE: Parse header and data together
@@ -300,9 +295,7 @@ pub fn read_segments<'a>(
             
             match read_segment_header(data, pos, has_file_header) {
                 Ok(segment_header) => {
-                    println!("  Segment {}: type={}, header_end=0x{:04x}, length={}", 
-                        segment_header.number, segment_header.segment_type, 
-                        segment_header.header_end, segment_header.length);
+
                     
                     // Move past header
                     pos = segment_header.header_end;
@@ -339,7 +332,7 @@ pub fn read_segments<'a>(
         // RANDOM-ACCESS MODE: Two-phase parsing
         
         // PHASE 1: Parse ALL segment headers (directory)
-        println!("PHASE 1: Parsing segment directory");
+
         let mut headers = vec![];
         
         while pos < end {
@@ -349,9 +342,7 @@ pub fn read_segments<'a>(
             
             match read_segment_header(data, pos, has_file_header) {
                 Ok(segment_header) => {
-                    println!("  Directory entry {}: type={}, header at 0x{:04x}-0x{:04x}, data_length={}", 
-                        segment_header.number, segment_header.segment_type, 
-                        pos, segment_header.header_end, segment_header.length);
+
                     
                     // Move past header
                     pos = segment_header.header_end;
@@ -362,7 +353,7 @@ pub fn read_segments<'a>(
                     
                     // EOF segment marks end of directory
                     if is_eof {
-                        println!("  → End of directory (EOF segment)");
+
                         break;
                     }
                 }
@@ -370,19 +361,17 @@ pub fn read_segments<'a>(
             }
         }
         
-        println!("Directory complete: {} segments, data area starts at 0x{:04x}", 
-            headers.len(), pos);
+
         
         // PHASE 2: Parse ALL segment data (in same order as headers)
-        println!("PHASE 2: Parsing segment data");
+
         let _data_area_start = pos;
         
-        for (i, header) in headers.into_iter().enumerate() {
+        for header in headers.into_iter() {
             let segment_start = pos;
             let segment_end = pos + header.length;
             
-            println!("  Segment {} data: 0x{:04x}-0x{:04x} ({} bytes)", 
-                i, segment_start, segment_end, header.length);
+
             
             // Validate we have enough data
             if segment_end > end {
@@ -401,6 +390,6 @@ pub fn read_segments<'a>(
         }
     }
     
-    println!("read_segments: parsed {} segments", segments.len());
+
     Ok(segments)
 }

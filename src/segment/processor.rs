@@ -108,16 +108,7 @@ pub fn process_segment<'a>(
             let number_of_exported_symbols = read_u32(data, offset);
             let number_of_new_symbols = read_u32(data, offset + 4);
             
-            eprintln!("Symbol Dict Segment {}:", header.number);
-            eprintln!("  Flags: 0x{:04x}", dictionary_flags);
-            eprintln!("  SDHUFF: {}", sdhuff);
-            eprintln!("  SDREFAGG: {}", sdrefagg);
-            eprintln!("  SDTEMPLATE: {}", sdtemplate);
-            eprintln!("  Offset after flags: {}", start + 2);
-            eprintln!("  Offset for counts: {}", offset);
-            eprintln!("  SDNUMEXSYMS: {}", number_of_exported_symbols);
-            eprintln!("  SDNUMNEWSYMS: {}", number_of_new_symbols);
-            eprintln!("  Data start: {}", offset + 8);
+
 
             // Sanity check to catch parsing errors early
             if number_of_new_symbols > 1_000_000 {
@@ -166,24 +157,14 @@ pub fn process_segment<'a>(
         }
         48 => {
             // PageInformation  
-            println!("Processing PageInformation segment {}", header.number);
-            println!("PageInfo segment data starts at offset 0x{:04x} ({})", start, start);
-            if end - start >= 19 {
-                println!("PageInfo bytes: {:02x?}", &data[start..start+19]);
-            }
+
             // Per JBIG2 spec and reference implementation: ALL fields use BIG-ENDIAN
             let mut width = read_u32(data, start);
             let mut height = read_u32(data, start + 4);
             let resolution_x = read_u32(data, start + 8);
             let resolution_y = read_u32(data, start + 12);
             let page_segment_flags = data[start + 16];
-            println!(
-                "Page info raw: width={}, height={}, xres={}, yres={} at segment {}",
-                width, height, resolution_x, resolution_y, header.number
-            );
-            println!("Parsed from bytes: width=[{:02x} {:02x} {:02x} {:02x}], height=[{:02x} {:02x} {:02x} {:02x}]",
-                data[start], data[start+1], data[start+2], data[start+3],
-                data[start+4], data[start+5], data[start+6], data[start+7]);
+
             if width == 0 || height == 0 {
                 width = 1;
                 height = 1;
@@ -206,9 +187,7 @@ pub fn process_segment<'a>(
                 requires_buffer,
                 combination_operator_override,
             };
-            println!("Calling visitor.on_page_information from segment {}",
-                header.number
-            );
+
             visitor.on_page_information(info);
         }
         16 => {
@@ -347,7 +326,7 @@ pub fn process_segment<'a>(
         }
         62 => {
             // Extension segment - ignore completely (as jbig2dec does)
-            println!("Extension segment: ignoring as comment/metadata");
+
             // Don't process anything from extension segments
         }
         _ => {} // Unknown segment types

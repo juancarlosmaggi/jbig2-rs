@@ -320,17 +320,9 @@ impl CCITTFaxDecoder {
                         return Ok(total);
                     }
                 }
-                eprintln!(
-                    "DEBUG: Invalid terminating code after makeup: {:b} (len={}) white={}",
-                    code, length, white
-                );
                 return Err(Jbig2Error::new("invalid terminating code after makeup"));
             }
         }
-        eprintln!(
-            "DEBUG: Run length code too long: {:b} (len={}) white={}",
-            code, length, white
-        );
         Err(Jbig2Error::new("run length code too long"))
     }
     // White run length terminating codes
