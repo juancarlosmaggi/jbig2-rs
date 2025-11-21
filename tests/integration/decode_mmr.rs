@@ -1,10 +1,10 @@
 use jbig2_rs::decode::decode_mmr::decode_mmr_bitmap;
-use jbig2_rs::reader::Reader;
+use crate::common::create_test_reader;
 
 #[test]
 fn test_decode_mmr_simple() {
     let data = vec![0u8; 10];
-    let mut reader = Reader::new(data, 0, 10);
+    let mut reader = create_test_reader(data);
     let result = decode_mmr_bitmap(&mut reader, 8, 8, false);
     assert!(result.is_ok());
     let bitmap = result.unwrap();
@@ -22,7 +22,7 @@ fn test_decode_mmr_zero_dimensions() {
     let data = vec![0u8; 10];
 
     // Zero width
-    let mut reader = Reader::new(data.clone(), 0, 10);
+    let mut reader = create_test_reader(data.clone());
     let result = decode_mmr_bitmap(&mut reader, 0, 8, false);
     assert!(result.is_ok());
     let bitmap = result.unwrap();
@@ -30,7 +30,7 @@ fn test_decode_mmr_zero_dimensions() {
     assert_eq!(bitmap.height, 8);
 
     // Zero height
-    let mut reader = Reader::new(data, 0, 10);
+    let mut reader = create_test_reader(data);
     let result = decode_mmr_bitmap(&mut reader, 8, 0, false);
     assert!(result.is_ok());
     let bitmap = result.unwrap();
@@ -41,7 +41,7 @@ fn test_decode_mmr_zero_dimensions() {
 #[test]
 fn test_decode_mmr_empty_data() {
     let data = vec![];
-    let mut reader = Reader::new(data, 0, 0);
+    let mut reader = create_test_reader(data);
     let result = decode_mmr_bitmap(&mut reader, 8, 8, false);
     assert!(result.is_ok());
     let bitmap = result.unwrap();
@@ -57,7 +57,7 @@ fn test_decode_mmr_empty_data() {
 #[test]
 fn test_decode_mmr_insufficient_data() {
     let data = vec![0xFF];
-    let mut reader = Reader::new(data, 0, 1);
+    let mut reader = create_test_reader(data);
     let result = decode_mmr_bitmap(&mut reader, 64, 64, false);
     assert!(result.is_ok());
     let bitmap = result.unwrap();
@@ -73,7 +73,7 @@ fn test_decode_mmr_insufficient_data() {
 #[test]
 fn test_decode_mmr_end_of_block() {
     let data = vec![0u8; 100];
-    let mut reader = Reader::new(data, 0, 100);
+    let mut reader = create_test_reader(data);
     let result = decode_mmr_bitmap(&mut reader, 16, 16, true);
     assert!(result.is_ok());
     let bitmap = result.unwrap();
@@ -100,7 +100,7 @@ fn test_decode_mmr_different_sizes() {
 
     for (width, height) in test_cases {
         let data = vec![0u8; 1000];
-        let mut reader = Reader::new(data, 0, 1000);
+        let mut reader = create_test_reader(data);
         let result = decode_mmr_bitmap(&mut reader, width, height, false);
         assert!(result.is_ok(), "Failed for size {}x{}", width, height);
         let bitmap = result.unwrap();
@@ -121,7 +121,7 @@ fn test_decode_mmr_different_sizes() {
 #[test]
 fn test_decode_mmr_large_dimensions() {
     let data = vec![0u8; 10000];
-    let mut reader = Reader::new(data, 0, 10000);
+    let mut reader = create_test_reader(data);
     let result = decode_mmr_bitmap(&mut reader, 1000, 1000, false);
     assert!(result.is_ok());
     let bitmap = result.unwrap();

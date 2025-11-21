@@ -140,7 +140,14 @@ Err(Jbig2Error::invalid_template_index(5, 3))
 - Predictable memory usage with pre-allocation
 - Comprehensive benchmarking suite for tracking future changes
 
-### 5. Configuration and Features
+### 5. Extended Test Coverage
+
+**Missing:**
+- [ ] **Property-Based Testing**: Use `proptest` for arithmetic/MMR decoders
+- [ ] **Malformed File Handling**: Fuzz testing with `cargo-fuzz`
+- [ ] **Performance Regression Tests**: CI checks for performance degradation
+
+### 6. Configuration and Features
 
 **Add Feature Flags:**
 ```toml
@@ -151,13 +158,6 @@ no-std = []  # Support no_std environments
 debug-output = []  # Enable debug prints
 strict-validation = []  # Extra validation checks
 ```
-
-### 6. Extended Test Coverage
-
-**Missing:**
-- [ ] **Property-Based Testing**: Use `proptest` for arithmetic/MMR decoders
-- [ ] **Malformed File Handling**: Fuzz testing with `cargo-fuzz`
-- [ ] **Performance Regression Tests**: CI checks for performance degradation
 
 ## Low-Priority Enhancements
 
