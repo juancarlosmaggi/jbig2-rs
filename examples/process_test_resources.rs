@@ -42,8 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     
     for (index, (filename, name)) in test_files.iter().enumerate() {
-        println!("{} Processing file {} of {}: {}", 
-            "📄", index + 1, test_files.len(), filename);
+        println!("📄 Processing file {} of {}: {}", 
+            index + 1, test_files.len(), filename);
         println!("{}", "-".repeat(60));
         
         // Read the file
