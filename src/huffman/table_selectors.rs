@@ -139,6 +139,7 @@ pub struct TextRegionHuffmanParams {
     pub huffman_refinement_dx: u8,
     pub huffman_refinement_dy: u8,
     pub huffman_refinement_size_selector: bool,
+    pub huffman_ri: bool,
 }
 
 #[derive(Clone)]
@@ -152,6 +153,7 @@ pub struct TextRegionHuffmanTables {
     pub table_refinement_dx: Option<HuffmanTable>,
     pub table_refinement_dy: Option<HuffmanTable>,
     pub table_refinement_size: Option<HuffmanTable>,
+    pub table_refinement_ri: Option<HuffmanTable>,
 }
 
 pub fn get_text_region_huffman_tables(
@@ -309,6 +311,17 @@ pub fn get_text_region_huffman_tables(
         Some(get_standard_table(1)?)
     };
 
+    let table_refinement_ri = if params.huffman_ri {
+        custom_index += 1;
+        Some(get_custom_huffman_table(
+            custom_index - 1,
+            referred_to,
+            custom_tables,
+        )?)
+    } else {
+        Some(get_standard_table(1)?)
+    };
+
     Ok(TextRegionHuffmanTables {
         symbol_id_table,
         table_first_s,
@@ -319,6 +332,7 @@ pub fn get_text_region_huffman_tables(
         table_refinement_dx,
         table_refinement_dy,
         table_refinement_size,
+        table_refinement_ri,
     })
 }
 

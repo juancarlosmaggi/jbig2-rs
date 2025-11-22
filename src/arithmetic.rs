@@ -276,21 +276,15 @@ impl ArithmeticDecoder {
                 break;
             }
             
-            // TODO: Safety check - prevents infinite loop if A becomes 0
-            // Consider returning proper error instead of force-fixing state
+            // Safety check - prevents infinite loop if A becomes 0
             if self.a == 0 {
-                 eprintln!("CRITICAL ERROR: ArithmeticDecoder A became 0. Breaking infinite loop.");
-                 self.a = 0x8000; // Force valid state
-                 break;
+                 return Err(crate::error::Jbig2Error::new("arithmetic decoder state corrupted: A=0"));
             }
 
             loop_count += 1;
-            // TODO: Safety check - prevents stuck renormalization loop
-            // Consider returning proper error instead of force-fixing state
+            // Safety check - prevents stuck renormalization loop
             if loop_count > 100 {
-                 eprintln!("CRITICAL ERROR: ArithmeticDecoder renormD stuck. A={:x}", self.a);
-                 self.a = 0x8000;
-                 break;
+                 return Err(crate::error::Jbig2Error::new("arithmetic decoder stuck in renormalization"));
             }
         }
 
@@ -298,6 +292,13 @@ impl ArithmeticDecoder {
         // SAFETY: pos is within bounds as checked at start
         unsafe { *contexts.get_unchecked_mut(pos) = ((new_cx_index as i8) << 1) | (cx_mps as i8) };
         Ok(d)
+    }
+
+    /// Returns the number of bytes consumed from the input stream.
+    /// This includes bytes currently buffered in the decoder but not yet fully processed.
+    /// Note: This is an approximation for switching between coding methods.
+    pub fn get_bytes_read(&self) -> usize {
+        self.offset - self.next_word_bytes
     }
 }
 

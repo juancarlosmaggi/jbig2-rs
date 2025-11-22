@@ -97,4 +97,12 @@ impl DecodingContext {
     pub fn get_contexts(&self, id: &str) -> std::cell::RefMut<'_, Vec<i8>> {
         std::cell::RefMut::map(self.context_cache.borrow_mut(), |c| c.get_contexts(id))
     }
+
+    pub fn get_bytes_read(&self) -> usize {
+        if let Some(decoder) = self.decoder.borrow().as_ref() {
+            decoder.get_bytes_read()
+        } else {
+            0
+        }
+    }
 }

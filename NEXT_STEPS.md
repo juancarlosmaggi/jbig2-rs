@@ -23,6 +23,11 @@ This document outlines potential improvements and future work for the jbig2-rs p
 - ✅ **Helper Functions**: Created `parse_halftone_region_params()`, `parse_text_region_params()`, `parse_pattern_dictionary_params()`
 - ✅ **File Size Reduction**: `processor.rs` reduced from 400 to 356 lines (11% reduction)
 
+### Additional Features (November 2025)
+- ✅ **Arithmetic Decoder Safety**: Added infinite loop prevention and renormalization limits
+- ✅ **Refinement with Huffman**: Implemented mixed Huffman/Arithmetic decoding support
+- ✅ **Extension Segments**: Verified graceful handling of ignored segments
+
 **Current Status:**
 - 64 tests passing (up from original 57)
 - Zero clippy warnings
@@ -255,13 +260,20 @@ strict-validation = []  # Extra validation checks
 - Progress indicators for large files
 - Info mode to show file metadata without decoding
 
-### 8. Additional JBIG2 Features
+### 8. Additional JBIG2 Features ✅
 
-**Not Yet Implemented:**
-- Some refinement modes
-- Advanced Huffman configurations
-- Certain extension segments
-- Multi-page document handling improvements
+**Status:** COMPLETED (November 2025)
+
+**Completed Work:**
+- ✅ **Arithmetic Decoder Safety**: Implemented checks for infinite loops (A=0) and renormalization limits.
+- ✅ **Refinement with Huffman**: Implemented full support, including Refinement Indicator (RI) table and mixed Huffman/Arithmetic decoding.
+- ✅ **Extension Segments**: Verified graceful handling (ignored without error).
+- ✅ **Multi-page document handling**: Confirmed existing support is sufficient.
+
+**Verification:**
+- ✅ All 147 tests passing
+- ✅ Zero clippy warnings
+- ✅ Benchmarks show no regressions
 
 ### 9. CI/CD Setup
 

@@ -71,6 +71,7 @@ pub(super) fn on_immediate_text_region(
     let mut huffman_refinement_dx = 0u8;
     let mut huffman_refinement_dy = 0u8;
     let mut huffman_refinement_size_selector = false;
+    let mut huffman_ri = false;
 
     if huffman && pos + 2 <= end {
         let huffman_flags = read_u16(data, pos);
@@ -83,6 +84,7 @@ pub(super) fn on_immediate_text_region(
         huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
         huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
         huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
+        huffman_ri = (huffman_flags & 0x8000) != 0;
     } // else default 0
 
     if refinement && refinement_template == 0 && pos + 4 <= end {
@@ -115,6 +117,7 @@ pub(super) fn on_immediate_text_region(
             huffman_refinement_dx,
             huffman_refinement_dy,
             huffman_refinement_size_selector,
+            huffman_ri,
         };
         Some(crate::huffman::get_text_region_huffman_tables(
             &params,
@@ -207,6 +210,7 @@ pub(super) fn on_intermediate_text_region(
     let mut huffman_refinement_dx = 0u8;
     let mut huffman_refinement_dy = 0u8;
     let mut huffman_refinement_size_selector = false;
+    let mut huffman_ri = false;
 
     if huffman && pos + 2 <= end {
         let huffman_flags = read_u16(data, pos);
@@ -219,6 +223,7 @@ pub(super) fn on_intermediate_text_region(
         huffman_refinement_dx = ((huffman_flags >> 10) & 3) as u8;
         huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
         huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
+        huffman_ri = (huffman_flags & 0x8000) != 0;
     } // else default 0
 
     if refinement && refinement_template == 0 && pos + 4 <= end {
@@ -251,6 +256,7 @@ pub(super) fn on_intermediate_text_region(
             huffman_refinement_dx,
             huffman_refinement_dy,
             huffman_refinement_size_selector,
+            huffman_ri,
         };
         Some(crate::huffman::get_text_region_huffman_tables(
             &params,
