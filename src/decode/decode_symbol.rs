@@ -72,7 +72,7 @@ pub fn decode_symbol_dictionary(
         }
         if current_height == 0 {
             continue;
-        } // zero height class is allowed (skips class)
+        }
 
         let mut current_width: i32 = 0;
         let mut total_width: i32 = 0;
@@ -109,16 +109,21 @@ pub fn decode_symbol_dictionary(
                 // Number of instances (IAAI / SDHUFFAGGINST)
                 let instances = if huffman {
                     let tables = huffman_tables.unwrap();
-                    tables
+                    let (val, oob) = tables
                         .table_aggregate_instances
-                        .decode(huffman_input.as_mut().unwrap())? as i32
-                        + 1
+                        .decode_entry(huffman_input.as_mut().unwrap())?;
+                    if oob {
+                        break; // treat OOB as end of height class (remaining exported later)
+                    }
+                    val + 1
                 } else {
-                    decode_integer_context(decoding_context, "IAAI")?.unwrap_or(1)
+                    decode_integer_context(decoding_context, "IAAI")?
+                        .map(|v| v + 1)
+                        .unwrap_or(1)
                 };
 
                 if instances == 1 {
-                    // Single symbol refinement – always arithmetic coded
+                    // Single symbol refinement – always arithmetic coded, bottom-left reference corner (spec 6.5.8.2.1)
                     let symbol_id =
                         decode_iaid_context(decoding_context, symbol_code_length)? as usize;
                     let sym = if symbol_id < params.symbols.len() {
@@ -132,14 +137,24 @@ pub fn decode_symbol_dictionary(
                     let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
                     let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
 
+                    let new_width = sym.width as i32 + rdw;
+                    let new_height = sym.height as i32 + rdh;
+                    if new_width <= 0 || new_height <= 0 {
+                        return Err(Jbig2Error::new("Invalid dimensions for refined symbol"));
+                    }
+
+                    let offset_x = rdx + (rdw >> 1);
+                    // Bottom-left reference corner → adjust Y offset by -(REFH - 1)
+                    let offset_y = rdy + (rdh >> 1) - (sym.height as i32 - 1);
+
                     let bitmap = crate::decode::decode_refinement::decode_refinement(
                         &crate::decode::decode_refinement::RefinementParams {
-                            width: (sym.width as i32 + rdw) as usize,
-                            height: (sym.height as i32 + rdh) as usize,
+                            width: new_width as usize,
+                            height: new_height as usize,
                             template_index: params.refinement_template_index,
                             reference_bitmap: sym,
-                            offset_x: (rdw >> 1) + rdx,
-                            offset_y: (rdh >> 1) + rdy,
+                            offset_x,
+                            offset_y,
                             prediction: false,
                             at: params.refinement_at.clone(),
                         },
@@ -237,16 +252,16 @@ pub fn decode_symbol_dictionary(
     let mut flags = Vec::with_capacity(total_symbols);
 
     if huffman {
-        // NOTE: Replace `table_aggregate_instances` with correct table B.10 (SDHUFFEXRUN) when implemented
         let tables = huffman_tables.unwrap();
         let mut export = false; // first run is non-exported
         loop {
-            let run = tables
-                .table_aggregate_instances
-                .decode(huffman_input.as_mut().unwrap())? as usize;
-            if run == 0 {
+            let (run, oob) = tables
+                .table_aggregate_instances // NOTE: replace with B.10 SDHUFFEXRUN when implemented
+                .decode_entry(huffman_input.as_mut().unwrap())?;
+            if oob || run == 0 {
                 break;
-            } // adjust if table has OOB instead of 0
+            }
+            let run = run as usize;
             for _ in 0..run {
                 if flags.len() < total_symbols {
                     flags.push(export);
@@ -257,7 +272,7 @@ pub fn decode_symbol_dictionary(
                 break;
             }
         }
-        // If OOB encountered early, remaining symbols are exported
+        // OOB or early termination → remaining symbols exported
         while flags.len() < total_symbols {
             flags.push(true);
         }
@@ -271,9 +286,9 @@ pub fn decode_symbol_dictionary(
             let bit = decoding_context.get_decoder().read_bit(&mut ctx, 0)?;
             flags.push(bit != 0);
         }
-        // If stream ends early, remaining symbols are NOT exported (conservative)
+        // Stream ended early → remaining symbols exported (spec 6.5.10)
         while flags.len() < total_symbols {
-            flags.push(false);
+            flags.push(true);
         }
     }
 

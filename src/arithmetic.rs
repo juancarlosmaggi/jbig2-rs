@@ -73,51 +73,43 @@ impl ArithmeticDecoder {
         self.next_word_bytes = bytes_read;
     }
 
-    /// Input a byte into the C register, handling 0xFF stuffing handling included.
+    /// Input a byte into the C register, handling 0xFF stuffing correctly.
     fn byte_in(&mut self) {
-        // Extract current top byte
         let b = ((self.next_word >> 24) & 0xFF) as u8;
 
         // Always consume the current top byte
         self.next_word <<= 8;
         self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
-
         if self.next_word_bytes == 0 {
             self.refill_buffer();
         }
 
-        if b == 0xFF {
-            // Stuffing: look at next byte (if available)
-            let b1 = ((self.next_word >> 24) & 0xFF) as u8;
+        let add: u32;
 
-            let add = if b1 > 0x8F {
-                // Marker stuff – no consume, add 0xFF00
-                0xFF00u32
+        if b == 0xFF {
+            let b1 = ((self.next_word >> 24) & 0xFF) as u8;
+            if b1 > 0x8F {
+                add = 0xFF00;
+                // Marker – do not consume next byte
             } else {
-                // Normal stuff – consume next byte, add B1 << 8
+                add = 0xFE00;
+                // Stuffed – consume the next (stuffer) byte
                 self.next_word <<= 8;
                 self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
                 if self.next_word_bytes == 0 {
                     self.refill_buffer();
                 }
-                (b1 as u32) << 8
-            };
-
-            let c = ((self.chigh as u64) << 16) | self.clow as u64;
-            let c = c + add as u64;
-            self.chigh = (c >> 16) as u32;
-            self.clow = c as u32 & 0xFFFF;
+            }
             self.ct = 8;
         } else {
-            // Normal byte
-            let add = (b as u32) << 8;
-
-            let c = ((self.chigh as u64) << 16) | self.clow as u64;
-            let c = c + add as u64;
-            self.chigh = (c >> 16) as u32;
-            self.clow = c as u32 & 0xFFFF;
+            add = (b as u32) << 8;
             self.ct = 8;
         }
+
+        let c = ((self.chigh as u64) << 16) | self.clow as u64;
+        let c = c + add as u64;
+        self.chigh = (c >> 16) as u32;
+        self.clow = c as u32 & 0xFFFF;
     }
 
     /// Decodes a single bit using the specified context.
@@ -125,7 +117,11 @@ impl ArithmeticDecoder {
     /// Follows the DECODE procedure from Annex E Figure E.15 (with MPS/LPS exchange
     /// and renormalization as per Figures E.16–E.18).
     #[inline(always)]
-    pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> Result<u8, crate::error::Jbig2Error> {
+    pub fn read_bit(
+        &mut self,
+        contexts: &mut [i8],
+        pos: usize,
+    ) -> Result<u8, crate::error::Jbig2Error> {
         if pos >= contexts.len() {
             return Err(crate::error::Jbig2Error::new("invalid context position"));
         }

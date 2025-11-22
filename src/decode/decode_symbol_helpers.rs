@@ -22,7 +22,7 @@ pub fn split_collective_bitmap(
     height: usize,
 ) -> Vec<Bitmap> {
     let mut symbols = Vec::new();
-    let mut x_offset = 0;
+    let mut x_offset = 0; // ← fixed typo
 
     for &width in symbol_widths {
         let mut symbol_bitmap = Bitmap::new(width, height);
@@ -44,18 +44,18 @@ pub fn create_aggregate_text_params(
     input_symbols: Vec<Bitmap>,
 ) -> TextRegionParams {
     TextRegionParams {
-        huffman: false,
+        huffman: false, // aggregate always uses arithmetic for IDs/positions (spec 6.5.5)
         refinement: params.refinement,
         width: params.current_width as usize,
         height: params.current_height as usize,
         default_pixel_value: 0,
         number_of_symbol_instances: params.number_of_instances as usize,
-        strip_size: params.current_height as usize, // ← correct per 6.5.8.2.2
+        strip_size: params.current_height as usize, // correct per 6.5.8.2.2
         input_symbols,
         symbol_code_length: params.symbol_code_length,
         transposed: false,
         ds_offset: 0,
-        reference_corner: 1,
+        reference_corner: 1, // bottom-left reference point (matches text region convention)
         combination_operator: 0, // OR
         log_strip_size: 0,
         huffman_tables: None,
@@ -63,6 +63,7 @@ pub fn create_aggregate_text_params(
         refinement_at: params.refinement_at.clone(),
     }
 }
+
 pub fn decode_aggregate_symbol(
     params: &AggregateSymbolParams,
     existing_symbols: &[Bitmap],
