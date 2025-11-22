@@ -16,7 +16,10 @@ fuzz_target!(|data: &[u8]| {
     // Use remaining data as MMR-encoded data
     let mmr_data = &data[3..];
     
+    // Create a Reader from the data
+    let mut reader = jbig2_rs::reader::Reader::new(mmr_data.to_vec(), 0, mmr_data.len());
+    
     // Try to decode the MMR bitmap
     // This should not panic regardless of input
-    let _ = decode_mmr_bitmap(mmr_data, width, height, end_of_block);
+    let _ = decode_mmr_bitmap(&mut reader, width, height, end_of_block);
 });

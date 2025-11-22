@@ -13,12 +13,6 @@ libfuzzer-sys = "0.4"
 [dependencies.jbig2-rs]
 path = ".."
 
-[[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
-test = false
-doc = false
-bench = false
 
 [[bin]]
 name = "fuzz_reader"

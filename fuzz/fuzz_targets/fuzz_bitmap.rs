@@ -18,11 +18,11 @@ fuzz_target!(|data: &[u8]| {
     // Set some pixels based on input data
     for (i, &byte) in data.iter().skip(2).take(20).enumerate() {
         let x = (byte as usize) % width;
-        let y = (i % height);
+        let y = i % height;
         bm1.set_pixel(x, y, byte & 1);
         
         let x2 = (byte as usize) % (width / 2 + 1);
-        let y2 = (i % (height / 2 + 1));
+        let y2 = i % (height / 2 + 1);
         bm2.set_pixel(x2, y2, (byte >> 1) & 1);
     }
     

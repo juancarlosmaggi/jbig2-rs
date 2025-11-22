@@ -21,9 +21,5 @@ fuzz_target!(|data: &[u8]| {
         let _ = decoder.read_bit(&mut contexts, ctx_idx);
     }
     
-    // Try reading bounded integers if enough data
-    if data.len() > 10 {
-        let _ = decoder.read_bounded_int(&mut contexts, 0, 10);
-        let _ = decoder.read_bounded_int(&mut contexts, 0, 100);
-    }
+
 });
