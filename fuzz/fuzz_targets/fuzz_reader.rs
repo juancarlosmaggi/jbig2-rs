@@ -28,7 +28,7 @@ fuzz_target!(|data: &[u8]| {
     reader.byte_align();
     let _ = reader.get_position();
     
-    if data.len() > 2 {
+    if data.len() > 3 {
         reader.set_position(data[2] as usize);
         reader.skip(data[3] as usize % 100);
     }

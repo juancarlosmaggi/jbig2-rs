@@ -120,14 +120,14 @@ impl Bitmap {
     pub fn combine(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
         // Clip to bounds
         let start_y = y.max(0) as usize;
-        let end_y = (y + other.height as isize).min(self.height as isize) as usize;
+        let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
         
         if start_y >= end_y {
             return;
         }
 
         let start_x = x.max(0) as usize;
-        let end_x = (x + other.width as isize).min(self.width as isize) as usize;
+        let end_x = (x + other.width as isize).min(self.width as isize).max(0) as usize;
 
         if start_x >= end_x {
             return;
