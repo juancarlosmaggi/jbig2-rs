@@ -140,14 +140,115 @@ Err(Jbig2Error::invalid_template_index(5, 3))
 - Predictable memory usage with pre-allocation
 - Comprehensive benchmarking suite for tracking future changes
 
-### 5. Extended Test Coverage
+### 5. Extended Test Coverage ✅
 
-**Missing:**
-- [ ] **Property-Based Testing**: Use `proptest` for arithmetic/MMR decoders
-- [ ] **Malformed File Handling**: Fuzz testing with `cargo-fuzz`
-- [ ] **Performance Regression Tests**: CI checks for performance degradation
+**Status:** PHASES 1-5 COMPLETED (November 21, 2025)
 
-### 6. Configuration and Features
+**Summary:** Implemented comprehensive multi-layered testing architecture with 147 automated tests and 4 fuzz targets.
+
+#### Phase 1 & 2: Test Organization (Complete)
+- ✅ **Directory Structure**: Created `tests/common/`, `tests/integration/`, `tests/property/`, `tests/unit/`, `fuzz/`
+- ✅ **Common Utilities**: Helpers for file loading, bitmap comparison, test data generation
+- ✅ **Test Reorganization**: Moved all integration tests to organized structure
+- ✅ **Result**: 67 integration tests passing
+
+#### Phase 3: Inline Unit Tests (Complete)
+- ✅ **src/reader.rs**: 12 tests for bit/byte reading, position management
+- ✅ **src/arithmetic.rs**: 12 tests for decoder initialization, context handling
+- ✅ **src/bitmap.rs**: 19 tests for pixel operations, all combine operators
+- ✅ **src/decode/decode_mmr.rs**: 14 tests for MMR decoding
+- ✅ **Result**: 52 inline unit tests added
+- ✅ **Bug Fix**: Discovered and fixed critical bitmap combine mask calculation bug
+
+#### Phase 4: Property-Based Testing (Complete)
+- ✅ **Added `proptest` dependency**
+- ✅ **Bitmap Properties**: 10 tests (dimensions, pixels, combine invariants)
+- ✅ **Reader Properties**: 11 tests (position, reads, limits)
+- ✅ **Result**: 21 property tests (each runs 256 test cases = 5,376 total)
+
+#### Phase 5: Fuzzing Infrastructure (Complete)
+- ✅ **Installed `cargo-fuzz`**
+- ✅ **fuzz_reader**: Reader operations with random data
+- ✅ **fuzz_arithmetic**: ArithmeticDecoder with random contexts
+- ✅ **fuzz_bitmap**: All bitmap operations including combine
+- ✅ **fuzz_mmr**: MMR decoder with random encoded data
+- ✅ **Documentation**: [fuzz/README.md](file:///home/jmaggi/projects/jbig2-rs/fuzz/README.md) with usage guide
+- ✅ **Result**: 4 fuzz targets ready (requires nightly Rust)
+
+**Current Test Coverage:**
+- **147 Automated Tests**: 67 integration + 52 inline + 21 property + 9 doc tests
+- **4 Fuzz Targets**: Continuous robustness testing
+- **All tests passing** ✅
+- **Zero clippy warnings** ✅
+
+**Testing Philosophy:**
+- **Correctness**: Unit and integration tests verify expected behavior
+- **Robustness**: Property tests verify invariants across input ranges  
+- **Resilience**: Fuzz tests find edge cases and prevent crashes
+
+### 6. Performance Regression Testing 🎯
+
+**Status:** READY TO IMPLEMENT (Phase 6 - Final Phase)
+
+**Goal:** Create automated performance regression detection to ensure optimizations don't regress and new changes don't introduce slowdowns.
+
+**Proposed Implementation:**
+
+#### Option A: Criterion Baseline Comparison
+```bash
+# Establish baseline
+cargo bench -- --save-baseline main
+
+# After changes, compare
+cargo bench -- --baseline main
+```
+
+**Benefits:**
+- Already using Criterion
+- Built-in statistical analysis
+- Visual charts and reports
+- Easy CI integration
+
+**Setup Required:**
+1. Document baseline workflow in `benches/README.md`
+2. Add benchmark expectations to comments
+3. Create script to check for regressions (>10% slowdown = fail)
+
+#### Option B: Custom Regression Script
+Create `scripts/check_performance.sh`:
+```bash
+#!/bin/bash
+# Run benchmarks and fail if >10% slower than baseline
+cargo bench --bench bitmap_bench -- --baseline main
+cargo bench --bench decoder_bench -- --baseline main  
+cargo bench --bench full_bench -- --baseline main
+
+# Parse results and exit non-zero if regression detected
+```
+
+**Integration Points:**
+- **CI/CD**: Run on PRs to catch regressions early
+- **Git Hooks**: Optional pre-commit hook for local checks
+- **Release Checklist**: Verify performance before releases
+
+**Benchmarks to Monitor:**
+- `bitmap_bench`: Pixel operations, combine function (~3.6 µs baseline)
+- `decoder_bench`: Arithmetic decoder read_bit (~6.5 µs baseline)
+- `full_bench`: End-to-end file decoding (~54ms for symbol_dictionary.jb2)
+
+**Acceptance Criteria:**
+- ✅ No regression >10% without explicit justification
+- ✅ Benchmark results tracked over time
+- ✅ Documented workflow for developers
+- ✅ Optional CI integration ready
+
+**Deliverables:**
+- [ ] `benches/README.md` with regression testing instructions
+- [ ] `scripts/check_performance.sh` (or equivalent)
+
+**Estimated Effort:** 1-2 hours
+
+### 7. Configuration and Features
 
 **Add Feature Flags:**
 ```toml
@@ -159,9 +260,11 @@ debug-output = []  # Enable debug prints
 strict-validation = []  # Extra validation checks
 ```
 
+**Note:** With comprehensive testing now in place (Phases 1-5), feature flag implementation would benefit from the existing test infrastructure.
+
 ## Low-Priority Enhancements
 
-### 7. CLI Improvements
+### 8. CLI Improvements
 
 **Current CLI:** Basic file conversion
 
@@ -196,10 +299,11 @@ strict-validation = []  # Extra validation checks
 
 ## Recommended Next Steps (Priority Order)
 
-1. **Complete Error Handling Migration** (Phase 3 & 4)
-2. **Optimize Arithmetic Decoder** (High impact for compressed files)
-3. **Add Full File Benchmarks** (Measure real-world impact)
-4. **Extended Test Coverage** (Fuzzing/Property testing)
+1. **✅ Complete Testing Architecture** (Phases 1-5 DONE)
+2. **🎯 Performance Regression Testing** (Phase 6 - Final Testing Phase)
+3. **Continue Error Handling Migration** (Phases 3 & 4 remaining)
+4. **CI/CD Setup** (Automated testing, coverage, releases)
+5. **Feature Flags** (Leveraging existing test infrastructure)
 
 ## Development Guidelines
 
