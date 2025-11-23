@@ -47,7 +47,11 @@ impl ArithmeticDecoder {
         decoder.refill_buffer();
         decoder.byte_in();
         decoder.byte_in();
-        decoder.ct = 12;
+        decoder.ct -= 7;
+        let carry = decoder.clow >> 9;
+        decoder.clow = (decoder.clow << 7) & 0xFFFF;
+        decoder.chigh = (decoder.chigh << 7 | carry) & 0xFFFF;
+        decoder.a = 0x8000;
 
         decoder
     }

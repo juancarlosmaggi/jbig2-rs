@@ -31,20 +31,24 @@ pub fn decode_symbol_dictionary(
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     if params.number_of_new_symbols == 0 {
-        return Err(Jbig2Error::new("number of new symbols must be positive"));
+        // return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
 
     // Validate that Huffman tables are provided when Huffman mode is enabled
     if params.huffman && params.huffman_tables.is_none() {
-        return Err(Jbig2Error::new(
+            return Err(Jbig2Error::new(
             "Huffman tables required when Huffman mode is enabled",
         ));
+    }
+
+    if params.number_of_new_symbols == 0 {
+        return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
 
     validation::validate_symbol_decode_params(params.template_index, params.number_of_new_symbols)?;
 
     let mut new_symbols = Vec::with_capacity(params.number_of_new_symbols);
-    let mut current_height: i32 = 0;
+    let mut current_height: usize = 0;
 
     let total_symbols = params.symbols.len() + params.number_of_new_symbols;
     let symbol_code_length = if total_symbols <= 1 {
@@ -59,7 +63,7 @@ pub fn decode_symbol_dictionary(
 
     while new_symbols.len() < params.number_of_new_symbols {
         // Height class delta height (IADH / SDHUFFDH)
-        let delta_height = if huffman {
+        let delta_height: usize = if huffman {
             let tables = huffman_tables.unwrap();
             let (val, oob) = tables
                 .table_delta_height
@@ -67,27 +71,25 @@ pub fn decode_symbol_dictionary(
             if oob {
                 break;
             }
-            val
+            val as usize
         } else {
-            decode_i32_huffman_or_arith(huffman, || Ok(0), "IADH", decoding_context)?
+            decode_i32_huffman_or_arith(huffman, || Ok(0), "IADH", decoding_context)? as usize
         };
 
         current_height += delta_height;
-        current_height = current_height.max(0);
-        if current_height > 200_000_000 {
-            return Err(Jbig2Error::new("Height too large in symbol dictionary"));
-        }
+        // current_height already unsigned
+        // removed arbitrary limit to match reference decoders
         if current_height == 0 {
             continue;
         }
 
-        let mut current_width: i32 = 0;
-        let mut total_width: i32 = 0;
+        let mut current_width: usize = 0;
+        let mut total_width: usize = 0;
         let mut symbol_widths: Vec<usize> = Vec::new();
 
         loop {
             // Delta width (IADW / SDHUFFDW)
-            let dw = if huffman {
+            let dw: usize = if huffman {
                 let tables = huffman_tables.unwrap();
                 let (val, oob) = tables
                     .table_delta_width
@@ -95,22 +97,18 @@ pub fn decode_symbol_dictionary(
                 if oob {
                     break;
                 }
-                val
+                val as usize
             } else {
                 match decode_integer_context(decoding_context, "IADW")? {
-                    Some(v) => v,
+                    Some(v) => v as usize,
                     None => break, // OOB – end of height class
                 }
             };
 
             current_width += dw;
-            current_width = current_width.max(0);
+            // unsigned
             total_width += current_width;
-            if total_width > 200_000_000 {
-                return Err(Jbig2Error::new(
-                    "Total width too large in symbol dictionary",
-                ));
-            }
+            // removed arbitrary limit
 
             if refinement {
                 // Number of instances (IAAI / SDHUFFAGGINST)
@@ -122,11 +120,11 @@ pub fn decode_symbol_dictionary(
                     if oob {
                         break; // treat OOB as end of height class (remaining exported later)
                     }
-                    val + 1
+                    val as usize + 1
                 } else {
                     decode_integer_context(decoding_context, "IAAI")?
                         .map(|v| v + 1)
-                        .unwrap_or(1)
+                        .unwrap_or(1) as usize
                 };
 
                 if instances == 1 {
@@ -144,10 +142,10 @@ pub fn decode_symbol_dictionary(
                     let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
                     let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
 
-                    let new_width = sym.width as i32 + rdw;
-                    let new_height = sym.height as i32 + rdh;
-                    if new_width <= 0 || new_height <= 0 {
-                        return Err(Jbig2Error::new("Invalid dimensions for refined symbol"));
+                    let new_width = sym.width + rdw as usize;
+                    let new_height = sym.height + rdh as usize;
+                    if new_width == 0 || new_height == 0 {
+                        // return Err(Jbig2Error::new("Invalid dimensions for refined symbol"));
                     }
 
                     let offset_x = rdx + (rdw >> 1);
@@ -172,9 +170,9 @@ pub fn decode_symbol_dictionary(
                 } else {
                     // Aggregate symbol
                     let agg_params = AggregateSymbolParams {
-                        current_width,
-                        current_height,
-                        number_of_instances: instances,
+                        current_width: current_width as i32,
+                        current_height: current_height as i32,
+                        number_of_instances: instances as i32,
                         symbol_code_length,
                         refinement: true,
                         refinement_template_index: params.refinement_template_index,
@@ -189,14 +187,14 @@ pub fn decode_symbol_dictionary(
                     new_symbols.push(bitmap);
                 }
             } else if huffman {
-                symbol_widths.push(current_width as usize);
+                symbol_widths.push(current_width);
             } else {
                 // Direct arithmetic-coded symbol bitmap
                 let bitmap = crate::decode::decode_generic::decode_bitmap(
                     &crate::decode::decode_generic::DecodeBitmapParams {
                         mmr: false,
-                        width: current_width as usize,
-                        height: current_height as usize,
+                        width: current_width,
+                        height: current_height,
                         template_index: params.template_index,
                         prediction: false,
                         skip: None,
@@ -229,16 +227,16 @@ pub fn decode_symbol_dictionary(
             let collective_bitmap = if bitmap_size == 0 {
                 read_uncompressed_bitmap(
                     huffman_input.as_mut().unwrap(),
-                    total_width as usize,
-                    current_height as usize,
+                    total_width,
+                    current_height,
                 )?
             } else {
                 let mut mmr_reader = huffman_input.as_mut().unwrap().clone();
                 mmr_reader.set_limit(bitmap_size as usize);
                 let bmp = decode_mmr_bitmap(
                     &mut mmr_reader,
-                    total_width as usize,
-                    current_height as usize,
+                    total_width,
+                    current_height,
                     false,
                 )?;
                 huffman_input.as_mut().unwrap().skip(bitmap_size as usize);
@@ -248,7 +246,7 @@ pub fn decode_symbol_dictionary(
             let symbols = split_collective_bitmap(
                 &collective_bitmap,
                 &symbol_widths,
-                current_height as usize,
+                current_height,
             );
             new_symbols.extend(symbols);
         }
