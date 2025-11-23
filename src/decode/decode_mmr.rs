@@ -1,7 +1,7 @@
+use super::mmr_tables::{get_black_makeup, get_black_run, get_white_makeup, get_white_run};
 use crate::bitmap::Bitmap;
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
-use super::mmr_tables::{get_white_run, get_black_run, get_white_makeup, get_black_makeup};
 
 // CCITT Group 4 (MMR) decoder implementation
 // Based on ITU-T T.6 specification, with JBIG2-specific robustness improvements
@@ -48,7 +48,12 @@ impl CCITTFaxDecoder {
             }
 
             let start_pos = if a0 < 0 { 0 } else { (a0 + 1) as usize };
-            let b1 = self.find_changing_element_of_color(&self.ref_line, start_pos, self.width, 1 - current_color);
+            let b1 = self.find_changing_element_of_color(
+                &self.ref_line,
+                start_pos,
+                self.width,
+                1 - current_color,
+            );
             let b2 = self.find_changing_element(&self.ref_line, b1 + 1, self.width);
 
             let mode = match self.read_mode_code() {
@@ -65,7 +70,8 @@ impl CCITTFaxDecoder {
             }
 
             match mode {
-                0 => { // Pass mode
+                0 => {
+                    // Pass mode
                     for i in x..b2 {
                         self.curr_line[i] = current_color;
                     }
@@ -82,7 +88,7 @@ impl CCITTFaxDecoder {
                         6 => -3, // VL(-3)
                         7 => 2,  // VR(2)
                         8 => 3,  // VR(3)
-                        _ => 0, // unreachable
+                        _ => 0,  // unreachable
                     };
 
                     let mut a1 = (b1 as i32) + offset;
@@ -98,7 +104,8 @@ impl CCITTFaxDecoder {
                     a0 = a1;
                     current_color = 1 - current_color;
                 }
-                4 => { // Horizontal mode
+                4 => {
+                    // Horizontal mode
                     let white_first = current_color == 0;
                     let r1 = match self.decode_run_length(white_first) {
                         Ok(r) => r as usize,
@@ -145,13 +152,13 @@ impl CCITTFaxDecoder {
             length += 1;
 
             if let Some(mode) = match (code, length) {
-                (0b1,       1) => Some(2), // V(0)
-                (0b001,     3) => Some(4), // H
-                (0b010,     3) => Some(1), // VL(-1)
-                (0b011,     3) => Some(3), // VR(+1)
-                (0b0001,    4) => Some(0), // Pass
-                (0b000010,  6) => Some(5), // VL(-2)
-                (0b000011,  6) => Some(7), // VR(+2)
+                (0b1, 1) => Some(2),       // V(0)
+                (0b001, 3) => Some(4),     // H
+                (0b010, 3) => Some(1),     // VL(-1)
+                (0b011, 3) => Some(3),     // VR(+1)
+                (0b0001, 4) => Some(0),    // Pass
+                (0b000010, 6) => Some(5),  // VL(-2)
+                (0b000011, 6) => Some(7),  // VR(+2)
                 (0b0000010, 7) => Some(6), // VL(-3)
                 (0b0000011, 7) => Some(8), // VR(+3)
                 _ => None,
@@ -162,7 +169,10 @@ impl CCITTFaxDecoder {
 
         // If end_of_block, check for EOFB (24-bit 0x001001) without consuming bits unless it matches
         if self.end_of_block {
+            // Save full reader state
             let saved_pos = self.reader.get_position();
+            let saved_shift = self.reader.get_shift();
+            let saved_current_byte = self.reader.get_current_byte();
 
             let mut full_code = code;
             let mut full_len = length;
@@ -185,10 +195,12 @@ impl CCITTFaxDecoder {
             if matched {
                 return Ok(9); // EOFB
             } else {
+                // Restore full state if not matched
                 self.reader.set_position(saved_pos);
+                self.reader.set_shift(saved_shift);
+                self.reader.set_current_byte(saved_current_byte);
             }
         }
-
         Err(Jbig2Error::new("no valid MMR mode code"))
     }
 
@@ -202,7 +214,13 @@ impl CCITTFaxDecoder {
         width
     }
 
-    fn find_changing_element_of_color(&self, line: &[u8], mut pos: usize, width: usize, color: u8) -> usize {
+    fn find_changing_element_of_color(
+        &self,
+        line: &[u8],
+        mut pos: usize,
+        width: usize,
+        color: u8,
+    ) -> usize {
         while pos < width {
             if line[pos] == color && (pos == 0 || line[pos - 1] != color) {
                 return pos;
@@ -227,14 +245,22 @@ impl CCITTFaxDecoder {
                 clen += 1;
 
                 // Terminating code?
-                let term = if white { get_white_run(code, clen) } else { get_black_run(code, clen) };
+                let term = if white {
+                    get_white_run(code, clen)
+                } else {
+                    get_black_run(code, clen)
+                };
                 if term >= 0 {
                     total += term;
                     return Ok(total);
                 }
 
                 // Make-up code?
-                let makeup = if white { get_white_makeup(code, clen) } else { get_black_makeup(code, clen) };
+                let makeup = if white {
+                    get_white_makeup(code, clen)
+                } else {
+                    get_black_makeup(code, clen)
+                };
                 if makeup >= 0 {
                     total += makeup;
                     found_makeup = true;

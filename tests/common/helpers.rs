@@ -5,10 +5,10 @@ use jbig2_rs::reader::Reader;
 use std::fs;
 
 /// Load a test file from the resources directory.
-/// 
+///
 /// # Arguments
 /// * `filename` - Name of the file in `tests/resources/`
-/// 
+///
 /// # Panics
 /// Panics if the file cannot be read.
 pub fn load_test_file(filename: &str) -> Vec<u8> {
@@ -17,13 +17,13 @@ pub fn load_test_file(filename: &str) -> Vec<u8> {
 }
 
 /// Assert that two bitmaps are exactly equal.
-/// 
+///
 /// Checks dimensions and all pixel values.
 #[allow(dead_code)]
 pub fn assert_bitmap_equals(actual: &Bitmap, expected: &Bitmap) {
     assert_eq!(actual.width, expected.width, "Bitmap widths differ");
     assert_eq!(actual.height, expected.height, "Bitmap heights differ");
-    
+
     for y in 0..actual.height {
         for x in 0..actual.width {
             let actual_pixel = actual.get_pixel(x, y);
@@ -38,7 +38,7 @@ pub fn assert_bitmap_equals(actual: &Bitmap, expected: &Bitmap) {
 }
 
 /// Assert that all pixels in a given range have the expected value.
-/// 
+///
 /// # Arguments
 /// * `bitmap` - The bitmap to check
 /// * `x_range` - Range of x coordinates (inclusive)
@@ -52,7 +52,7 @@ pub fn assert_pixel_range(
 ) {
     let (x_start, x_end) = x_range;
     let (y_start, y_end) = y_range;
-    
+
     for y in y_start..=y_end.min(bitmap.height.saturating_sub(1)) {
         for x in x_start..=x_end.min(bitmap.width.saturating_sub(1)) {
             let pixel = bitmap.get_pixel(x, y);
@@ -66,10 +66,10 @@ pub fn assert_pixel_range(
 }
 
 /// Create a Reader from test data.
-/// 
+///
 /// # Arguments
 /// * `data` - The byte data for the reader
-/// 
+///
 /// # Returns
 /// A Reader positioned at the start of the data.
 pub fn create_test_reader(data: Vec<u8>) -> Reader {
@@ -78,14 +78,14 @@ pub fn create_test_reader(data: Vec<u8>) -> Reader {
 }
 
 /// Print a hex dump of data for debugging.
-/// 
+///
 /// # Arguments
 /// * `data` - The data to dump
 /// * `max_bytes` - Maximum number of bytes to display
 pub fn hex_dump(data: &[u8], max_bytes: usize) {
     let bytes_to_show = data.len().min(max_bytes);
     print!("Hex dump ({} bytes): ", bytes_to_show);
-    
+
     for (i, byte) in data.iter().take(bytes_to_show).enumerate() {
         if i > 0 && i % 16 == 0 {
             println!();
@@ -93,7 +93,7 @@ pub fn hex_dump(data: &[u8], max_bytes: usize) {
         }
         print!("{:02x} ", byte);
     }
-    
+
     if data.len() > max_bytes {
         print!("... ({} more bytes)", data.len() - max_bytes);
     }

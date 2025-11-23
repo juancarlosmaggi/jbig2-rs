@@ -102,7 +102,13 @@ pub(super) fn on_immediate_generic_region(
     };
 
     let bitmap = decode_bitmap(&params, &mut decoding_context)?;
-    draw_bitmap(current_page_info, current_bitmap, current_y, region_info, &bitmap)?;
+    draw_bitmap(
+        current_page_info,
+        current_bitmap,
+        current_y,
+        region_info,
+        &bitmap,
+    )?;
     Ok(())
 }
 
@@ -181,7 +187,13 @@ pub(super) fn on_immediate_generic_refinement_region(
         &mut decoding_context,
     )?;
 
-    draw_bitmap(current_page_info, current_bitmap, current_y, region_info, &bitmap)?;
+    draw_bitmap(
+        current_page_info,
+        current_bitmap,
+        current_y,
+        region_info,
+        &bitmap,
+    )?;
     Ok(())
 }
 

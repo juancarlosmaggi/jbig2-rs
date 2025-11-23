@@ -47,15 +47,11 @@ mod standard_tables;
 mod table_selectors;
 
 // Re-export public types and functions
-pub use table_selectors::{
-    SymbolDictionaryHuffmanTables,
-    TextRegionHuffmanParams,
-    TextRegionHuffmanTables,
-    get_symbol_dictionary_huffman_tables,
-    get_text_region_huffman_tables,
-    decode_tables_segment,
-};
 pub use standard_tables::get_standard_table;
+pub use table_selectors::{
+    SymbolDictionaryHuffmanTables, TextRegionHuffmanParams, TextRegionHuffmanTables,
+    decode_tables_segment, get_symbol_dictionary_huffman_tables, get_text_region_huffman_tables,
+};
 
 // Core Huffman types and decoding logic
 use crate::error::Jbig2Error;

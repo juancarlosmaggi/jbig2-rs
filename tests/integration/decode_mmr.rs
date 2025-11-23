@@ -1,5 +1,5 @@
-use jbig2_rs::decode::decode_mmr::decode_mmr_bitmap;
 use crate::common::create_test_reader;
+use jbig2_rs::decode::decode_mmr::decode_mmr_bitmap;
 
 #[test]
 fn test_decode_mmr_simple() {

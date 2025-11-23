@@ -6,22 +6,22 @@ use jbig2_rs::{Jbig2Chunk, Jbig2Document};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("JBIG2 Chunk-Based Decoding Example\n");
-    
+
     // Simulated example: In a real PDF extractor, you would read these
     // chunks from the PDF's JBIG2 streams
-    
+
     // Example chunk 1: Global segment data (shared across pages)
     let global_data = vec![
         // This would contain symbol dictionaries, tables, etc.
         // For demonstration, we'll use empty data
     ];
-    
+
     // Example chunk 2: Page-specific segment data
     let page_data = vec![
         // This would contain page information and region segments
         // For demonstration, we'll use empty data
     ];
-    
+
     // Create chunks
     let chunks = vec![
         Jbig2Chunk {
@@ -35,21 +35,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             end: page_data.len(),
         },
     ];
-    
+
     println!("Processing {} chunks...", chunks.len());
-    
+
     // Parse the chunks
     match Jbig2Document::parse_chunks(&chunks) {
         Ok(document) => {
             println!("Document parsed successfully!");
             println!("Number of pages: {}", document.page_count());
-            
+
             // Process each page
             for i in 0..document.page_count() {
                 if let Some(page) = document.get_page(i) {
                     println!("\nPage {}:", i);
-                    println!("  Dimensions: {}x{} pixels", page.page_info.width, page.page_info.height);
-                    
+                    println!(
+                        "  Dimensions: {}x{} pixels",
+                        page.page_info.width, page.page_info.height
+                    );
+
                     let bitmap_data = page.to_image_data();
                     println!("  Bitmap size: {} bytes", bitmap_data.len());
                 }
@@ -65,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  4. Parse chunks to decode the image");
         }
     }
-    
+
     // Demonstrate proper chunk creation
     println!("\n--- Chunk Creation Pattern ---");
     println!("When extracting from PDFs:");
@@ -78,6 +81,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("     - Text regions");
     println!("     - Generic regions");
     println!("     - End markers");
-    
+
     Ok(())
 }

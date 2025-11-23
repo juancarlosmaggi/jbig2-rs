@@ -197,4 +197,3 @@ mod tests {
         assert_eq!(bitmap.get_pixel(0, 0), 0);
     }
 }
-

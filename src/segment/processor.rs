@@ -1,15 +1,13 @@
 // Segment processing logic - dispatches segments to visitor callbacks
 
-use crate::error::Jbig2Error;
-use crate::visitor::SimpleSegmentVisitor;
+use super::parser::{
+    parse_halftone_region_params, parse_pattern_dictionary_params, parse_text_region_params,
+    read_region_segment_information,
+};
 use super::types::*;
 use super::utils::*;
-use super::parser::{
-    read_region_segment_information, 
-    parse_halftone_region_params,
-    parse_text_region_params,
-    parse_pattern_dictionary_params,
-};
+use crate::error::Jbig2Error;
+use crate::visitor::SimpleSegmentVisitor;
 
 pub fn process_segments<'a>(
     segments: &[Segment<'a>],
@@ -84,31 +82,29 @@ pub fn process_segment<'a>(
     match header.segment_type {
         0 => {
             let dictionary_flags = read_u16(data, start);
-            
+
             // Parse all relevant flags
             let sdhuff = (dictionary_flags & 1) != 0;
             let sdrefagg = ((dictionary_flags >> 1) & 1) != 0;
             let sdtemplate = ((dictionary_flags >> 10) & 3) as usize;
             let sdrtemplate = ((dictionary_flags >> 12) & 1) != 0;
-            
+
             let mut offset = start + 2;
-            
+
             // AT pixels for direct coding (only if not Huffman)
             if !sdhuff {
                 let sdat_bytes = if sdtemplate == 0 { 8 } else { 2 };
                 offset += sdat_bytes;
             }
-            
+
             // Refinement AT pixels (Table 18 in JBIG2 spec)
             if sdrefagg && !sdrtemplate {
-                offset += 4;  // 4 bytes for refinement AT
+                offset += 4; // 4 bytes for refinement AT
             }
-            
+
             // NOW read symbol counts (BIG-ENDIAN!)
             let number_of_exported_symbols = read_u32(data, offset);
             let number_of_new_symbols = read_u32(data, offset + 4);
-            
-
 
             // Sanity check to catch parsing errors early
             if number_of_new_symbols > 1_000_000 {
@@ -117,7 +113,7 @@ pub fn process_segment<'a>(
                     number_of_new_symbols
                 )));
             }
-            
+
             let params = SymbolDictionaryParams {
                 dictionary_flags,
                 number_of_exported_symbols,
@@ -125,7 +121,7 @@ pub fn process_segment<'a>(
                 current_segment: header.number,
                 referred_segments: &header.referred_to,
                 data,
-                start: offset + 8,  // Data starts after both counts
+                start: offset + 8, // Data starts after both counts
                 end,
                 at_pixels: Vec::new(),
                 refinement_at_pixels: Vec::new(),
@@ -141,10 +137,15 @@ pub fn process_segment<'a>(
             } else {
                 4
             };
-            
-            let params = parse_text_region_params(data, start, referred_size, header.referred_to.len());
-            let pos = start + 2 + 4 + header.referred_to.len() * referred_size + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
-            
+
+            let params =
+                parse_text_region_params(data, start, referred_size, header.referred_to.len());
+            let pos = start
+                + 2
+                + 4
+                + header.referred_to.len() * referred_size
+                + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+
             visitor.on_immediate_text_region(
                 &params.region_info,
                 params.text_region_segment_flags,
@@ -156,7 +157,7 @@ pub fn process_segment<'a>(
             )?;
         }
         48 => {
-            // PageInformation  
+            // PageInformation
 
             // Per JBIG2 spec and reference implementation: ALL fields use BIG-ENDIAN
             let mut width = read_u32(data, start);

@@ -57,7 +57,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .to_string()
     });
 
-    println!("Decoding {} pages from '{}'", document.page_count(), args.input);
+    println!(
+        "Decoding {} pages from '{}'",
+        document.page_count(),
+        args.input
+    );
 
     // Process each page
     for (page_index, page) in document.pages.iter().enumerate() {
@@ -80,7 +84,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Save the image
         img.save(&output_path)?;
-        println!("Saved page {} to '{}'", page_index + 1, output_path.display());
+        println!(
+            "Saved page {} to '{}'",
+            page_index + 1,
+            output_path.display()
+        );
     }
 
     println!("Successfully decoded {} pages", document.page_count());

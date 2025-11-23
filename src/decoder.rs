@@ -11,7 +11,7 @@ pub fn decode_integer(
 ) -> Result<Option<i32>, Jbig2Error> {
     let contexts = context_cache.get_contexts(procedure);
     let mut prev = 1;
-    
+
     let read_bits = |length: u32,
                      contexts: &mut Vec<i8>,
                      prev: &mut usize,
@@ -29,9 +29,9 @@ pub fn decode_integer(
         }
         Ok(v)
     };
-    
+
     let sign = read_bits(1, contexts, &mut prev, decoder)?;
-    
+
     // The nested ternary from JS
     let value = if read_bits(1, contexts, &mut prev, decoder)? != 0 {
         if read_bits(1, contexts, &mut prev, decoder)? != 0 {
@@ -54,7 +54,7 @@ pub fn decode_integer(
     } else {
         read_bits(2, contexts, &mut prev, decoder)?
     };
-    
+
     let signed_value = if sign == 0 {
         value as i32
     } else if value > 0 {

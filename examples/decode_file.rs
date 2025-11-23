@@ -23,42 +23,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("Reading JBIG2 file: {}", input_path);
-    
+
     // Read the input file
     let data = fs::read(input_path)?;
-    
+
     // Parse the JBIG2 document
     let document = Jbig2Document::parse(&data)?;
-    
+
     println!("Document parsed successfully!");
     println!("Number of pages: {}", document.page_count());
-    
+
     // Get the first page
     if let Some(page) = document.get_page(0) {
         println!("\nPage 0 information:");
-        println!("  Dimensions: {}x{} pixels", page.page_info.width, page.page_info.height);
-        
+        println!(
+            "  Dimensions: {}x{} pixels",
+            page.page_info.width, page.page_info.height
+        );
+
         // Convert page to raw bitmap data
         let bitmap_data = page.to_image_data();
-        
+
         println!("  Bitmap size: {} bytes", bitmap_data.len());
         println!("  Bits per pixel: 1 (monochrome)");
-        
+
         // Save to output file
         fs::write(output_path, &bitmap_data)?;
         println!("\nSaved bitmap data to: {}", output_path);
-        
+
         // Display information about how to use the data
         println!("\nThe output file contains raw bitmap data:");
         println!("  - 1 bit per pixel (0=white, 1=black)");
         println!("  - Packed into bytes (8 pixels per byte)");
         println!("Stride: {} bytes", page.page_info.width.div_ceil(8));
         println!("  - Total rows: {}", page.page_info.height);
-        
     } else {
         eprintln!("Error: No pages found in document");
         std::process::exit(1);
     }
-    
+
     Ok(())
 }

@@ -41,7 +41,9 @@ pub(super) fn on_immediate_text_region(
         });
         let width = region_info.width as usize;
         let height = region_info.height as usize;
-        *current_bitmap = Some(crate::bitmap_utils::create_initialized_bitmap(width, height, 0));
+        *current_bitmap = Some(crate::bitmap_utils::create_initialized_bitmap(
+            width, height, 0,
+        ));
     }
 
     let huffman = (text_region_segment_flags & 1) != 0;
@@ -152,7 +154,13 @@ pub(super) fn on_immediate_text_region(
 
     let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
 
-    draw_bitmap(current_page_info, current_bitmap, current_y, region_info, &bitmap)?;
+    draw_bitmap(
+        current_page_info,
+        current_bitmap,
+        current_y,
+        region_info,
+        &bitmap,
+    )?;
     Ok(())
 }
 

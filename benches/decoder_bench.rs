@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use jbig2_rs::arithmetic::ArithmeticDecoder;
 
 fn bench_arithmetic_decoder(c: &mut Criterion) {
@@ -7,8 +7,8 @@ fn bench_arithmetic_decoder(c: &mut Criterion) {
     // For benchmarking the `read_bit` overhead, random data is sufficient
     // to exercise the decoding loop, although it might not trigger all
     // renormalization paths realistically.
-    let data = vec![0xAA; 1024]; 
-    
+    let data = vec![0xAA; 1024];
+
     c.bench_function("arithmetic_decode_bit", |b| {
         b.iter(|| {
             let mut decoder = ArithmeticDecoder::new(black_box(&data));

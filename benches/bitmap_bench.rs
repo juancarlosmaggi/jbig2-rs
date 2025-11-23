@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use jbig2_rs::bitmap::Bitmap;
 use jbig2_rs::bitmap_utils;
 
@@ -60,5 +60,11 @@ fn bench_draw_symbol(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_bitmap_new, bench_bitmap_get_pixel, bench_bitmap_set_pixel, bench_draw_symbol);
+criterion_group!(
+    benches,
+    bench_bitmap_new,
+    bench_bitmap_get_pixel,
+    bench_bitmap_set_pixel,
+    bench_draw_symbol
+);
 criterion_main!(benches);

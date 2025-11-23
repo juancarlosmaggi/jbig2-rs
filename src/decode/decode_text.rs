@@ -128,7 +128,12 @@ pub fn decode_text_region(
             let apply_refinement = if params.refinement {
                 if params.huffman {
                     let tables = huffman_tables.unwrap();
-                    tables.table_refinement_ri.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())? != 0
+                    tables
+                        .table_refinement_ri
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?
+                        != 0
                 } else {
                     decode_integer_context(decoding_context, "IARI")?.unwrap_or(0) != 0
                 }
@@ -141,23 +146,40 @@ pub fn decode_text_region(
                     // Mixed Huffman/Arithmetic coding for refinement
                     // 1. Decode refinement parameters using Huffman
                     let tables = huffman_tables.unwrap();
-                    let rdw = tables.table_refinement_dw.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
-                    let rdh = tables.table_refinement_dh.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
-                    let rdx = tables.table_refinement_dx.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
-                    let rdy = tables.table_refinement_dy.as_ref().unwrap().decode(huffman_input.as_mut().unwrap())?;
+                    let rdw = tables
+                        .table_refinement_dw
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
+                    let rdh = tables
+                        .table_refinement_dh
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
+                    let rdx = tables
+                        .table_refinement_dx
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
+                    let rdy = tables
+                        .table_refinement_dy
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
 
                     // 2. Switch to Arithmetic for the bitmap
                     huffman_input.as_mut().unwrap().byte_align();
                     let current_pos = huffman_input.as_ref().unwrap().get_position();
                     let data = huffman_input.as_ref().unwrap().get_data();
-                    
+
                     // Create a temporary decoding context for the arithmetic part
                     // We use the remaining data from the current position
-                    let mut temp_context = DecodingContext::new(data.to_vec(), current_pos, data.len());
-                    
+                    let mut temp_context =
+                        DecodingContext::new(data.to_vec(), current_pos, data.len());
+
                     let refined_width = (symbol_width as i32 + rdw) as usize;
                     let refined_height = (symbol_height as i32 + rdh) as usize;
-                    
+
                     let bitmap = decode_refinement(
                         &RefinementParams {
                             width: refined_width,
@@ -171,11 +193,11 @@ pub fn decode_text_region(
                         },
                         &mut temp_context,
                     )?;
-                    
+
                     // 3. Update Huffman reader position based on bytes consumed by Arithmetic decoder
                     let bytes_consumed = temp_context.get_bytes_read();
                     huffman_input.as_mut().unwrap().skip(bytes_consumed);
-                    
+
                     (rdw, rdh, rdx, rdy, bitmap)
                 } else {
                     // Pure Arithmetic coding
@@ -183,10 +205,10 @@ pub fn decode_text_region(
                     let rdh = decode_integer_context(decoding_context, "IARDH")?.unwrap_or(0);
                     let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
                     let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
-                    
+
                     let refined_width = (symbol_width as i32 + rdw) as usize;
                     let refined_height = (symbol_height as i32 + rdh) as usize;
-                    
+
                     let bitmap = decode_refinement(
                         &RefinementParams {
                             width: refined_width,
@@ -202,7 +224,7 @@ pub fn decode_text_region(
                     )?;
                     (rdw, rdh, rdx, rdy, bitmap)
                 };
-                
+
                 let refined_width = (symbol_width as i32 + rdw) as usize;
                 let refined_height = (symbol_height as i32 + rdh) as usize;
                 (refined_width, refined_height, refined_bitmap)

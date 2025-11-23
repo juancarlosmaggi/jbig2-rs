@@ -59,7 +59,7 @@ impl Jbig2Document {
     pub fn new() -> Self {
         Jbig2Document { pages: Vec::new() }
     }
-    
+
     /// Parses JBIG2 data from a byte slice and returns a document.
     ///
     /// This method handles both file-header and random-access JBIG2 formats.
@@ -151,7 +151,7 @@ impl Jbig2Document {
             pages: visitor.pages,
         })
     }
-    
+
     /// Parses JBIG2 data from multiple chunks (useful for embedded JBIG2 in PDFs).
     ///
     /// Chunks are processed sequentially, assuming no file header.
@@ -194,12 +194,12 @@ impl Jbig2Document {
             pages: visitor.pages,
         })
     }
-    
+
     /// Returns the total number of pages in the document.
     pub fn page_count(&self) -> usize {
         self.pages.len()
     }
-    
+
     /// Gets a reference to a specific page by index.
     ///
     /// # Arguments

@@ -1,9 +1,9 @@
 // Segment header and data parsing functions
 
-use crate::error::Jbig2Error;
+use super::segment_params::{HalftoneRegionParams, PatternDictionaryParams, TextRegionParams};
 use super::types::*;
 use super::utils::*;
-use super::segment_params::{HalftoneRegionParams, TextRegionParams, PatternDictionaryParams};
+use crate::error::Jbig2Error;
 
 pub fn read_segment_header(
     data: &[u8],
@@ -11,8 +11,10 @@ pub fn read_segment_header(
     has_file_header: bool,
 ) -> Result<SegmentHeader, Jbig2Error> {
     if data.len().saturating_sub(start) < 11 {
-        return Err(Jbig2Error::insufficient_data(11, data.len().saturating_sub(start))
-            .with_position(start));
+        return Err(
+            Jbig2Error::insufficient_data(11, data.len().saturating_sub(start))
+                .with_position(start),
+        );
     }
     let mut pos = start;
     let number = read_u32(data, pos);
@@ -21,8 +23,7 @@ pub fn read_segment_header(
     pos += 1;
     let segment_type = (flags & 0x3f) as usize;
     if segment_type >= SEGMENT_TYPES.len() {
-        return Err(Jbig2Error::invalid_segment("segment type out of range")
-            .with_position(start));
+        return Err(Jbig2Error::invalid_segment("segment type out of range").with_position(start));
     }
     let type_name = SEGMENT_TYPES[segment_type].to_string();
     let deferred_non_retain = (flags & 0x80) != 0;
@@ -168,26 +169,20 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
 pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegionParams {
     let region_info = read_region_segment_information(data, start);
     let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
-    
+
     let mmr = (halftone_region_flags & 1) != 0;
     let template = ((halftone_region_flags >> 1) & 3) as usize;
     let enable_skip = (halftone_region_flags & 8) != 0;
     let combination_operator = ((halftone_region_flags >> 4) & 7) as usize;
     let default_pixel_value = (halftone_region_flags >> 7) & 1;
-    
-    let grid_width =
-        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
-    let grid_height =
-        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
-    let grid_offset_x =
-        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
-    let grid_offset_y =
-        read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
-    let grid_vector_x =
-        read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
-    let grid_vector_y =
-        read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
-    
+
+    let grid_width = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1) as usize;
+    let grid_height = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 5) as usize;
+    let grid_offset_x = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 9) as i32;
+    let grid_offset_y = read_u32(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 13) as i32;
+    let grid_vector_x = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 17) as i16;
+    let grid_vector_y = read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 19) as i16;
+
     HalftoneRegionParams {
         region_info,
         mmr,
@@ -206,7 +201,12 @@ pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegion
 
 /// Parse text region common parameters (segments 4, 6, 7)
 /// Returns region info, flags, and symbol instance count
-pub fn parse_text_region_params(data: &[u8], start: usize, referred_size: usize, referred_count: usize) -> TextRegionParams {
+pub fn parse_text_region_params(
+    data: &[u8],
+    start: usize,
+    referred_size: usize,
+    referred_count: usize,
+) -> TextRegionParams {
     let mut pos = start;
     let text_region_segment_flags = read_u16(data, pos);
     pos += 2;
@@ -214,7 +214,7 @@ pub fn parse_text_region_params(data: &[u8], start: usize, referred_size: usize,
     pos += 4;
     pos += referred_count * referred_size;
     let region_info = read_region_segment_information(data, pos);
-    
+
     TextRegionParams {
         region_info,
         text_region_segment_flags,
@@ -230,7 +230,7 @@ pub fn parse_pattern_dictionary_params(data: &[u8], start: usize) -> PatternDict
     let pattern_width = data[start + 1] as usize;
     let pattern_height = data[start + 2] as usize;
     let max_pattern_index = read_u32(data, start + 3) as usize;
-    
+
     PatternDictionaryParams {
         mmr,
         template,
@@ -239,7 +239,6 @@ pub fn parse_pattern_dictionary_params(data: &[u8], start: usize) -> PatternDict
         max_pattern_index,
     }
 }
-
 
 pub fn read_segments<'a>(
     data: &'a [u8],
@@ -251,23 +250,19 @@ pub fn read_segments<'a>(
 ) -> Result<Vec<Segment<'a>>, Jbig2Error> {
     let mut segments = vec![];
     let mut pos = start;
-    
 
-    
     if sequential {
         // SEQUENTIAL MODE: Parse header and data together
         while pos < end {
             if pos + 11 > end {
                 break;
             }
-            
+
             match read_segment_header(data, pos, has_file_header) {
                 Ok(segment_header) => {
-
-                    
                     // Move past header
                     pos = segment_header.header_end;
-                    
+
                     // EOF segment has no data
                     if segment_header.segment_type == 51 {
                         segments.push(Segment {
@@ -278,18 +273,18 @@ pub fn read_segments<'a>(
                         });
                         break;
                     }
-                    
+
                     // Calculate data range
                     let segment_start = pos;
                     let segment_end = (pos + segment_header.length).min(end);
-                    
+
                     segments.push(Segment {
                         header: segment_header,
                         data,
                         start: segment_start,
                         end: segment_end,
                     });
-                    
+
                     // Move to next segment
                     pos = segment_end;
                 }
@@ -298,66 +293,58 @@ pub fn read_segments<'a>(
         }
     } else {
         // RANDOM-ACCESS MODE: Two-phase parsing
-        
+
         // PHASE 1: Parse ALL segment headers (directory)
 
         let mut headers = vec![];
-        
+
         while pos < end {
             if pos + 11 > end {
                 break;
             }
-            
+
             match read_segment_header(data, pos, has_file_header) {
                 Ok(segment_header) => {
-
-                    
                     // Move past header
                     pos = segment_header.header_end;
-                    
+
                     // Store header for phase 2
                     let is_eof = segment_header.segment_type == 51;
                     headers.push(segment_header);
-                    
+
                     // EOF segment marks end of directory
                     if is_eof {
-
                         break;
                     }
                 }
                 Err(_) => break,
             }
         }
-        
 
-        
         // PHASE 2: Parse ALL segment data (in same order as headers)
 
         let _data_area_start = pos;
-        
+
         for header in headers.into_iter() {
             let segment_start = pos;
             let segment_end = pos + header.length;
-            
 
-            
             // Validate we have enough data
             if segment_end > end {
                 return Err(Jbig2Error::new(ERR_OVERRUN));
             }
-            
+
             segments.push(Segment {
                 header,
                 data,
                 start: segment_start,
                 end: segment_end,
             });
-            
+
             // Move to next segment's data
             pos = segment_end;
         }
     }
-    
 
     Ok(segments)
 }

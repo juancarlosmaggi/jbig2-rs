@@ -1,5 +1,5 @@
-use proptest::prelude::*;
 use jbig2_rs::bitmap::Bitmap;
+use proptest::prelude::*;
 
 proptest! {
     /// Property: A bitmap's dimensions should match what was requested
@@ -45,7 +45,7 @@ proptest! {
     ) {
         let mut bitmap = Bitmap::new(width, height);
         bitmap.set_pixel(x1, y1, 1);
-        
+
         // Check that only the target pixel is set
         for y in 0..height {
             for x in 0..width {
@@ -99,7 +99,7 @@ proptest! {
         let mut bm1b = Bitmap::new(width, height);
         let mut bm2 = Bitmap::new(width, height);
         let mut bm3 = Bitmap::new(width, height);
-        
+
         // Set some pixels in bm1 and bm2
         for (i, (&p1, &p2)) in pixels1.iter().zip(pixels2.iter()).enumerate() {
             let x = i % width;
@@ -110,12 +110,12 @@ proptest! {
             bm2.set_pixel(x, y, p2 & 1);
             bm3.set_pixel(x, y, p2 & 1);
         }
-        
+
         // A | B
         bm1a.combine(&bm2, 0, 0, 0);
         // B | A
         bm3.combine(&bm1b, 0, 0, 0);
-        
+
         // Should be equal
         for y in 0..height {
             for x in 0..width {
@@ -132,7 +132,7 @@ proptest! {
         pixels in prop::collection::vec(any::<u8>(), 10..100),
     ) {
         let mut bm = Bitmap::new(width, height);
-        
+
         // Set some pixels
         for (i, &p) in pixels.iter().enumerate() {
             let x = i % width;
@@ -140,13 +140,13 @@ proptest! {
             if y >= height { break; }
             bm.set_pixel(x, y, p & 1);
         }
-        
+
         let original = bm.clone();
         let bm_copy = bm.clone(); // Clone AFTER setting pixels
-        
+
         // A & A should equal A
         bm.combine(&bm_copy, 0, 0, 1);
-        
+
         for y in 0..height {
             for x in 0..width {
                 prop_assert_eq!(bm.get_pixel(x, y), original.get_pixel(x, y));
@@ -163,7 +163,7 @@ proptest! {
     ) {
         let mut bm = Bitmap::new(width, height);
         let zero_bm = Bitmap::new(width, height);
-        
+
         // Set some pixels in bm
         for (i, &p) in pixels.iter().enumerate() {
             let x = i % width;
@@ -171,10 +171,10 @@ proptest! {
             if y >= height { break; }
             bm.set_pixel(x, y, p & 1);
         }
-        
+
         // A & 0 should equal 0
         bm.combine(&zero_bm, 0, 0, 1);
-        
+
         for y in 0..height {
             for x in 0..width {
                 prop_assert_eq!(bm.get_pixel(x, y), 0);

@@ -57,7 +57,9 @@ pub(super) fn on_immediate_halftone_region(
         });
         let width = region_info.width.max(1) as usize;
         let height = region_info.height.max(1) as usize;
-        *current_bitmap = Some(crate::bitmap_utils::create_initialized_bitmap(width, height, 0));
+        *current_bitmap = Some(crate::bitmap_utils::create_initialized_bitmap(
+            width, height, 0,
+        ));
     }
 
     // Get patterns from referred segment
@@ -93,7 +95,13 @@ pub(super) fn on_immediate_halftone_region(
 
     let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
 
-    draw_bitmap(current_page_info, current_bitmap, current_y, region_info, &bitmap)?;
+    draw_bitmap(
+        current_page_info,
+        current_bitmap,
+        current_y,
+        region_info,
+        &bitmap,
+    )?;
     Ok(())
 }
 

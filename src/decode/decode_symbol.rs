@@ -34,6 +34,13 @@ pub fn decode_symbol_dictionary(
         return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
 
+    // Validate that Huffman tables are provided when Huffman mode is enabled
+    if params.huffman && params.huffman_tables.is_none() {
+        return Err(Jbig2Error::new(
+            "Huffman tables required when Huffman mode is enabled",
+        ));
+    }
+
     validation::validate_symbol_decode_params(params.template_index, params.number_of_new_symbols)?;
 
     let mut new_symbols = Vec::with_capacity(params.number_of_new_symbols);

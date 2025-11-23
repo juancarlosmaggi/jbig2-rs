@@ -30,5 +30,10 @@ pub fn draw_symbol_at_position(
     offset_y: i32,
     combination_operator: u8,
 ) {
-    bitmap.combine(symbol, offset_x as isize, offset_y as isize, combination_operator);
+    bitmap.combine(
+        symbol,
+        offset_x as isize,
+        offset_y as isize,
+        combination_operator,
+    );
 }

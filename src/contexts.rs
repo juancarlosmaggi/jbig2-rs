@@ -74,7 +74,6 @@ pub struct DecodingContext {
 
 impl DecodingContext {
     pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
-        
         DecodingContext {
             data,
             start,

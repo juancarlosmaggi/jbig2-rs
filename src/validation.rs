@@ -1,22 +1,30 @@
-use crate::error::{Jbig2Error};
+use crate::error::Jbig2Error;
 
 pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbig2Error> {
     // Zero dimensions are allowed (empty bitmaps)
     if width == 0 && height == 0 {
         return Ok(());
     }
-    
+
     // Prevent integer overflow when calculating bitmap buffer size
     // stride = ((width - 1) / 8) + 1 bytes per row
     // total_size = stride * height must not exceed INT32_MAX
     let width_u32 = width as u32;
     let height_u32 = height as u32;
-    let stride = if width_u32 == 0 { 1 } else { ((width_u32 - 1) / 8) + 1 };
-    
+    let stride = if width_u32 == 0 {
+        1
+    } else {
+        ((width_u32 - 1) / 8) + 1
+    };
+
     if height_u32 > (i32::MAX as u32) / stride {
-        return Err(Jbig2Error::dimensions_too_large(width, height, i32::MAX as usize));
+        return Err(Jbig2Error::dimensions_too_large(
+            width,
+            height,
+            i32::MAX as usize,
+        ));
     }
-    
+
     Ok(())
 }
 

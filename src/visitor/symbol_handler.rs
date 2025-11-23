@@ -13,7 +13,7 @@ pub(super) fn collect_input_symbols(
     referred_segments: &[u32],
 ) -> Vec<Bitmap> {
     let mut input_symbols = Vec::new();
-    
+
     for &segment_id in referred_segments {
         if let Some(symbols) = symbols.get(&segment_id) {
             input_symbols.extend(symbols.clone());
@@ -47,18 +47,18 @@ pub(super) fn on_symbol_dictionary(
     // So we need to look BACKWARDS in the data to find AT values
     let mut at = Vec::new();
     let mut refinement_at = Vec::new();
-    
+
     if !huffman {
         // AT pixels are at fixed offset: 2 bytes after flags
-        let _at_offset = 2;  // Right after 2-byte flags in segment data
+        let _at_offset = 2; // Right after 2-byte flags in segment data
         let at_length = if template == 0 { 4 } else { 1 };
-        
+
         // Parse from original segment data (params.data contains full segment)
         // params.start points to decode data, so we need to calculate backwards
-        let segment_data_start = params.start - 8;  // Back past counts (8 bytes)
+        let segment_data_start = params.start - 8; // Back past counts (8 bytes)
         let at_bytes_count = if template == 0 { 8 } else { 2 };
         let at_data_start = segment_data_start - at_bytes_count;
-        
+
         if at_data_start + at_bytes_count <= params.data.len() {
             for i in 0..at_length {
                 let x = params.data[at_data_start + i * 2] as i8;
@@ -77,8 +77,8 @@ pub(super) fn on_symbol_dictionary(
         } else {
             0
         };
-        let refinement_at_start = segment_data_start - 4;  // 4 bytes for refinement AT
-        
+        let refinement_at_start = segment_data_start - 4; // 4 bytes for refinement AT
+
         if refinement_at_start >= at_bytes_count && refinement_at_start + 4 <= params.data.len() {
             for i in 0..2 {
                 let x = params.data[refinement_at_start + i * 2] as i8;
@@ -129,7 +129,7 @@ pub(super) fn on_symbol_dictionary(
         &mut decoding_context,
         huffman_input.as_mut(),
     )?;
-    
+
     symbols.insert(params.current_segment, exported_symbols);
 
     Ok(())

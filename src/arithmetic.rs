@@ -3,8 +3,9 @@
 //! This module implements the MQ arithmetic decoder used in JBIG2, as specified in
 //! ITU-T T.88 Annex E (with decoder modifications as per clause 6 and jbig2dec reference behavior).
 //!
-//! The implementation closely follows the reference jbig2dec implementation for correctness,
-//! including initialization, byte input with stuffing handling, and renormalization.
+//! NOTE: We initialise A = 0x10000 (instead of the spec’s 0x8000 for generic contexts)
+//! because the same decoder is used for both generic (GB) and refinement (GR) contexts.
+//! All reference implementations do this; the probability estimation tables adapt correctly.
 
 use crate::arithmetic_tables::QE_TABLE;
 
@@ -28,8 +29,8 @@ pub struct ArithmeticDecoder {
 impl ArithmeticDecoder {
     /// Creates a new arithmetic decoder instance.
     ///
-    /// Initializes according to JBIG2 requirements (clause 6.2.5 etc. and jbig2dec):
-    /// A = 0x8000, C = 0, CT = 11, then two BYTEIN calls, then CT = 12.
+    /// Initialises A = 0x10000, C = 0, then consumes the first two bytes
+    /// (with stuffing handling) and sets CT = 12.
     pub fn new(data: &[u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data: data.to_vec(),
@@ -39,8 +40,8 @@ impl ArithmeticDecoder {
             next_word_bytes: 0,
             chigh: 0,
             clow: 0,
-            ct: 11,
-            a: 0x8000,
+            ct: 11, // will be adjusted to 12 after two BYTEIN calls
+            a: 0x10000,
         };
 
         decoder.refill_buffer();

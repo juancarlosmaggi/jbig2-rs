@@ -1,5 +1,5 @@
-use crate::error::Jbig2Error;
 use super::{HuffmanLine, HuffmanTable};
+use crate::error::Jbig2Error;
 
 pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
     if number == 0 || number > 15 {
