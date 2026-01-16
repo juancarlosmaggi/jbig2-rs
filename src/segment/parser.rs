@@ -29,21 +29,26 @@ pub fn read_segment_header(
     let deferred_non_retain = (flags & 0x80) != 0;
     let page_association_field_size = (flags & 0x40) != 0;
     let _data_length_field_size = (flags & 0x04) != 0;
-    let mut referred_to_count = (data[pos] >> 5) as usize;
-    let mut retain_bits = vec![data[pos] & 0x07];
-    pos += 1;
-    if referred_to_count == 31 {
-        if data.len().saturating_sub(pos) < 3 {
+    let referred_to_count;
+    let retain_bits;
+    let rtscarf = data[pos];
+    if (rtscarf & 0xE0) == 0xE0 {
+        if data.len().saturating_sub(pos) < 4 {
             return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
-        referred_to_count = read_u32(data, pos) as usize & 0x1fffffff;
-        pos += 3;
-        let bytes = (referred_to_count + 7) >> 3;
+        let rtscarf_long = read_u32(data, pos);
+        referred_to_count = (rtscarf_long & 0x1fffffff) as usize;
+        pos += 4;
+        let bytes = (referred_to_count + 1) / 8;
         if data.len().saturating_sub(pos) < bytes {
             return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
         }
         retain_bits = data[pos..pos + bytes].to_vec();
         pos += bytes;
+    } else {
+        referred_to_count = (rtscarf >> 5) as usize;
+        retain_bits = vec![rtscarf & 0x1f];
+        pos += 1;
     }
     let referred_to_segment_number_size = if number <= 256 {
         1

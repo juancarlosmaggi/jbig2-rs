@@ -3,25 +3,21 @@
 //! This module implements the MQ arithmetic decoder used in JBIG2, as specified in
 //! ITU-T T.88 Annex E (with decoder modifications as per clause 6 and jbig2dec reference behavior).
 //!
-//! NOTE: We initialise A = 0x10000 (instead of the spec’s 0x8000 for generic contexts)
-//! because the same decoder is used for both generic (GB) and refinement (GR) contexts.
-//! All reference implementations do this; the probability estimation tables adapt correctly.
+//! The implementation follows the jbig2dec "software convention" initialization and BYTEIN
+//! handling to match marker/stuffing behavior.
 
 use crate::arithmetic_tables::QE_TABLE;
+use crate::error::Jbig2Error;
 
 /// MQ Arithmetic Decoder implementation.
 ///
-/// C register is represented as chigh (bits 31–16) and clow (bits 15–0).
-/// A is the interval register (effectively 16-bit value).
-/// CT is the bit counter (number of bits until next BYTEIN).
+/// C is the 32-bit register, A is the interval register (16-bit value), and CT is the bit counter.
 pub struct ArithmeticDecoder {
     data: Vec<u8>,
     offset: usize,
-    data_end: usize,
     next_word: u32,
     next_word_bytes: usize,
-    chigh: u32,
-    clow: u32,
+    c: u32,
     ct: i32,
     a: u32,
 }
@@ -29,92 +25,138 @@ pub struct ArithmeticDecoder {
 impl ArithmeticDecoder {
     /// Creates a new arithmetic decoder instance.
     ///
-    /// Initialises A = 0x10000, C = 0, then consumes the first two bytes
-    /// (with stuffing handling) and sets CT = 12.
+    /// Initializes C from the first byte, then performs a BYTEIN and normalization
+    /// per Figure E.20 and jbig2dec's software convention.
     pub fn new(data: &[u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data: data.to_vec(),
             offset: 0,
-            data_end: data.len(),
             next_word: 0,
             next_word_bytes: 0,
-            chigh: 0,
-            clow: 0,
-            ct: 11, // will be adjusted to 12 after two BYTEIN calls
-            a: 0x10000,
+            c: 0,
+            ct: 0,
+            a: 0x8000,
         };
 
-        decoder.refill_buffer();
+        let (word, bytes) = decoder.get_next_word(0);
+        decoder.next_word = word;
+        decoder.next_word_bytes = bytes;
+        if bytes == 0 {
+            return decoder;
+        }
+        decoder.offset = bytes;
+
+        // Figure F.1
+        decoder.c = (!(decoder.next_word >> 8)) & 0xFF0000;
+
+        // Figure E.20 (2)
         decoder.byte_in();
-        decoder.byte_in();
+
+        // Figure E.20 (3)
+        decoder.c <<= 7;
         decoder.ct -= 7;
-        let carry = decoder.clow >> 9;
-        decoder.clow = (decoder.clow << 7) & 0xFFFF;
-        decoder.chigh = (decoder.chigh << 7 | carry) & 0xFFFF;
         decoder.a = 0x8000;
 
         decoder
     }
 
-    /// Refill the 32-bit input buffer, padding with 0xFF when data is exhausted
-    /// (this matches jbig2dec behavior for end-of-stream handling).
-    fn refill_buffer(&mut self) {
-        let mut new_word = 0u32;
-        let mut bytes_read = 0;
-
-        for _ in 0..4 {
-            let byte = if self.offset < self.data_end {
-                let b = self.data[self.offset];
-                self.offset += 1;
-                b as u32
-            } else {
-                0xFF
-            };
-            new_word = (new_word << 8) | byte;
-            bytes_read += 1;
+    fn get_next_word(&self, offset: usize) -> (u32, usize) {
+        if offset >= self.data.len() {
+            return (0, 0);
         }
 
-        self.next_word = new_word;
-        self.next_word_bytes = bytes_read;
+        let mut val = 0u32;
+        let mut ret = 0usize;
+
+        if offset < self.data.len() {
+            val |= (self.data[offset] as u32) << 24;
+            ret += 1;
+        }
+        if offset + 1 < self.data.len() {
+            val |= (self.data[offset + 1] as u32) << 16;
+            ret += 1;
+        }
+        if offset + 2 < self.data.len() {
+            val |= (self.data[offset + 2] as u32) << 8;
+            ret += 1;
+        }
+        if offset + 3 < self.data.len() {
+            val |= self.data[offset + 3] as u32;
+            ret += 1;
+        }
+
+        (val, ret)
     }
 
-    /// Input a byte into the C register, handling 0xFF stuffing correctly.
+    /// Input a byte into the C register, handling 0xFF stuffing and marker codes.
     fn byte_in(&mut self) {
         let b = ((self.next_word >> 24) & 0xFF) as u8;
 
-        // Always consume the current top byte
-        self.next_word <<= 8;
-        self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
-        if self.next_word_bytes == 0 {
-            self.refill_buffer();
-        }
-
-        let add: u32;
-
         if b == 0xFF {
-            let b1 = ((self.next_word >> 24) & 0xFF) as u8;
-            if b1 > 0x8F {
-                add = 0xFF00;
-                // Marker – do not consume next byte
+            if self.next_word_bytes <= 1 {
+                let (word, bytes) = self.get_next_word(self.offset);
+                if bytes == 0 {
+                    self.next_word = 0xFF900000;
+                    self.next_word_bytes = 2;
+                    self.c = self.c.wrapping_add(0xFF00);
+                    self.ct = 8;
+                    return;
+                }
+                self.next_word = word;
+                self.next_word_bytes = bytes;
+                self.offset += bytes;
+
+                let b1 = ((self.next_word >> 24) & 0xFF) as u8;
+                if b1 > 0x8F {
+                    self.ct = 8;
+                    self.next_word = 0xFF000000 | (self.next_word >> 8);
+                    self.next_word_bytes = 2;
+                    if self.offset > 0 {
+                        self.offset -= 1;
+                    }
+                } else {
+                    self.c = self
+                        .c
+                        .wrapping_add(0xFE00u32.wrapping_sub((b1 as u32) << 9));
+                    self.ct = 7;
+                }
             } else {
-                add = 0xFE00;
-                // Stuffed – consume the next (stuffer) byte
-                self.next_word <<= 8;
-                self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
-                if self.next_word_bytes == 0 {
-                    self.refill_buffer();
+                let b1 = ((self.next_word >> 16) & 0xFF) as u8;
+                if b1 > 0x8F {
+                    self.ct = 8;
+                } else {
+                    self.next_word_bytes -= 1;
+                    self.next_word <<= 8;
+                    self.c = self
+                        .c
+                        .wrapping_add(0xFE00u32.wrapping_sub((b1 as u32) << 9));
+                    self.ct = 7;
                 }
             }
-            self.ct = 8;
         } else {
-            add = (b as u32) << 8;
+            self.next_word <<= 8;
+            self.next_word_bytes = self.next_word_bytes.saturating_sub(1);
+
+            if self.next_word_bytes == 0 {
+                let (word, bytes) = self.get_next_word(self.offset);
+                if bytes == 0 {
+                    self.next_word = 0xFF900000;
+                    self.next_word_bytes = 2;
+                    self.c = self.c.wrapping_add(0xFF00);
+                    self.ct = 8;
+                    return;
+                }
+                self.next_word = word;
+                self.next_word_bytes = bytes;
+                self.offset += bytes;
+            }
+
+            let b = ((self.next_word >> 24) & 0xFF) as u8;
+            self.c = self
+                .c
+                .wrapping_add(0xFF00u32.wrapping_sub((b as u32) << 8));
             self.ct = 8;
         }
-
-        let c = ((self.chigh as u64) << 16) | self.clow as u64;
-        let c = c + add as u64;
-        self.chigh = (c >> 16) as u32;
-        self.clow = c as u32 & 0xFFFF;
     }
 
     /// Decodes a single bit using the specified context.
@@ -126,16 +168,16 @@ impl ArithmeticDecoder {
         &mut self,
         contexts: &mut [i8],
         pos: usize,
-    ) -> Result<u8, crate::error::Jbig2Error> {
+    ) -> Result<u8, Jbig2Error> {
         if pos >= contexts.len() {
-            return Err(crate::error::Jbig2Error::new("invalid context position"));
+            return Err(Jbig2Error::new("invalid context position"));
         }
 
         let ctx_val = unsafe { *contexts.get_unchecked(pos) };
         let cx_index = (ctx_val >> 1) as usize;
 
         if cx_index >= QE_TABLE.len() {
-            return Err(crate::error::Jbig2Error::new("invalid context index"));
+            return Err(Jbig2Error::new("invalid context index"));
         }
 
         let qe_entry = unsafe { QE_TABLE.get_unchecked(cx_index) };
@@ -148,16 +190,16 @@ impl ArithmeticDecoder {
         let d: u8;
         let new_cx_index: usize;
 
-        if self.chigh < self.a {
+        if (self.c >> 16) < self.a {
             // MPS path
             if (self.a & 0x8000) != 0 {
                 // No renormalization needed – fast path
                 unsafe {
-                    *contexts.get_unchecked_mut(pos) = ((qe_entry.nmps as i8) << 1) | (mps as i8);
+                    *contexts.get_unchecked_mut(pos) =
+                        ((qe_entry.nmps as i8) << 1) | (mps as i8);
                 }
                 return Ok(mps);
             }
-            // Renormalization needed
             if self.a < qe {
                 d = 1 ^ mps;
                 if qe_entry.switch_flag == 1 {
@@ -170,10 +212,7 @@ impl ArithmeticDecoder {
             }
         } else {
             // LPS path – subtract A from C (A is shifted left 16 bits)
-            let c = ((self.chigh as u64) << 16) | self.clow as u64;
-            let c = c.wrapping_sub((self.a as u64) << 16);
-            self.chigh = (c >> 16) as u32;
-            self.clow = c as u32 & 0xFFFF;
+            self.c = self.c.wrapping_sub(self.a << 16);
 
             if self.a < qe {
                 self.a = qe;
@@ -195,9 +234,7 @@ impl ArithmeticDecoder {
                 self.byte_in();
             }
             self.a <<= 1;
-            let carry = self.clow >> 15 & 1;
-            self.clow = (self.clow << 1) & 0xFFFF;
-            self.chigh = ((self.chigh << 1) | carry) & 0xFFFF;
+            self.c <<= 1;
             self.ct -= 1;
             if (self.a & 0x8000) != 0 {
                 break;
@@ -214,6 +251,6 @@ impl ArithmeticDecoder {
 
     /// Returns the number of bytes consumed from the input stream.
     pub fn get_bytes_read(&self) -> usize {
-        self.offset - self.next_word_bytes
+        self.offset.saturating_sub(self.next_word_bytes)
     }
 }
