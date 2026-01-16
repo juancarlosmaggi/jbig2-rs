@@ -5,7 +5,6 @@ use crate::error::Jbig2Error;
 use crate::reader::Reader;
 use crate::validation;
 
-const OLD_PIXEL_MASK: u16 = 0x7bf7;
 const REUSED_CONTEXTS: [u16; 4] = [
     0x9b25, // 10011 0110010 0101
     0x0795, // 0011 110010 101
@@ -77,38 +76,61 @@ fn decode_bitmap_template0(
     let mut decoder = decoding_context.get_decoder();
     let mut contexts = decoding_context.get_contexts("GB");
     let mut bitmap = Bitmap::new(width, height);
-    for i in 0..height {
-        let mut context_label = 0u16;
-        if i >= 2 {
-            let row2_y = i - 2;
-            context_label |= (bitmap.get_pixel(0, row2_y) as u16) << 13;
-            context_label |= (bitmap.get_pixel(1, row2_y) as u16) << 12;
-            context_label |= (bitmap.get_pixel(2, row2_y) as u16) << 11;
-        }
-        if i >= 1 {
-            let row1_y = i - 1;
-            context_label |= (bitmap.get_pixel(0, row1_y) as u16) << 7;
-            context_label |= (bitmap.get_pixel(1, row1_y) as u16) << 6;
-            context_label |= (bitmap.get_pixel(2, row1_y) as u16) << 5;
-            context_label |= (bitmap.get_pixel(3, row1_y) as u16) << 4;
-        }
-        for j in 0..width {
-            let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize)?;
-            bitmap.set_pixel(j, i, pixel);
-            let row2_contrib = if i >= 2 && j + 3 < width {
-                (bitmap.get_pixel(j + 3, i - 2) as u16) << 11
-            } else {
-                0
-            };
-            let row1_contrib = if i >= 1 && j + 4 < width {
-                (bitmap.get_pixel(j + 4, i - 1) as u16) << 4
-            } else {
-                0
-            };
-            context_label = ((context_label & OLD_PIXEL_MASK) << 1)
-                | row2_contrib
-                | row1_contrib
-                | (pixel as u16);
+    if width == 0 || height == 0 {
+        return Ok(bitmap);
+    }
+    let rowstride = bitmap.stride;
+    let padded_width = (width + 7) & !7;
+    for y in 0..height {
+        let row_start = y * rowstride;
+        let (before, after) = bitmap.data.split_at_mut(row_start);
+        let (row, _) = after.split_at_mut(rowstride);
+        let line1 = if y >= 1 {
+            Some(&before[(y - 1) * rowstride..y * rowstride])
+        } else {
+            None
+        };
+        let line2 = if y >= 2 {
+            Some(&before[(y - 2) * rowstride..(y - 1) * rowstride])
+        } else {
+            None
+        };
+
+        let mut line_m1 = line1.map_or(0u32, |l| l[0] as u32);
+        let mut line_m2 = line2.map_or(0u32, |l| (l[0] as u32) << 6);
+        let mut context = (line_m1 & 0x7f0) | (line_m2 & 0xf800);
+
+        for x in (0..padded_width).step_by(8) {
+            let minor_width = if width - x > 8 { 8 } else { width - x };
+
+            if let Some(line1_row) = line1 {
+                let next = if x + 8 < width {
+                    line1_row[(x >> 3) + 1] as u32
+                } else {
+                    0
+                };
+                line_m1 = (line_m1 << 8) | next;
+            }
+
+            if let Some(line2_row) = line2 {
+                let next = if x + 8 < width {
+                    line2_row[(x >> 3) + 1] as u32
+                } else {
+                    0
+                };
+                line_m2 = (line_m2 << 8) | (next << 6);
+            }
+
+            let mut result = 0u8;
+            for x_minor in 0..minor_width {
+                let bit = decoder.read_bit(contexts.as_mut(), context as usize)?;
+                result |= (bit as u8) << (7 - x_minor);
+                let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                context =
+                    ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+            }
+            row[x >> 3] = result;
         }
     }
     Ok(bitmap)
@@ -206,7 +228,7 @@ pub fn decode_bitmap(
     }
     let sbb_left = (-min_x) as usize;
     let sbb_top = (-min_y) as usize;
-    let sbb_right = params.width - max_x as usize;
+    let sbb_right = params.width.saturating_sub(max_x as usize);
     let pseudo_pixel_context = REUSED_CONTEXTS[params.template_index];
     let mut bitmap = Bitmap::new(params.width, params.height);
     let mut decoder = decoding_context.get_decoder();

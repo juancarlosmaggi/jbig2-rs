@@ -5,9 +5,9 @@ use crate::decode::decode_symbol_helpers::{
     AggregateSymbolParams, decode_aggregate_symbol, split_collective_bitmap,
 };
 use crate::decode::decode_utils::read_uncompressed_bitmap;
-use crate::decoder::{decode_i32_huffman_or_arith, decode_iaid_context, decode_integer_context};
+use crate::decoder::{decode_iaid_context, decode_integer_context};
 use crate::error::Jbig2Error;
-use crate::huffman::SymbolDictionaryHuffmanTables;
+use crate::huffman::{SymbolDictionaryHuffmanTables, get_standard_table};
 use crate::reader::Reader;
 use crate::validation;
 
@@ -60,6 +60,21 @@ pub fn decode_symbol_dictionary(
     let huffman = params.huffman;
     let refinement = params.refinement;
     let huffman_tables = params.huffman_tables.as_ref();
+    let huff_refine_delta = if huffman && refinement {
+        Some(get_standard_table(15)?)
+    } else {
+        None
+    };
+    let huff_refine_size = if huffman && refinement {
+        Some(get_standard_table(1)?)
+    } else {
+        None
+    };
+    let huff_export_run = if huffman {
+        Some(get_standard_table(1)?)
+    } else {
+        None
+    };
 
     while new_symbols.len() < params.number_of_new_symbols {
         // Height class delta height (IADH / SDHUFFDH)
@@ -75,7 +90,14 @@ pub fn decode_symbol_dictionary(
             }
             val
         } else {
-            decode_i32_huffman_or_arith(huffman, || Ok(0), "IADH", decoding_context)?
+            match decode_integer_context(decoding_context, "IADH")? {
+                Some(v) => v,
+                None => {
+                    return Err(Jbig2Error::new(
+                        "OOB when decoding height class delta",
+                    ))
+                }
+            }
         };
 
         current_height = current_height
@@ -145,49 +167,91 @@ pub fn decode_symbol_dictionary(
                 };
 
                 if instances == 1 {
-                    // Single symbol refinement – always arithmetic coded, bottom-left reference corner (spec 6.5.8.2.1)
-                    let symbol_id =
-                        decode_iaid_context(decoding_context, symbol_code_length)? as usize;
+                    let (symbol_id, rdx, rdy, bmsize) = if huffman {
+                        let reader = huffman_input
+                            .as_mut()
+                            .ok_or_else(|| Jbig2Error::new("missing Huffman input"))?;
+                        let symbol_id = reader.read_bits(symbol_code_length as u32)? as usize;
+                        let delta_table = huff_refine_delta.as_ref().unwrap();
+                        let rdx = delta_table.decode(reader)?;
+                        let rdy = delta_table.decode(reader)?;
+                        let size_table = huff_refine_size.as_ref().unwrap();
+                        let bmsize = size_table.decode(reader)?;
+                        if bmsize < 0 {
+                            return Err(Jbig2Error::new("invalid refinement bitmap size"));
+                        }
+                        reader.byte_align();
+                        (symbol_id, rdx, rdy, Some(bmsize as usize))
+                    } else {
+                        let symbol_id =
+                            decode_iaid_context(decoding_context, symbol_code_length)? as usize;
+                        let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
+                        let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
+                        (symbol_id, rdx, rdy, None)
+                    };
+
+                    let total_symbols = params.symbols.len() + new_symbols.len();
+                    if symbol_id >= total_symbols {
+                        return Err(Jbig2Error::new("invalid refinement symbol id"));
+                    }
                     let sym = if symbol_id < params.symbols.len() {
                         &params.symbols[symbol_id]
                     } else {
                         &new_symbols[symbol_id - params.symbols.len()]
                     };
 
-                    let rdw = decode_integer_context(decoding_context, "IARDW")?.unwrap_or(0);
-                    let rdh = decode_integer_context(decoding_context, "IARDH")?.unwrap_or(0);
-                    let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
-                    let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
-
-                    let new_width_i32 = sym.width as i32 + rdw;
-                    let new_height_i32 = sym.height as i32 + rdh;
-                    if new_width_i32 <= 0 || new_height_i32 <= 0 {
-                        return Err(Jbig2Error::new(
-                            "Invalid dimensions for refined symbol",
-                        ));
+                    if current_width <= 0 || current_height <= 0 {
+                        return Err(Jbig2Error::new("invalid refinement symbol dimensions"));
                     }
-                    let new_width = new_width_i32 as usize;
-                    let new_height = new_height_i32 as usize;
+                    let width = current_width as usize;
+                    let height = current_height as usize;
 
-                    let offset_x = rdx + (rdw >> 1);
-                    // Bottom-left reference corner → adjust Y offset by -(REFH - 1)
-                    let offset_y = rdy + (rdh >> 1) - (sym.height as i32 - 1);
-
-                    let bitmap = crate::decode::decode_refinement::decode_refinement(
-                        &crate::decode::decode_refinement::RefinementParams {
-                            width: new_width as usize,
-                            height: new_height as usize,
-                            template_index: params.refinement_template_index,
-                            reference_bitmap: sym,
-                            offset_x,
-                            offset_y,
-                            prediction: false,
-                            at: params.refinement_at.clone(),
-                        },
-                        decoding_context,
-                    )?;
+                    let bitmap = if huffman {
+                        let reader = huffman_input
+                            .as_mut()
+                            .ok_or_else(|| Jbig2Error::new("missing Huffman input"))?;
+                        let current_pos = reader.get_position();
+                        let data = reader.get_data();
+                        let mut temp_context =
+                            DecodingContext::new(data.to_vec(), current_pos, data.len());
+                        crate::decode::decode_refinement::decode_refinement(
+                            &crate::decode::decode_refinement::RefinementParams {
+                                width,
+                                height,
+                                template_index: params.refinement_template_index,
+                                reference_bitmap: sym,
+                                offset_x: rdx,
+                                offset_y: rdy,
+                                prediction: false,
+                                at: params.refinement_at.clone(),
+                            },
+                            &mut temp_context,
+                        )?
+                    } else {
+                        crate::decode::decode_refinement::decode_refinement(
+                            &crate::decode::decode_refinement::RefinementParams {
+                                width,
+                                height,
+                                template_index: params.refinement_template_index,
+                                reference_bitmap: sym,
+                                offset_x: rdx,
+                                offset_y: rdy,
+                                prediction: false,
+                                at: params.refinement_at.clone(),
+                            },
+                            decoding_context,
+                        )?
+                    };
 
                     new_symbols.push(bitmap);
+
+                    if let Some(mut bmsize) = bmsize {
+                        if bmsize == 0 {
+                            let stride = (width + 7) >> 3;
+                            bmsize = height * stride;
+                        }
+                        huffman_input.as_mut().unwrap().skip(bmsize);
+                    }
                 } else {
                     // Aggregate symbol
                     let agg_params = AggregateSymbolParams {
@@ -198,12 +262,14 @@ pub fn decode_symbol_dictionary(
                         refinement: true,
                         refinement_template_index: params.refinement_template_index,
                         refinement_at: params.refinement_at.clone(),
+                        huffman,
                     };
                     let bitmap = decode_aggregate_symbol(
                         &agg_params,
                         &params.symbols,
                         &new_symbols,
                         decoding_context,
+                        huffman_input.as_mut().map(|reader| &mut **reader),
                     )?;
                     new_symbols.push(bitmap);
                 }
@@ -274,34 +340,63 @@ pub fn decode_symbol_dictionary(
         }
     }
 
+    if new_symbols.len() != params.number_of_new_symbols {
+        return Err(Jbig2Error::new(&format!(
+            "symbol dictionary decoded {} of {} symbols",
+            new_symbols.len(),
+            params.number_of_new_symbols
+        )));
+    }
+
     // Exported symbols
     let total_symbols = params.symbols.len() + new_symbols.len();
     let mut flags = Vec::with_capacity(total_symbols);
 
     if huffman {
-        let tables = huffman_tables.unwrap();
+        let export_table = huff_export_run.as_ref().unwrap();
         let mut export = false; // first run is non-exported
-        loop {
-            let (run, oob) = tables
-                .table_aggregate_instances // NOTE: replace with B.10 SDHUFFEXRUN when implemented
-                .decode_entry(huffman_input.as_mut().unwrap())?;
-            if oob || run == 0 {
-                break;
+        let mut i = 0usize;
+        let mut exported_count = 0usize;
+        let mut empty_runs = 0u32;
+        while i < total_symbols {
+            let (run, oob) = export_table.decode_entry(huffman_input.as_mut().unwrap())?;
+            if oob {
+                return Err(Jbig2Error::new(
+                    "OOB when decoding runlength for exported symbols",
+                ));
             }
-            let run = run as usize;
-            for _ in 0..run {
-                if flags.len() < total_symbols {
-                    flags.push(export);
+
+            let mut run_len = run;
+            if run_len <= 0 {
+                empty_runs += 1;
+                if empty_runs == 1000 {
+                    return Err(Jbig2Error::new(
+                        "run length too small in export symbol table",
+                    ));
                 }
+            } else {
+                empty_runs = 0;
+            }
+            if run_len < 0 {
+                run_len = 0;
+            }
+            let mut run_len = run_len as usize;
+
+            if run_len > total_symbols - i {
+                run_len = total_symbols - i;
+            }
+            if export && exported_count + run_len > params.number_of_exported_symbols {
+                run_len = params.number_of_exported_symbols - exported_count;
+            }
+
+            for _ in 0..run_len {
+                flags.push(export);
+                if export {
+                    exported_count += 1;
+                }
+                i += 1;
             }
             export = !export;
-            if flags.len() >= total_symbols {
-                break;
-            }
-        }
-        // OOB or early termination → remaining symbols exported
-        while flags.len() < total_symbols {
-            flags.push(true);
         }
     } else {
         // Arithmetic mode – IAEX run-lengths toggle export flag (spec 6.5.10)
@@ -310,19 +405,29 @@ pub fn decode_symbol_dictionary(
         let mut exported_count = 0usize;
         let mut empty_runs = 0u32;
         while i < total_symbols {
-            let run = decode_integer_context(decoding_context, "IAEX")?.unwrap_or(0);
-            if run <= 0 {
+            let run = match decode_integer_context(decoding_context, "IAEX")? {
+                Some(v) => v,
+                None => {
+                    return Err(Jbig2Error::new(
+                        "OOB when decoding runlength for exported symbols",
+                    ))
+                }
+            };
+            let mut run_len = run;
+            if run_len <= 0 {
                 empty_runs += 1;
                 if empty_runs == 1000 {
                     return Err(Jbig2Error::new(
                         "run length too small in export symbol table",
                     ));
                 }
-                continue;
+            } else {
+                empty_runs = 0;
             }
-            empty_runs = 0;
-
-            let mut run_len = run as usize;
+            if run_len < 0 {
+                run_len = 0;
+            }
+            let mut run_len = run_len as usize;
             if run_len > total_symbols - i {
                 run_len = total_symbols - i;
             }
@@ -352,6 +457,24 @@ pub fn decode_symbol_dictionary(
                 &new_symbols[i - params.symbols.len()]
             };
             exported_symbols.push(sym.clone());
+        }
+    }
+
+    if exported_symbols.len() != params.number_of_exported_symbols {
+        if params.number_of_exported_symbols <= total_symbols {
+            exported_symbols.clear();
+            for i in 0..params.number_of_exported_symbols {
+                let sym = if i < params.symbols.len() {
+                    &params.symbols[i]
+                } else {
+                    &new_symbols[i - params.symbols.len()]
+                };
+                exported_symbols.push(sym.clone());
+            }
+        } else {
+            return Err(Jbig2Error::new(
+                "exported symbol count exceeds available symbols",
+            ));
         }
     }
 

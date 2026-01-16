@@ -156,13 +156,10 @@ pub struct TextRegionHuffmanTables {
     pub table_refinement_ri: Option<HuffmanTable>,
 }
 
-pub fn get_text_region_huffman_tables(
-    params: &TextRegionHuffmanParams,
-    referred_to: &[u32],
-    custom_tables: &HashMap<u32, HuffmanTable>,
-    number_of_symbols: usize,
+fn decode_symbol_id_huffman_table(
     reader: &mut Reader,
-) -> Result<TextRegionHuffmanTables, Jbig2Error> {
+    number_of_symbols: usize,
+) -> Result<HuffmanTable, Jbig2Error> {
     // 7.4.3.1.7 Symbol ID Huffman table decoding
     // Read code lengths for RUNCODEs 0...34.
     let mut codes = Vec::new();
@@ -214,7 +211,17 @@ pub fn get_text_region_huffman_tables(
         }
     }
     reader.byte_align();
-    let symbol_id_table = HuffmanTable::new(codes, false);
+    Ok(HuffmanTable::new(codes, false))
+}
+
+pub fn get_text_region_huffman_tables(
+    params: &TextRegionHuffmanParams,
+    referred_to: &[u32],
+    custom_tables: &HashMap<u32, HuffmanTable>,
+    number_of_symbols: usize,
+    reader: &mut Reader,
+) -> Result<TextRegionHuffmanTables, Jbig2Error> {
+    let symbol_id_table = decode_symbol_id_huffman_table(reader, number_of_symbols)?;
 
     // 7.4.3.1.6 Text region segment Huffman table selection
     let mut custom_index = 0;
@@ -333,6 +340,26 @@ pub fn get_text_region_huffman_tables(
         table_refinement_dy,
         table_refinement_size,
         table_refinement_ri,
+    })
+}
+
+pub fn get_aggregate_symbol_huffman_tables(
+    reader: &mut Reader,
+    number_of_symbols: usize,
+) -> Result<TextRegionHuffmanTables, Jbig2Error> {
+    let symbol_id_table = decode_symbol_id_huffman_table(reader, number_of_symbols)?;
+
+    Ok(TextRegionHuffmanTables {
+        symbol_id_table,
+        table_first_s: get_standard_table(6)?,  // B.6
+        table_delta_s: get_standard_table(8)?,  // B.8
+        table_delta_t: get_standard_table(11)?, // B.11
+        table_refinement_dw: Some(get_standard_table(15)?), // B.15
+        table_refinement_dh: Some(get_standard_table(15)?),
+        table_refinement_dx: Some(get_standard_table(15)?),
+        table_refinement_dy: Some(get_standard_table(15)?),
+        table_refinement_size: Some(get_standard_table(1)?), // B.1
+        table_refinement_ri: Some(get_standard_table(1)?),
     })
 }
 

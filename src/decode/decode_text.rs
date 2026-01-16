@@ -1,11 +1,10 @@
 use crate::bitmap::Bitmap;
-use crate::bitmap_utils::{self, apply_combination_operator};
+use crate::bitmap_utils;
 use crate::contexts::DecodingContext;
 use crate::decode::decode_refinement::RefinementParams;
 use crate::decode::decode_refinement::decode_refinement;
 use crate::decoder::{
-    decode_i32_huffman_or_arith, decode_integer_context, decode_option_i32_huffman_or_arith,
-    decode_u32_huffman_or_arith,
+    decode_i32_huffman_or_arith, decode_integer_context, decode_u32_huffman_or_arith,
 };
 use crate::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
@@ -62,7 +61,7 @@ pub fn decode_text_region(
         params.default_pixel_value,
     );
     let huffman_tables = params.huffman_tables.as_ref();
-    let mut strip_t = -decode_i32_huffman_or_arith(
+    let initial_strip_t = decode_i32_huffman_or_arith(
         params.huffman,
         || {
             let tables = huffman_tables.unwrap();
@@ -71,6 +70,9 @@ pub fn decode_text_region(
         "IADT",
         decoding_context,
     )?;
+    let mut strip_t = initial_strip_t
+        .checked_neg()
+        .ok_or_else(|| Jbig2Error::new("strip T overflow"))?;
     let mut first_s = 0i32;
     let mut i = 0;
     while i < params.number_of_symbol_instances {
@@ -83,7 +85,9 @@ pub fn decode_text_region(
             "IADT",
             decoding_context,
         )?;
-        strip_t += delta_t;
+        strip_t = strip_t
+            .checked_add(delta_t)
+            .ok_or_else(|| Jbig2Error::new("strip T overflow"))?;
         let delta_first_s = decode_i32_huffman_or_arith(
             params.huffman,
             || {
@@ -93,7 +97,9 @@ pub fn decode_text_region(
             "IAFS",
             decoding_context,
         )?;
-        first_s += delta_first_s;
+        first_s = first_s
+            .checked_add(delta_first_s)
+            .ok_or_else(|| Jbig2Error::new("first S overflow"))?;
         let mut current_s = first_s;
         loop {
             let mut current_t = 0i32;
@@ -107,7 +113,10 @@ pub fn decode_text_region(
                     decode_integer_context(decoding_context, "IAIT")?.unwrap_or(0) as i32
                 };
             }
-            let t = (params.strip_size as i32) * strip_t + current_t;
+            let t = (params.strip_size as i32)
+                .checked_mul(strip_t)
+                .and_then(|val| val.checked_add(current_t))
+                .ok_or_else(|| Jbig2Error::new("text region T overflow"))?;
             let symbol_id = decode_u32_huffman_or_arith(
                 params.huffman,
                 || {
@@ -120,20 +129,20 @@ pub fn decode_text_region(
                 decoding_context,
             )? as usize;
             if symbol_id >= params.input_symbols.len() {
-                return Err(Jbig2Error::new("invalid symbol id"));
+                return Err(Jbig2Error::new(&format!(
+                    "invalid symbol id {} (max {}) at instance {} of {}",
+                    symbol_id,
+                    params.input_symbols.len().saturating_sub(1),
+                    i + 1,
+                    params.number_of_symbol_instances
+                )));
             }
             let symbol_bitmap = &params.input_symbols[symbol_id];
             let symbol_width = symbol_bitmap.width;
             let symbol_height = symbol_bitmap.height;
             let apply_refinement = if params.refinement {
                 if params.huffman {
-                    let tables = huffman_tables.unwrap();
-                    tables
-                        .table_refinement_ri
-                        .as_ref()
-                        .unwrap()
-                        .decode(huffman_input.as_mut().unwrap())?
-                        != 0
+                    huffman_input.as_mut().unwrap().read_bits(1)? != 0
                 } else {
                     decode_integer_context(decoding_context, "IARI")?.unwrap_or(0) != 0
                 }
@@ -166,6 +175,14 @@ pub fn decode_text_region(
                         .as_ref()
                         .unwrap()
                         .decode(huffman_input.as_mut().unwrap())?;
+                    let bmsize = tables
+                        .table_refinement_size
+                        .as_ref()
+                        .unwrap()
+                        .decode(huffman_input.as_mut().unwrap())?;
+                    if bmsize < 0 {
+                        return Err(Jbig2Error::new("invalid refinement bitmap size"));
+                    }
 
                     // 2. Switch to Arithmetic for the bitmap
                     huffman_input.as_mut().unwrap().byte_align();
@@ -194,9 +211,11 @@ pub fn decode_text_region(
                         &mut temp_context,
                     )?;
 
-                    // 3. Update Huffman reader position based on bytes consumed by Arithmetic decoder
-                    let bytes_consumed = temp_context.get_bytes_read();
-                    huffman_input.as_mut().unwrap().skip(bytes_consumed);
+                    // 3. Advance Huffman reader by the refinement bitmap size
+                    huffman_input
+                        .as_mut()
+                        .unwrap()
+                        .skip(bmsize as usize);
 
                     (rdw, rdh, rdx, rdy, bitmap)
                 } else {
@@ -231,88 +250,87 @@ pub fn decode_text_region(
             } else {
                 (symbol_width, symbol_height, symbol_bitmap.clone())
             };
-            let offset_t = t - if (params.reference_corner & 1) != 0 {
-                0
-            } else {
-                final_symbol_height as i32 - 1
-            };
-            let offset_s = current_s
-                - if (params.reference_corner & 2) != 0 {
-                    final_symbol_width as i32 - 1
-                } else {
-                    0
-                };
-            // Draw the symbol with correct transformations and clipping
-            for i in 0..final_symbol_height {
-                let region_y = offset_t + i as i32;
-                if region_y < 0 || region_y >= params.height as i32 {
-                    continue;
+            let symbol_width = i32::try_from(final_symbol_width)
+                .map_err(|_| Jbig2Error::new("symbol width overflow"))?;
+            let symbol_height = i32::try_from(final_symbol_height)
+                .map_err(|_| Jbig2Error::new("symbol height overflow"))?;
+            let width_adjust = symbol_width
+                .checked_sub(1)
+                .ok_or_else(|| Jbig2Error::new("symbol width invalid"))?;
+            let height_adjust = symbol_height
+                .checked_sub(1)
+                .ok_or_else(|| Jbig2Error::new("symbol height invalid"))?;
+
+            let mut s = current_s;
+            if !params.transposed {
+                if params.reference_corner > 1 {
+                    s = s.wrapping_add(width_adjust);
                 }
-                for j in 0..final_symbol_width {
-                    let region_x = offset_s + j as i32;
-                    if region_x < 0 || region_x >= params.width as i32 {
-                        continue;
-                    }
-                    let mut cx = j as i32;
-                    let mut cy = final_symbol_height as i32 - 1 - i as i32;
-                    if params.transposed {
-                        cx = i as i32;
-                        cy = final_symbol_height as i32 - 1 - j as i32;
-                        if params.ds_offset < 0 {
-                            cy += params.ds_offset;
-                        } else if params.ds_offset > 0 {
-                            cx += params.ds_offset;
-                        }
-                    } else {
-                        cy += params.ds_offset;
-                    }
-                    if cx < 0
-                        || cy < 0
-                        || cx >= final_symbol_width as i32
-                        || cy >= final_symbol_height as i32
-                    {
-                        continue;
-                    }
-                    let src_pixel = final_symbol_bitmap.get_pixel(cx as usize, cy as usize);
-                    let dst_pixel = bitmap.get_pixel(region_x as usize, region_y as usize);
-                    let new_pixel = apply_combination_operator(
-                        dst_pixel,
-                        src_pixel,
-                        params.combination_operator as u8,
-                    );
-                    bitmap.set_pixel(region_x as usize, region_y as usize, new_pixel);
-                }
+            } else if (params.reference_corner & 1) == 0 {
+                s = s.wrapping_add(height_adjust);
             }
+
+            let (x, y) = if !params.transposed {
+                match params.reference_corner {
+                    0 => (s, t),
+                    1 => (s.wrapping_sub(width_adjust), t),
+                    2 => (s, t.wrapping_sub(height_adjust)),
+                    _ => (
+                        s.wrapping_sub(width_adjust),
+                        t.wrapping_sub(height_adjust),
+                    ),
+                }
+            } else {
+                match params.reference_corner {
+                    0 => (t, s),
+                    1 => (t.wrapping_sub(width_adjust), s),
+                    2 => (t, s.wrapping_sub(height_adjust)),
+                    _ => (
+                        t.wrapping_sub(width_adjust),
+                        s.wrapping_sub(height_adjust),
+                    ),
+                }
+            };
+
+            bitmap.combine(
+                &final_symbol_bitmap,
+                x as isize,
+                y as isize,
+                params.combination_operator as u8,
+            );
+
+            if !params.transposed {
+                if params.reference_corner < 2 {
+                    s = s.wrapping_add(width_adjust);
+                }
+            } else if (params.reference_corner & 1) != 0 {
+                s = s.wrapping_add(height_adjust);
+            }
+            current_s = s;
             i += 1;
             if i >= params.number_of_symbol_instances {
                 break; // Processed all symbols
             }
-            let delta_s = decode_option_i32_huffman_or_arith(
-                params.huffman,
-                || {
-                    let tables = huffman_tables.unwrap();
-                    tables.table_delta_s.decode(huffman_input.as_mut().unwrap())
-                },
-                "IADS",
-                decoding_context,
-            )?;
+            let delta_s = if params.huffman {
+                let tables = huffman_tables.unwrap();
+                let (val, oob) =
+                    tables
+                        .table_delta_s
+                        .decode_entry(huffman_input.as_mut().unwrap())?;
+                if oob {
+                    None
+                } else {
+                    Some(val)
+                }
+            } else {
+                decode_integer_context(decoding_context, "IADS")?
+            };
             if delta_s.is_none() {
                 break; // OOB
             }
-            let increment = if !params.transposed {
-                if params.reference_corner > 1 {
-                    final_symbol_width as i32 - 1
-                } else {
-                    0
-                }
-            } else if params.reference_corner & 1 != 0 {
-                final_symbol_height as i32 - 1
-            } else {
-                0
-            };
+            let delta_s = delta_s.unwrap();
             current_s = current_s
-                .wrapping_add(increment)
-                .wrapping_add(delta_s.unwrap())
+                .wrapping_add(delta_s)
                 .wrapping_add(params.ds_offset);
         }
     }

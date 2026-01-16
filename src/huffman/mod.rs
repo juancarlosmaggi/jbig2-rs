@@ -50,7 +50,8 @@ mod table_selectors;
 pub use standard_tables::get_standard_table;
 pub use table_selectors::{
     SymbolDictionaryHuffmanTables, TextRegionHuffmanParams, TextRegionHuffmanTables,
-    decode_tables_segment, get_symbol_dictionary_huffman_tables, get_text_region_huffman_tables,
+    decode_tables_segment, get_aggregate_symbol_huffman_tables,
+    get_symbol_dictionary_huffman_tables, get_text_region_huffman_tables,
 };
 
 // Core Huffman types and decoding logic
