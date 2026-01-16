@@ -193,11 +193,7 @@ impl ArithmeticDecoder {
         if (self.c >> 16) < self.a {
             // MPS path
             if (self.a & 0x8000) != 0 {
-                // No renormalization needed – fast path
-                unsafe {
-                    *contexts.get_unchecked_mut(pos) =
-                        ((qe_entry.nmps as i8) << 1) | (mps as i8);
-                }
+                // No renormalization needed – keep context unchanged (jbig2dec behavior)
                 return Ok(mps);
             }
             if self.a < qe {

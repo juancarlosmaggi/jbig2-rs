@@ -130,21 +130,7 @@ pub fn process_segment<'a>(
         }
         6 | 7 => {
             // ImmediateTextRegion / ImmediateLosslessTextRegion
-            let referred_size = if header.number <= 256 {
-                1
-            } else if header.number <= 65536 {
-                2
-            } else {
-                4
-            };
-
-            let params =
-                parse_text_region_params(data, start, referred_size, header.referred_to.len());
-            let pos = start
-                + 2
-                + 4
-                + header.referred_to.len() * referred_size
-                + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
+            let params = parse_text_region_params(data, start);
 
             visitor.on_immediate_text_region(
                 &params.region_info,
@@ -152,7 +138,7 @@ pub fn process_segment<'a>(
                 params.number_of_symbol_instances,
                 &header.referred_to,
                 data,
-                pos,
+                start,
                 end,
             )?;
         }
@@ -247,7 +233,7 @@ pub fn process_segment<'a>(
         }
         4 => {
             // IntermediateTextRegion
-            let params = parse_text_region_params(data, start, 0, 0);
+            let params = parse_text_region_params(data, start);
             visitor.on_intermediate_text_region(
                 &params.region_info,
                 params.text_region_segment_flags,

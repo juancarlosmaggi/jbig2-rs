@@ -206,19 +206,23 @@ pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegion
 
 /// Parse text region common parameters (segments 4, 6, 7)
 /// Returns region info, flags, and symbol instance count
-pub fn parse_text_region_params(
-    data: &[u8],
-    start: usize,
-    referred_size: usize,
-    referred_count: usize,
-) -> TextRegionParams {
-    let mut pos = start;
+pub fn parse_text_region_params(data: &[u8], start: usize) -> TextRegionParams {
+    let region_info = read_region_segment_information(data, start);
+    let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
     let text_region_segment_flags = read_u16(data, pos);
     pos += 2;
-    let number_of_symbol_instances = read_u32_le(data, pos);
-    pos += 4;
-    pos += referred_count * referred_size;
-    let region_info = read_region_segment_information(data, pos);
+
+    let huffman = (text_region_segment_flags & 1) != 0;
+    let refinement = (text_region_segment_flags & 2) != 0;
+    let refinement_template = ((text_region_segment_flags >> 15) & 1) != 0;
+
+    if huffman {
+        pos += 2;
+    } else if refinement && !refinement_template {
+        pos += 4;
+    }
+
+    let number_of_symbol_instances = read_u32(data, pos);
 
     TextRegionParams {
         region_info,

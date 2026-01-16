@@ -32,35 +32,44 @@ pub fn decode_integer(
 
     let sign = read_bits(1, contexts, &mut prev, decoder)?;
 
-    // The nested ternary from JS
-    let value = if read_bits(1, contexts, &mut prev, decoder)? != 0 {
+    let (n_tail, offset) = if read_bits(1, contexts, &mut prev, decoder)? != 0 {
         if read_bits(1, contexts, &mut prev, decoder)? != 0 {
             if read_bits(1, contexts, &mut prev, decoder)? != 0 {
                 if read_bits(1, contexts, &mut prev, decoder)? != 0 {
                     if read_bits(1, contexts, &mut prev, decoder)? != 0 {
-                        (read_bits(32, contexts, &mut prev, decoder)? as u64 + 4436) as u32
+                        (32, 4436)
                     } else {
-                        read_bits(12, contexts, &mut prev, decoder)? + 340
+                        (12, 340)
                     }
                 } else {
-                    read_bits(8, contexts, &mut prev, decoder)? + 84
+                    (8, 84)
                 }
             } else {
-                read_bits(6, contexts, &mut prev, decoder)? + 20
+                (6, 20)
             }
         } else {
-            read_bits(4, contexts, &mut prev, decoder)? + 4
+            (4, 4)
         }
     } else {
-        read_bits(2, contexts, &mut prev, decoder)?
+        (2, 0)
     };
+
+    let mut value = read_bits(n_tail, contexts, &mut prev, decoder)?;
+    let offset_u32 = offset as u32;
+    if value > (i32::MAX as u32).saturating_sub(offset_u32) {
+        value = i32::MAX as u32;
+    } else {
+        value = value.saturating_add(offset_u32);
+    }
+
+    if sign != 0 && value == 0 {
+        return Ok(None);
+    }
 
     let signed_value = if sign == 0 {
         value as i32
-    } else if value > 0 {
-        -(value as i32)
     } else {
-        return Ok(None); // invalid case
+        -(value as i32)
     };
     Ok(Some(signed_value))
 }

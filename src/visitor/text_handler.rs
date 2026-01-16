@@ -98,6 +98,11 @@ pub(super) fn on_immediate_text_region(
         }
     } // else default empty
 
+    if pos + 4 > end {
+        return Err(Jbig2Error::new("text region segment too short for instance count"));
+    }
+    pos += 4;
+
     let slice = &data[pos.min(end)..end];
 
     let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
@@ -242,6 +247,11 @@ pub(super) fn on_intermediate_text_region(
             pos += 2;
         }
     } // else default empty
+
+    if pos + 4 > end {
+        return Err(Jbig2Error::new("text region segment too short for instance count"));
+    }
+    pos += 4;
 
     let slice = &data[pos.min(end)..end];
 
