@@ -199,6 +199,10 @@ impl Bitmap {
     /// * `y` - Y coordinate in this bitmap where the source should be placed
     /// * `operator` - Combination operator (0=OR, 1=AND, 2=XOR, 3=XNOR, 4=REPLACE)
     pub fn combine(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
+        if operator == 0 {
+            self.combine_or(other, x, y);
+            return;
+        }
         // Clip to destination bounds before iterating.
         let start_y = y.max(0) as usize;
         let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
@@ -237,9 +241,7 @@ impl Bitmap {
                 let dst_row = &mut self.data[dst_row_start..dst_row_start + row_bytes];
                 let src_row = &other.data[src_row_start..src_row_start + row_bytes];
 
-                for idx in 0..full_bytes {
-                    dst_row[idx] |= src_row[idx];
-                }
+                or_bytes_unaligned(&mut dst_row[..full_bytes], &src_row[..full_bytes]);
                 if rem_bits != 0 {
                     let mask = 0xFFu8 << (8 - rem_bits);
                     dst_row[full_bytes] |= src_row[full_bytes] & mask;
@@ -356,9 +358,7 @@ impl Bitmap {
                 let dst_row = &mut self.data[dst_row_start..dst_row_start + row_bytes];
                 let src_row = &other.data[src_row_start..src_row_start + row_bytes];
 
-                for idx in 0..full_bytes {
-                    dst_row[idx] |= src_row[idx];
-                }
+                or_bytes_unaligned(&mut dst_row[..full_bytes], &src_row[..full_bytes]);
                 if rem_bits != 0 {
                     let mask = 0xFFu8 << (8 - rem_bits);
                     dst_row[full_bytes] |= src_row[full_bytes] & mask;
@@ -446,6 +446,25 @@ impl Bitmap {
                 self.data[dst_byte_idx] |= src_aligned & mask;
             }
         }
+    }
+}
+
+fn or_bytes_unaligned(dst: &mut [u8], src: &[u8]) {
+    let len = dst.len().min(src.len());
+    let mut idx = 0usize;
+    unsafe {
+        while idx + 8 <= len {
+            let dst_ptr = dst.as_mut_ptr().add(idx) as *mut u64;
+            let src_ptr = src.as_ptr().add(idx) as *const u64;
+            let dst_val = std::ptr::read_unaligned(dst_ptr);
+            let src_val = std::ptr::read_unaligned(src_ptr);
+            std::ptr::write_unaligned(dst_ptr, dst_val | src_val);
+            idx += 8;
+        }
+    }
+    while idx < len {
+        dst[idx] |= src[idx];
+        idx += 1;
     }
 }
 

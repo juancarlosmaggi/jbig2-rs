@@ -4,6 +4,109 @@ use crate::contexts::DecodingContext;
 use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
 
+const BIT_MASKS: [u8; 8] = [0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01];
+
+struct ShiftedRows {
+    stride: usize,
+    data: Vec<u8>,
+}
+
+struct ShiftedPattern {
+    shifts: [ShiftedRows; 8],
+    has_black: bool,
+}
+
+fn build_shifted_rows(pattern: &Bitmap, shift: usize) -> ShiftedRows {
+    if pattern.width == 0 || pattern.height == 0 {
+        return ShiftedRows {
+            stride: 0,
+            data: Vec::new(),
+        };
+    }
+
+    let width = pattern.width;
+    let height = pattern.height;
+    let src_stride = pattern.stride;
+    let dst_stride = (width + shift + 7) >> 3;
+    let src_rem_bits = width & 7;
+    let src_mask = if src_rem_bits == 0 {
+        0xFF
+    } else {
+        0xFFu8 << (8 - src_rem_bits)
+    };
+    let total_bits = width + shift;
+    let rem_bits = total_bits & 7;
+    let last_mask = if rem_bits == 0 {
+        0xFF
+    } else {
+        0xFFu8 << (8 - rem_bits)
+    };
+
+    let mut data = vec![0u8; dst_stride * height];
+
+    for row in 0..height {
+        let src_row_start = row * src_stride;
+        let dst_row_start = row * dst_stride;
+        let src_row = &pattern.data[src_row_start..src_row_start + src_stride];
+        let dst_row = &mut data[dst_row_start..dst_row_start + dst_stride];
+
+        if shift == 0 {
+            dst_row.copy_from_slice(src_row);
+        } else {
+            let mut carry = 0u8;
+            let mut dst_idx = 0usize;
+            for (idx, &b0) in src_row.iter().enumerate() {
+                let mut b = b0;
+                if src_rem_bits != 0 && idx + 1 == src_stride {
+                    b &= src_mask;
+                }
+                let out = (b >> shift) | carry;
+                if dst_idx < dst_stride {
+                    dst_row[dst_idx] = out;
+                    dst_idx += 1;
+                } else {
+                    break;
+                }
+                carry = b << (8 - shift);
+            }
+            if dst_idx < dst_stride {
+                dst_row[dst_idx] = carry;
+            }
+        }
+
+        if rem_bits != 0 && dst_stride > 0 {
+            dst_row[dst_stride - 1] &= last_mask;
+        }
+    }
+
+    ShiftedRows { stride: dst_stride, data }
+}
+
+fn build_shifted_pattern(pattern: &Bitmap) -> ShiftedPattern {
+    let has_black = pattern.data.iter().any(|&b| b != 0);
+    let shifts = std::array::from_fn(|shift| build_shifted_rows(pattern, shift));
+    ShiftedPattern { shifts, has_black }
+}
+
+fn or_row_bytes(dst: &mut [u8], src: &[u8]) {
+    let len = dst.len().min(src.len());
+    let mut idx = 0usize;
+    unsafe {
+        while idx + 8 <= len {
+            let dst_ptr = dst.as_mut_ptr().add(idx) as *mut u64;
+            let src_ptr = src.as_ptr().add(idx) as *const u64;
+            let dst_val = std::ptr::read_unaligned(dst_ptr);
+            let src_val = std::ptr::read_unaligned(src_ptr);
+            std::ptr::write_unaligned(dst_ptr, dst_val | src_val);
+            idx += 8;
+        }
+    }
+    while idx < len {
+        dst[idx] |= src[idx];
+        idx += 1;
+    }
+}
+
 /// Inputs needed to decode a halftone region.
 #[derive(Clone)]
 pub struct HalftoneRegionParams<'a> {
@@ -42,8 +145,10 @@ pub fn decode_halftone_region(
         return Ok(region_bitmap);
     }
     let pattern0 = &params.patterns[0];
-    let pattern_width = pattern0.width as i64;
-    let pattern_height = pattern0.height as i64;
+    let pattern_width_usize = pattern0.width;
+    let pattern_height_usize = pattern0.height;
+    let pattern_width = pattern_width_usize as i64;
+    let pattern_height = pattern_height_usize as i64;
     let bits_per_value = crate::core_utils::log2(number_of_patterns as u32) as usize;
     const HALFTONE_AT_TEMPLATE_0_1: [(i8, i8); 4] =
         [(3, -1), (-3, -1), (2, -2), (-2, -2)];
@@ -71,31 +176,31 @@ pub fn decode_halftone_region(
         {
             None
         } else {
-        let mut skip = Bitmap::new(params.grid_width, params.grid_height);
-        let grid_vector_x = params.grid_vector_x as i64;
-        let grid_vector_y = params.grid_vector_y as i64;
-        let grid_offset_x = params.grid_offset_x as i64;
-        let grid_offset_y = params.grid_offset_y as i64;
-        for mg in 0..params.grid_height {
-            let base_x = grid_offset_x + mg as i64 * grid_vector_y;
-            let base_y = grid_offset_y + mg as i64 * grid_vector_x;
-            let mut x = base_x;
-            let mut y = base_y;
-            for ng in 0..params.grid_width {
-                let region_x = x >> 8;
-                let region_y = y >> 8;
-                let outside = region_x + pattern_width <= 0
-                    || region_x >= region_width
-                    || region_y + pattern_height <= 0
-                    || region_y >= region_height;
-                if outside {
-                    skip.set_pixel(ng, mg, 1);
+            let mut skip = Bitmap::new(params.grid_width, params.grid_height);
+            let grid_vector_x = params.grid_vector_x as i64;
+            let grid_vector_y = params.grid_vector_y as i64;
+            let grid_offset_x = params.grid_offset_x as i64;
+            let grid_offset_y = params.grid_offset_y as i64;
+            for mg in 0..params.grid_height {
+                let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+                let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+                let mut x = base_x;
+                let mut y = base_y;
+                for ng in 0..params.grid_width {
+                    let region_x = x >> 8;
+                    let region_y = y >> 8;
+                    let outside = region_x + pattern_width <= 0
+                        || region_x >= region_width
+                        || region_y + pattern_height <= 0
+                        || region_y >= region_height;
+                    if outside {
+                        skip.set_pixel(ng, mg, 1);
+                    }
+                    x += grid_vector_x;
+                    y -= grid_vector_y;
                 }
-                x += grid_vector_x;
-                y -= grid_vector_y;
             }
-        }
-        Some(skip)
+            Some(skip)
         }
     } else {
         None
@@ -115,17 +220,18 @@ pub fn decode_halftone_region(
         let bitmap = decode_bitmap(&decode_params, decoding_context)?;
         gray_scale_bit_planes[j] = bitmap;
         if j + 1 < bits_per_value {
-            for idx in 0..gray_scale_bit_planes[j].data.len() {
-                gray_scale_bit_planes[j].data[idx] ^= gray_scale_bit_planes[j + 1].data[idx];
-            }
+            let (left, right) = gray_scale_bit_planes.split_at_mut(j + 1);
+            let dst = &mut left[j].data;
+            let src = &right[0].data;
+            xor_plane_bytes(dst, src);
         }
     }
     // Render patterns into the output bitmap using the grid geometry.
     let patterns_len = params.patterns.len();
-    let pattern_has_black: Vec<bool> = params
+    let shifted_patterns: Vec<ShiftedPattern> = params
         .patterns
         .iter()
-        .map(|pattern| pattern.data.iter().any(|&b| b != 0))
+        .map(build_shifted_pattern)
         .collect();
     let grid_vector_x = params.grid_vector_x as i64;
     let grid_vector_y = params.grid_vector_y as i64;
@@ -186,7 +292,7 @@ pub fn decode_halftone_region(
         };
         for ng in 0..params.grid_width {
             let byte_index = ng >> 3;
-            let bit_mask = 1u8 << (7 - (ng & 7));
+            let bit_mask = BIT_MASKS[ng & 7];
             let mut pattern_index = match bits_per_value {
                 0 => 0usize,
                 1 => ((plane0_row[byte_index] & bit_mask) != 0) as usize,
@@ -218,7 +324,8 @@ pub fn decode_halftone_region(
             if pattern_index >= patterns_len {
                 pattern_index = patterns_len.saturating_sub(1);
             }
-            if !pattern_has_black[pattern_index] {
+            let shifted_pattern = &shifted_patterns[pattern_index];
+            if !shifted_pattern.has_black {
                 x += grid_vector_x;
                 y -= grid_vector_y;
                 continue;
@@ -234,13 +341,55 @@ pub fn decode_halftone_region(
                 y -= grid_vector_y;
                 continue;
             }
-            let pattern_bitmap = &params.patterns[pattern_index];
-            region_bitmap.combine_or(pattern_bitmap, region_x as isize, region_y as isize);
+            let inside = region_x >= 0
+                && region_y >= 0
+                && region_x + pattern_width <= region_width
+                && region_y + pattern_height <= region_height;
+            if inside {
+                let region_x_u = region_x as usize;
+                let region_y_u = region_y as usize;
+                let shift = region_x_u & 7;
+                let shifted_rows = &shifted_pattern.shifts[shift];
+                let src_stride = shifted_rows.stride;
+                let src_data = shifted_rows.data.as_slice();
+                let dst_stride = region_bitmap.stride;
+                let dst_byte_offset = region_x_u >> 3;
+                let dst_data = &mut region_bitmap.data;
+                for row in 0..pattern_height_usize {
+                    let dst_row_start = (region_y_u + row) * dst_stride + dst_byte_offset;
+                    let src_row_start = row * src_stride;
+                    let dst_row = &mut dst_data[dst_row_start..dst_row_start + src_stride];
+                    let src_row = &src_data[src_row_start..src_row_start + src_stride];
+                    or_row_bytes(dst_row, src_row);
+                }
+            } else {
+                let pattern_bitmap = &params.patterns[pattern_index];
+                region_bitmap.combine_or(pattern_bitmap, region_x as isize, region_y as isize);
+            }
             x += grid_vector_x;
             y -= grid_vector_y;
         }
     }
     Ok(region_bitmap)
+}
+
+fn xor_plane_bytes(dst: &mut [u8], src: &[u8]) {
+    let len = dst.len().min(src.len());
+    let mut idx = 0usize;
+    unsafe {
+        while idx + 8 <= len {
+            let dst_ptr = dst.as_mut_ptr().add(idx) as *mut u64;
+            let src_ptr = src.as_ptr().add(idx) as *const u64;
+            let dst_val = std::ptr::read_unaligned(dst_ptr);
+            let src_val = std::ptr::read_unaligned(src_ptr);
+            std::ptr::write_unaligned(dst_ptr, dst_val ^ src_val);
+            idx += 8;
+        }
+    }
+    while idx < len {
+        dst[idx] ^= src[idx];
+        idx += 1;
+    }
 }
 
 fn grid_fully_inside_region(
