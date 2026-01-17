@@ -38,10 +38,11 @@ impl Jbig2Page {
             for x in 0..width {
                 let byte_index = y * row_size + (x / 8);
                 let bit_index = 7 - (x % 8);
+                // JBIG2 uses 1=black, 0=white; GrayImage expects 0=black, 255=white.
                 let pixel = if (self.bit_packed_data[byte_index] & (1 << bit_index)) != 0 {
-                    255
-                } else {
                     0
+                } else {
+                    255
                 };
                 img_data[y * width + x] = pixel;
             }
