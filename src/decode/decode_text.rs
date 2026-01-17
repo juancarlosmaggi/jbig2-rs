@@ -45,6 +45,8 @@ pub fn decode_text_region(
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1000);
+    let trace_strip_match = std::env::var_os("JBIG2_RS_TRACE_TEXT_STRIP_MATCH").is_some();
+    let trace_symbol_miss = std::env::var_os("JBIG2_RS_TRACE_TEXT_SYMBOL_MISS").is_some();
     let mut clipped_instances = 0u32;
     let mut outside_instances = 0u32;
     let mut refined_instances = 0u32;
@@ -68,6 +70,10 @@ pub fn decode_text_region(
         None
     };
     let mut symbol_black_counts: Option<Vec<u32>> = None;
+    let mut symbol_extra_counts: Option<Vec<u32>> = None;
+    let mut symbol_extra_totals: Option<Vec<u32>> = None;
+    let mut symbol_ref_missing_counts: Option<Vec<u32>> = None;
+    let mut symbol_ref_totals: Option<Vec<u32>> = None;
     let mut max_symbol_black = 0u32;
     let mut max_symbol_black_id = 0usize;
     let mut ranges_initialized = false;
@@ -99,6 +105,16 @@ pub fn decode_text_region(
                     eprintln!("text_region: failed to load ref_bitmap: {}", err);
                 }
             }
+        }
+    }
+    if trace_symbol_miss {
+        if ref_bitmap.is_some() {
+            symbol_extra_counts = Some(vec![0u32; params.input_symbols.len()]);
+            symbol_extra_totals = Some(vec![0u32; params.input_symbols.len()]);
+            symbol_ref_missing_counts = Some(vec![0u32; params.input_symbols.len()]);
+            symbol_ref_totals = Some(vec![0u32; params.input_symbols.len()]);
+        } else {
+            eprintln!("text_region: symbol_miss requested without ref_bitmap");
         }
     }
     // Validate parameters
@@ -282,6 +298,7 @@ pub fn decode_text_region(
         }
         let mut current_s = first_s;
         let mut strip_instances = 0u32;
+        let mut strip_match_instances: Vec<(i32, i32, Bitmap)> = Vec::new();
         if trace_text_verbose {
             let huff_pos = huffman_input.as_ref().map(|r| r.get_position()).unwrap_or(0);
             let huff_shift = huffman_input.as_ref().map(|r| r.get_shift()).unwrap_or(0);
@@ -465,23 +482,23 @@ pub fn decode_text_region(
 
             let (x, y) = if !params.transposed {
                 match params.reference_corner {
-                    0 => (s, t),
-                    1 => (s.wrapping_sub(width_adjust), t),
-                    2 => (s, t.wrapping_sub(height_adjust)),
-                    _ => (
+                    0 => (s, t.wrapping_sub(height_adjust)), // bottom-left
+                    1 => (s, t),                             // top-left
+                    2 => (
                         s.wrapping_sub(width_adjust),
                         t.wrapping_sub(height_adjust),
-                    ),
+                    ), // bottom-right
+                    _ => (s.wrapping_sub(width_adjust), t), // top-right
                 }
             } else {
                 match params.reference_corner {
-                    0 => (t, s),
-                    1 => (t.wrapping_sub(width_adjust), s),
-                    2 => (t, s.wrapping_sub(height_adjust)),
-                    _ => (
+                    0 => (t, s.wrapping_sub(height_adjust)), // bottom-left
+                    1 => (t, s),                             // top-left
+                    2 => (
                         t.wrapping_sub(width_adjust),
                         s.wrapping_sub(height_adjust),
-                    ),
+                    ), // bottom-right
+                    _ => (t.wrapping_sub(width_adjust), s), // top-right
                 }
             };
 
@@ -653,6 +670,59 @@ pub fn decode_text_region(
                 }
             }
 
+            if trace_symbol_miss {
+                if let (
+                    Some(ref ref_bm),
+                    Some(ref mut extra),
+                    Some(ref mut extra_totals),
+                    Some(ref mut ref_missing),
+                    Some(ref mut ref_totals),
+                ) = (
+                    ref_bitmap.as_ref(),
+                    symbol_extra_counts.as_mut(),
+                    symbol_extra_totals.as_mut(),
+                    symbol_ref_missing_counts.as_mut(),
+                    symbol_ref_totals.as_mut(),
+                ) {
+                    let mut extra_count = 0u32;
+                    let mut extra_total = 0u32;
+                    let mut missing_count = 0u32;
+                    let mut missing_total = 0u32;
+                    for sy in 0..final_symbol_height {
+                        for sx in 0..final_symbol_width {
+                            let rx = x + sx as i32;
+                            let ry = y + sy as i32;
+                            if rx < 0
+                                || ry < 0
+                                || (rx as usize) >= ref_bm.width
+                                || (ry as usize) >= ref_bm.height
+                            {
+                                continue;
+                            }
+                            let ref_black = ref_bm.get_pixel(rx as usize, ry as usize) != 0;
+                            let sym_black = final_symbol_bitmap.get_pixel(sx, sy) != 0;
+                            if sym_black {
+                                extra_total = extra_total.saturating_add(1);
+                                if !ref_black {
+                                    extra_count = extra_count.saturating_add(1);
+                                }
+                            }
+                            if ref_black {
+                                missing_total = missing_total.saturating_add(1);
+                                if !sym_black {
+                                    missing_count = missing_count.saturating_add(1);
+                                }
+                            }
+                        }
+                    }
+                    extra[symbol_id] = extra[symbol_id].saturating_add(extra_count);
+                    extra_totals[symbol_id] = extra_totals[symbol_id].saturating_add(extra_total);
+                    ref_missing[symbol_id] =
+                        ref_missing[symbol_id].saturating_add(missing_count);
+                    ref_totals[symbol_id] = ref_totals[symbol_id].saturating_add(missing_total);
+                }
+            }
+
             if trace_text_verbose {
                 let should_log = i < trace_text_limit
                     || (trace_text_every > 0 && i % trace_text_every == 0)
@@ -704,6 +774,9 @@ pub fn decode_text_region(
                 y as isize,
                 params.combination_operator as u8,
             );
+            if trace_strip_match {
+                strip_match_instances.push((x, y, final_symbol_bitmap));
+            }
 
             if !params.transposed {
                 if params.reference_corner < 2 {
@@ -723,6 +796,52 @@ pub fn decode_text_region(
                         &mut min_strip_instances,
                         &mut max_strip_instances,
                     );
+                }
+                if trace_strip_match {
+                    if let Some(ref ref_bm) = ref_bitmap {
+                        let mut best_dy = 0i32;
+                        let mut best_score = u32::MAX;
+                        for dy in -16..=16 {
+                            let mut missing = 0u32;
+                            let mut outside = 0u32;
+                            for (sx, sy, inst_bm) in &strip_match_instances {
+                                for yy in 0..inst_bm.height {
+                                    for xx in 0..inst_bm.width {
+                                        if inst_bm.get_pixel(xx, yy) == 0 {
+                                            continue;
+                                        }
+                                        let rx = *sx + xx as i32;
+                                        let ry = *sy + dy + yy as i32;
+                                        if rx < 0
+                                            || ry < 0
+                                            || (rx as usize) >= ref_bm.width
+                                            || (ry as usize) >= ref_bm.height
+                                        {
+                                            outside = outside.saturating_add(1);
+                                            continue;
+                                        }
+                                        if ref_bm.get_pixel(rx as usize, ry as usize) == 0 {
+                                            missing = missing.saturating_add(1);
+                                        }
+                                    }
+                                }
+                            }
+                            let score = missing.saturating_add(outside);
+                            if score < best_score {
+                                best_score = score;
+                                best_dy = dy;
+                            }
+                        }
+                        if best_dy != 0 {
+                            eprintln!(
+                                "text_region: strip_match strip={} strip_t={} best_dy={} score={}",
+                                strip_index.saturating_sub(1),
+                                strip_t,
+                                best_dy,
+                                best_score
+                            );
+                        }
+                    }
                 }
                 break; // Processed all symbols
             }
@@ -755,6 +874,52 @@ pub fn decode_text_region(
                         &mut min_strip_instances,
                         &mut max_strip_instances,
                     );
+                }
+                if trace_strip_match {
+                    if let Some(ref ref_bm) = ref_bitmap {
+                        let mut best_dy = 0i32;
+                        let mut best_score = u32::MAX;
+                        for dy in -16..=16 {
+                            let mut missing = 0u32;
+                            let mut outside = 0u32;
+                            for (sx, sy, inst_bm) in &strip_match_instances {
+                                for yy in 0..inst_bm.height {
+                                    for xx in 0..inst_bm.width {
+                                        if inst_bm.get_pixel(xx, yy) == 0 {
+                                            continue;
+                                        }
+                                        let rx = *sx + xx as i32;
+                                        let ry = *sy + dy + yy as i32;
+                                        if rx < 0
+                                            || ry < 0
+                                            || (rx as usize) >= ref_bm.width
+                                            || (ry as usize) >= ref_bm.height
+                                        {
+                                            outside = outside.saturating_add(1);
+                                            continue;
+                                        }
+                                        if ref_bm.get_pixel(rx as usize, ry as usize) == 0 {
+                                            missing = missing.saturating_add(1);
+                                        }
+                                    }
+                                }
+                            }
+                            let score = missing.saturating_add(outside);
+                            if score < best_score {
+                                best_score = score;
+                                best_dy = dy;
+                            }
+                        }
+                        if best_dy != 0 {
+                            eprintln!(
+                                "text_region: strip_match strip={} strip_t={} best_dy={} score={}",
+                                strip_index.saturating_sub(1),
+                                strip_t,
+                                best_dy,
+                                best_score
+                            );
+                        }
+                    }
                 }
                 break; // OOB
             }
@@ -841,6 +1006,118 @@ pub fn decode_text_region(
                 oob_delta_s_count,
                 large_instances
             );
+        }
+        if trace_symbol_miss {
+            if let (
+                Some(ref_missing),
+                Some(ref_totals),
+                Some(extra),
+                Some(extra_totals),
+            ) = (
+                symbol_ref_missing_counts.as_ref(),
+                symbol_ref_totals.as_ref(),
+                symbol_extra_counts.as_ref(),
+                symbol_extra_totals.as_ref(),
+            ) {
+                let summary: Vec<(u64, u32, u32, u64, u32, u32, usize)> = ref_totals
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, &total)| {
+                        let miss = ref_missing[idx];
+                        let extra_count = extra[idx];
+                        let extra_total = extra_totals[idx];
+                        if total == 0 && extra_total == 0 {
+                            return None;
+                        }
+                        let miss_ppm = (miss as u64).saturating_mul(1000) / total.max(1) as u64;
+                        let extra_ppm =
+                            (extra_count as u64).saturating_mul(1000) / extra_total.max(1) as u64;
+                        Some((miss_ppm, miss, total, extra_ppm, extra_count, extra_total, idx))
+                    })
+                    .collect();
+                let mut by_ppm = summary.clone();
+                by_ppm.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+                let mut shown = 0u32;
+                for (miss_ppm, miss, total, extra_ppm, extra_count, extra_total, idx) in by_ppm {
+                    if shown >= 12 {
+                        break;
+                    }
+                    if miss == 0 && extra_count == 0 {
+                        continue;
+                    }
+                    let black = symbol_black_counts
+                        .as_ref()
+                        .and_then(|counts| counts.get(idx))
+                        .copied()
+                        .unwrap_or(0);
+                    let (sym_w, sym_h) = params
+                        .input_symbols
+                        .get(idx)
+                        .map(|bm| (bm.width, bm.height))
+                        .unwrap_or((0, 0));
+                    let use_count = symbol_use_counts
+                        .as_ref()
+                        .and_then(|counts| counts.get(idx))
+                        .copied()
+                        .unwrap_or(0);
+                    eprintln!(
+                        "text_region: symbol_miss_ppm sym={} size={}x{} use_count={} ref_missing={} ref_total={} ref_ppm={} extra={} extra_total={} extra_ppm={} black={}",
+                        idx,
+                        sym_w,
+                        sym_h,
+                        use_count,
+                        miss,
+                        total,
+                        miss_ppm,
+                        extra_count,
+                        extra_total,
+                        extra_ppm,
+                        black
+                    );
+                    shown = shown.saturating_add(1);
+                }
+                let mut by_missing = summary;
+                by_missing.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| b.0.cmp(&a.0)));
+                let mut shown = 0u32;
+                for (miss_ppm, miss, total, extra_ppm, extra_count, extra_total, idx) in by_missing {
+                    if shown >= 12 {
+                        break;
+                    }
+                    if miss == 0 && extra_count == 0 {
+                        continue;
+                    }
+                    let black = symbol_black_counts
+                        .as_ref()
+                        .and_then(|counts| counts.get(idx))
+                        .copied()
+                        .unwrap_or(0);
+                    let (sym_w, sym_h) = params
+                        .input_symbols
+                        .get(idx)
+                        .map(|bm| (bm.width, bm.height))
+                        .unwrap_or((0, 0));
+                    let use_count = symbol_use_counts
+                        .as_ref()
+                        .and_then(|counts| counts.get(idx))
+                        .copied()
+                        .unwrap_or(0);
+                    eprintln!(
+                        "text_region: symbol_miss_count sym={} size={}x{} use_count={} ref_missing={} ref_total={} ref_ppm={} extra={} extra_total={} extra_ppm={} black={}",
+                        idx,
+                        sym_w,
+                        sym_h,
+                        use_count,
+                        miss,
+                        total,
+                        miss_ppm,
+                        extra_count,
+                        extra_total,
+                        extra_ppm,
+                        black
+                    );
+                    shown = shown.saturating_add(1);
+                }
+            }
         }
         if ranges_initialized {
             eprintln!(

@@ -59,7 +59,7 @@ pub fn create_aggregate_text_params(
         symbol_code_length: params.symbol_code_length,
         transposed: false,
         ds_offset: 0,
-        reference_corner: 0, // top-left reference point for aggregate symbols
+        reference_corner: 1, // top-left reference point for aggregate symbols
         combination_operator: 0, // OR
         log_strip_size: 0,
         huffman_tables,

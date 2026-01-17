@@ -213,21 +213,9 @@ impl Bitmap {
             let dst_row_start = dst_y * self.stride;
             let src_row_start = src_y * other.stride;
 
-            // Bit offsets
-            let dst_bit_offset = start_x & 7;
-            let src_bit_offset = src_start_x & 7;
-
-            // Shift amount to align src to dst
-            // + means src needs to be shifted right (or dst left)
-            // We want to align MSB (bit 7).
-            // If dst_bit_offset = 0 (MSB), src_bit_offset = 1.
-            // src byte: .X......
-            // dst byte: X.......
-            // We need to shift src LEFT by 1.
-            let shift = src_bit_offset as i8 - dst_bit_offset as i8;
-
             let mut current_x = start_x;
             let mut current_src_x = src_start_x;
+            let src_row_end = src_row_start + other.stride;
 
             while current_x < end_x {
                 let dst_byte_idx = dst_row_start + (current_x >> 3);
@@ -236,32 +224,18 @@ impl Bitmap {
 
                 // Construct source byte aligned to dest
                 let src_byte_idx = src_row_start + (current_src_x >> 3);
-                let mut src_byte = other.data[src_byte_idx];
-
-                // Handle shift
-                if shift > 0 {
-                    // src is "later" in the byte, need to shift LEFT to match dst
-                    // e.g. src=1, dst=0. shift=1. src=0x40. dst=0x80. 0x40 << 1 = 0x80.
-                    src_byte <<= shift;
-                    // Need bits from next byte?
-                    // If we are processing N bits, and src_bit_offset + N > 8, we need next byte.
-                    // Actually, easier: just grab next byte if needed.
-                    if (current_src_x & 7) + bits_to_process > 8
-                        && src_byte_idx + 1 < other.data.len()
-                    {
-                        let next_byte = other.data[src_byte_idx + 1];
-                        src_byte |= next_byte >> (8 - shift);
-                    }
-                } else if shift < 0 {
-                    // src is "earlier", need to shift RIGHT
-                    // e.g. src=0, dst=1. shift=-1. src=0x80. dst=0x40. 0x80 >> 1 = 0x40.
-                    src_byte >>= -shift;
-                    if (current_src_x & 7) + bits_to_process > 8
-                        && src_byte_idx + 1 < other.data.len()
-                    {
-                        let next_byte = other.data[src_byte_idx + 1];
-                        src_byte |= next_byte << (8 + shift);
-                    }
+                let src_byte = other.data[src_byte_idx];
+                let next_byte = if src_byte_idx + 1 < src_row_end {
+                    other.data[src_byte_idx + 1]
+                } else {
+                    0
+                };
+                let src_word = ((src_byte as u16) << 8) | next_byte as u16;
+                let src_bit_offset = current_src_x & 7;
+                let mut src_aligned = ((src_word << src_bit_offset) >> 8) as u8;
+                let dst_bit_offset = current_x & 7;
+                if dst_bit_offset != 0 {
+                    src_aligned >>= dst_bit_offset;
                 }
 
                 // Create mask for the bits we are processing
@@ -280,17 +254,17 @@ impl Bitmap {
                 let mut new_byte = dst_byte;
 
                 match operator {
-                    0 => new_byte |= src_byte & mask, // OR
-                    1 => new_byte = (dst_byte & src_byte & mask) | (dst_byte & !mask), // AND within mask, preserve outside
-                    2 => new_byte ^= src_byte & mask,                                  // XOR
+                    0 => new_byte |= src_aligned & mask, // OR
+                    1 => new_byte = (dst_byte & src_aligned & mask) | (dst_byte & !mask), // AND within mask, preserve outside
+                    2 => new_byte ^= src_aligned & mask, // XOR
                     3 => {
                         // XNOR
-                        let xor = dst_byte ^ src_byte;
+                        let xor = dst_byte ^ src_aligned;
                         new_byte = (new_byte & !mask) | (!xor & mask);
                     }
                     4 => {
                         // REPLACE
-                        new_byte = (new_byte & !mask) | (src_byte & mask);
+                        new_byte = (new_byte & !mask) | (src_aligned & mask);
                     }
                     _ => {}
                 }
@@ -429,6 +403,31 @@ mod tests {
         assert_eq!(bm1.get_pixel(0, 0), 1);
         assert_eq!(bm1.get_pixel(1, 1), 1);
         assert_eq!(bm1.get_pixel(2, 2), 1);
+    }
+
+    #[test]
+    fn test_bitmap_combine_matches_naive_unaligned() {
+        let mut dst_opt = Bitmap::new(23, 11);
+        let mut dst_naive = dst_opt.clone();
+        let mut src = Bitmap::new(11, 7);
+
+        for y in 0..src.height {
+            for x in 0..src.width {
+                if (x + y) % 3 == 0 || (x * 2 + y) % 5 == 0 {
+                    src.set_pixel(x, y, 1);
+                }
+            }
+        }
+
+        dst_opt.combine(&src, 3, 2, 0);
+        dst_naive.combine_naive(&src, 3, 2, 0);
+        assert_eq!(dst_opt.data, dst_naive.data);
+
+        let mut dst_opt = Bitmap::new(19, 9);
+        let mut dst_naive = dst_opt.clone();
+        dst_opt.combine(&src, -2, 1, 2);
+        dst_naive.combine_naive(&src, -2, 1, 2);
+        assert_eq!(dst_opt.data, dst_naive.data);
     }
 
     #[test]
