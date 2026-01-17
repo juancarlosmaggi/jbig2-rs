@@ -26,17 +26,56 @@ pub fn split_collective_bitmap(
     symbol_widths: &[usize],
     height: usize,
 ) -> Vec<Bitmap> {
-    let mut symbols = Vec::new();
-    let mut x_offset = 0;
+    let mut symbols = Vec::with_capacity(symbol_widths.len());
+    let mut x_offset = 0usize;
+    let collective_stride = collective_bitmap.stride;
 
     for &width in symbol_widths {
         let mut symbol_bitmap = Bitmap::new(width, height);
+        let symbol_stride = symbol_bitmap.stride;
+        if symbol_stride == 0 || height == 0 {
+            symbols.push(symbol_bitmap);
+            x_offset += width;
+            continue;
+        }
+
+        let rem_bits = width & 7;
+        let tail_mask = if rem_bits == 0 {
+            0xFF
+        } else {
+            0xFFu8 << (8 - rem_bits)
+        };
+        let src_byte_offset = x_offset >> 3;
+        let src_bit_offset = (x_offset & 7) as u8;
+
         for y in 0..height {
-            for x in 0..width {
-                let pixel = collective_bitmap.get_pixel(x_offset + x, y);
-                symbol_bitmap.set_pixel(x, y, pixel);
+            let src_row_start = y * collective_stride + src_byte_offset;
+            let src_row_end = y * collective_stride + collective_stride;
+            let src_row = &collective_bitmap.data[src_row_start..src_row_end];
+            debug_assert!(src_row.len() >= symbol_stride);
+            let dst_row_start = y * symbol_stride;
+            let dst_row = &mut symbol_bitmap.data[dst_row_start..dst_row_start + symbol_stride];
+
+            if src_bit_offset == 0 {
+                dst_row.copy_from_slice(&src_row[..symbol_stride]);
+            } else {
+                let inv_shift = 8 - src_bit_offset;
+                for b in 0..symbol_stride {
+                    let cur = src_row[b];
+                    let next = if b + 1 < src_row.len() {
+                        src_row[b + 1]
+                    } else {
+                        0
+                    };
+                    dst_row[b] = (cur << src_bit_offset) | (next >> inv_shift);
+                }
+            }
+
+            if rem_bits != 0 {
+                dst_row[symbol_stride - 1] &= tail_mask;
             }
         }
+
         symbols.push(symbol_bitmap);
         x_offset += width;
     }

@@ -7,24 +7,17 @@ pub(super) fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
     let width = bitmap.width;
     let height = bitmap.height;
     let row_size = width.div_ceil(8); // bytes per row
-    let mut packed = vec![0u8; row_size * height];
     if row_size == 0 || height == 0 {
-        return packed;
+        return Vec::new();
     }
-    let rem_bits = width % 8;
-    let mask = if rem_bits == 0 {
-        0xFF
-    } else {
-        0xFFu8 << (8 - rem_bits)
-    };
-    for y in 0..height {
-        let dst_start = y * row_size;
-        let src_start = y * bitmap.stride;
-        let src_end = src_start + row_size;
-        packed[dst_start..dst_start + row_size]
-            .copy_from_slice(&bitmap.data[src_start..src_end]);
-        if rem_bits != 0 {
-            packed[dst_start + row_size - 1] &= mask;
+    let rem_bits = width & 7;
+    let mut packed = bitmap.data.clone();
+    if rem_bits != 0 {
+        let mask = 0xFFu8 << (8 - rem_bits);
+        let mut idx = row_size - 1;
+        for _ in 0..height {
+            packed[idx] &= mask;
+            idx += row_size;
         }
     }
     packed

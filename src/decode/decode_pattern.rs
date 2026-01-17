@@ -42,29 +42,47 @@ pub fn decode_pattern_dictionary(
 
     // Split the collective bitmap into individual pattern tiles.
     let mut patterns = Vec::new();
+    let collective_stride = collective_bitmap.stride;
+    let rem_bits = params.pattern_width & 7;
+    let tail_mask = if rem_bits == 0 {
+        0xFF
+    } else {
+        0xFFu8 << (8 - rem_bits)
+    };
     for i in 0..=params.max_pattern_index {
         let x_start = i * params.pattern_width;
         let mut pattern = Bitmap::new(params.pattern_width, params.pattern_height);
-
+        let pattern_stride = pattern.stride;
+        if pattern_stride == 0 {
+            patterns.push(pattern);
+            continue;
+        }
+        let src_byte_offset = x_start >> 3;
+        let src_bit_offset = (x_start & 7) as u8;
         for y in 0..params.pattern_height {
-            let collective_byte_offset = y * collective_bitmap.stride + (x_start >> 3);
+            let src_row_start = y * collective_stride + src_byte_offset;
+            let src_row_end = y * collective_stride + collective_stride;
+            let src_row = &collective_bitmap.data[src_row_start..src_row_end];
+            debug_assert!(src_row.len() >= pattern_stride);
+            let dst_row_start = y * pattern_stride;
+            let dst_row = &mut pattern.data[dst_row_start..dst_row_start + pattern_stride];
 
-            // Extract row pixels with bit alignment.
-            for px in 0..params.pattern_width {
-                let collective_x = x_start + px;
-                let collective_byte_idx = collective_x >> 3;
-                let collective_bit_idx = 7 - (collective_x & 7);
-                let byte_idx_in_row = collective_byte_idx - (x_start >> 3);
-
-                let pixel =
-                    if byte_idx_in_row < collective_bitmap.data[collective_byte_offset..].len() {
-                        (collective_bitmap.data[collective_byte_offset + byte_idx_in_row]
-                            >> collective_bit_idx)
-                            & 1
+            if src_bit_offset == 0 {
+                dst_row.copy_from_slice(&src_row[..pattern_stride]);
+            } else {
+                let inv_shift = 8 - src_bit_offset;
+                for b in 0..pattern_stride {
+                    let cur = src_row[b];
+                    let next = if b + 1 < src_row.len() {
+                        src_row[b + 1]
                     } else {
                         0
                     };
-                pattern.set_pixel(px, y, pixel);
+                    dst_row[b] = (cur << src_bit_offset) | (next >> inv_shift);
+                }
+            }
+            if rem_bits != 0 {
+                dst_row[pattern_stride - 1] &= tail_mask;
             }
         }
         patterns.push(pattern);
