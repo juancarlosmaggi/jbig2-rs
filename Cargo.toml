@@ -11,6 +11,13 @@ categories = ["multimedia::images", "encoding"]
 clap = { version = "4.0", features = ["derive"] }
 image = "0.24"
 
+[lib]
+bench = false
+
+[[bin]]
+name = "jbig2-rs"
+bench = false
+
 [dev-dependencies]
 rstest = "0.18"
 criterion = "0.5"
