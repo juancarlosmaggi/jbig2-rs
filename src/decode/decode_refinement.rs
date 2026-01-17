@@ -91,6 +91,9 @@ pub fn decode_refinement<'a>(
         .collect::<Vec<_>>();
     let reference_width = params.reference_bitmap.width;
     let reference_height = params.reference_bitmap.height;
+    let reference_width_i32 = reference_width as i32;
+    let reference_height_i32 = reference_height as i32;
+    let width_i32 = params.width as i32;
     let start_context = REFINEMENT_REUSED_CONTEXTS[params.template_index];
     let mut contexts = decoding_context.get_contexts("GR");
     let mut decoder = decoding_context.get_decoder();
@@ -108,10 +111,12 @@ pub fn decode_refinement<'a>(
                 let i_ref = j as i32 - params.offset_x;
                 let j_ref = i as i32 - params.offset_y;
                 let get_ref = |x: i32, y: i32| -> u8 {
-                    if x < 0 || y < 0 {
+                    if x < 0 || y < 0 || x >= reference_width_i32 || y >= reference_height_i32 {
                         0
                     } else {
-                        params.reference_bitmap.get_pixel(x as usize, y as usize)
+                        params
+                            .reference_bitmap
+                            .get_pixel_unchecked(x as usize, y as usize)
                     }
                 };
                 let m = get_ref(i_ref, j_ref);
@@ -128,14 +133,14 @@ pub fn decode_refinement<'a>(
                 }
             }
             if let Some(pixel) = implicit {
-                bitmap.set_pixel(j, i, pixel);
+                bitmap.set_pixel_unchecked(j, i, pixel);
                 continue;
             }
             for k in 0..coding_template_length {
                 let i0 = i as i32 + coding_template_y[k];
                 let j0 = j as i32 + coding_template_x[k];
-                if i0 >= 0 && j0 >= 0 && j0 < params.width as i32 {
-                    let bit = bitmap.get_pixel(j0 as usize, i0 as usize) as u16;
+                if i0 >= 0 && j0 >= 0 && j0 < width_i32 {
+                    let bit = bitmap.get_pixel_unchecked(j0 as usize, i0 as usize) as u16;
                     if bit != 0 {
                         context_label |= 1 << k;
                     }
@@ -145,18 +150,20 @@ pub fn decode_refinement<'a>(
                 let i0 = i as i32 + reference_template_y[k] - params.offset_y;
                 let j0 = j as i32 + reference_template_x[k] - params.offset_x;
                 if i0 >= 0
-                    && i0 < reference_height as i32
+                    && i0 < reference_height_i32
                     && j0 >= 0
-                    && j0 < reference_width as i32
+                    && j0 < reference_width_i32
                 {
-                    let bit = params.reference_bitmap.get_pixel(j0 as usize, i0 as usize) as u16;
+                    let bit = params
+                        .reference_bitmap
+                        .get_pixel_unchecked(j0 as usize, i0 as usize) as u16;
                     if bit != 0 {
                         context_label |= 1 << (coding_template_length + k);
                     }
                 }
             }
             let pixel = decoder.read_bit(contexts.as_mut(), context_label as usize)?;
-            bitmap.set_pixel(j, i, pixel);
+            bitmap.set_pixel_unchecked(j, i, pixel);
         }
     }
     Ok(bitmap)

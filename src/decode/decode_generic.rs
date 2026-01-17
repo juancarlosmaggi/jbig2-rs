@@ -200,6 +200,7 @@ pub fn decode_bitmap(
     let mut template = template;
     template.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
     let template_length = template.len();
+    debug_assert!(template_length <= 16);
     let mut template_x = vec![0i8; template_length];
     let mut template_y = vec![0i8; template_length];
     let mut changing_template_entries = vec![];
@@ -239,6 +240,13 @@ pub fn decode_bitmap(
     let mut bitmap = Bitmap::new(params.width, params.height);
     let mut decoder = decoding_context.get_decoder();
     let mut contexts = decoding_context.get_contexts("GB");
+    let width_i32 = params.width as i32;
+    let height_i32 = params.height as i32;
+    let skip_stride = params.skip.map_or(0, |skip| skip.stride);
+    let empty_skip: &[u8] = &[];
+    let skip_data = params.skip.map_or(empty_skip, |skip| skip.data.as_slice());
+    let safe_start = sbb_left.min(params.width);
+    let safe_end = sbb_right.min(params.width);
     let mut ltp = 0i32;
     for i in 0..params.height {
         if params.prediction {
@@ -258,56 +266,18 @@ pub fn decode_bitmap(
                 continue;
             }
         }
-        let mut context_label = 0u16;
-        let mut reuse_ready = false;
-        for j in 0..params.width {
-            let in_safe = j >= sbb_left && j < sbb_right && i >= sbb_top;
-            if in_safe {
-                if !reuse_ready || j == sbb_left {
-                    let mut full = 0u16;
-                    let mut shift = template_length as i32 - 1;
-                    for k in 0..template_length {
-                        let j0 = j as i32 + template_x[k] as i32;
-                        if j0 >= 0 && j0 < params.width as i32 {
-                            let i0 = i as i32 + template_y[k] as i32;
-                            if i0 >= 0
-                                && i0 < params.height as i32
-                                && bitmap.get_pixel(j0 as usize, i0 as usize) != 0
-                                && (0..16).contains(&shift)
-                            {
-                                full |= 1 << shift;
-                            }
-                        }
-                        shift -= 1;
-                    }
-                    context_label = full;
-                    reuse_ready = true;
-                } else {
-                    context_label = (context_label << 1) & reuse_mask;
-                    for k in 0..changing_entries_length {
-                        let i0 = i as i32 + changing_template_y[k] as i32;
-                        let j0 = j as i32 + changing_template_x[k] as i32;
-                        if i0 >= 0
-                            && i0 < params.height as i32
-                            && j0 >= 0
-                            && j0 < params.width as i32
-                            && bitmap.get_pixel(j0 as usize, i0 as usize) != 0
-                        {
-                            context_label |= changing_template_bit[k];
-                        }
-                    }
-                }
-            } else {
+        let mut context_label: u16;
+        if i < sbb_top || safe_start >= safe_end {
+            for j in 0..params.width {
                 let mut full = 0u16;
                 let mut shift = template_length as i32 - 1;
                 for k in 0..template_length {
                     let j0 = j as i32 + template_x[k] as i32;
-                    if j0 >= 0 && j0 < params.width as i32 {
+                    if j0 >= 0 && j0 < width_i32 {
                         let i0 = i as i32 + template_y[k] as i32;
                         if i0 >= 0
-                            && i0 < params.height as i32
-                            && bitmap.get_pixel(j0 as usize, i0 as usize) != 0
-                            && (0..16).contains(&shift)
+                            && i0 < height_i32
+                            && bitmap.get_pixel_unchecked(j0 as usize, i0 as usize) != 0
                         {
                             full |= 1 << shift;
                         }
@@ -315,14 +285,137 @@ pub fn decode_bitmap(
                     shift -= 1;
                 }
                 context_label = full;
-                reuse_ready = false;
+                let skip_hit = if useskip {
+                    let byte_index = i * skip_stride + (j >> 3);
+                    let mask = 1u8 << (7 - (j & 7));
+                    (skip_data[byte_index] & mask) != 0
+                } else {
+                    false
+                };
+                let pixel = if skip_hit {
+                    0
+                } else {
+                    decoder.read_bit(contexts.as_mut(), context_label as usize)?
+                };
+                bitmap.set_pixel_unchecked(j, i, pixel);
             }
-            let pixel = if useskip && params.skip.unwrap().get_pixel(j, i) != 0 {
+            continue;
+        }
+
+        for j in 0..safe_start {
+            let mut full = 0u16;
+            let mut shift = template_length as i32 - 1;
+            for k in 0..template_length {
+                let j0 = j as i32 + template_x[k] as i32;
+                if j0 >= 0 && j0 < width_i32 {
+                    let i0 = i as i32 + template_y[k] as i32;
+                    if i0 >= 0
+                        && i0 < height_i32
+                        && bitmap.get_pixel_unchecked(j0 as usize, i0 as usize) != 0
+                    {
+                        full |= 1 << shift;
+                    }
+                }
+                shift -= 1;
+            }
+            context_label = full;
+            let skip_hit = if useskip {
+                let byte_index = i * skip_stride + (j >> 3);
+                let mask = 1u8 << (7 - (j & 7));
+                (skip_data[byte_index] & mask) != 0
+            } else {
+                false
+            };
+            let pixel = if skip_hit {
                 0
             } else {
                 decoder.read_bit(contexts.as_mut(), context_label as usize)?
             };
-            bitmap.set_pixel(j, i, pixel);
+            bitmap.set_pixel_unchecked(j, i, pixel);
+        }
+
+        {
+            let j = safe_start;
+            let mut full = 0u16;
+            let mut shift = template_length as i32 - 1;
+            for k in 0..template_length {
+                let j0 = (j as i32 + template_x[k] as i32) as usize;
+                let i0 = (i as i32 + template_y[k] as i32) as usize;
+                if bitmap.get_pixel_unchecked(j0, i0) != 0 {
+                    full |= 1 << shift;
+                }
+                shift -= 1;
+            }
+            context_label = full;
+            let skip_hit = if useskip {
+                let byte_index = i * skip_stride + (j >> 3);
+                let mask = 1u8 << (7 - (j & 7));
+                (skip_data[byte_index] & mask) != 0
+            } else {
+                false
+            };
+            let pixel = if skip_hit {
+                0
+            } else {
+                decoder.read_bit(contexts.as_mut(), context_label as usize)?
+            };
+            bitmap.set_pixel_unchecked(j, i, pixel);
+        }
+
+        for j in (safe_start + 1)..safe_end {
+            context_label = (context_label << 1) & reuse_mask;
+            for k in 0..changing_entries_length {
+                let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
+                let j0 = (j as i32 + changing_template_x[k] as i32) as usize;
+                if bitmap.get_pixel_unchecked(j0, i0) != 0 {
+                    context_label |= changing_template_bit[k];
+                }
+            }
+            let skip_hit = if useskip {
+                let byte_index = i * skip_stride + (j >> 3);
+                let mask = 1u8 << (7 - (j & 7));
+                (skip_data[byte_index] & mask) != 0
+            } else {
+                false
+            };
+            let pixel = if skip_hit {
+                0
+            } else {
+                decoder.read_bit(contexts.as_mut(), context_label as usize)?
+            };
+            bitmap.set_pixel_unchecked(j, i, pixel);
+        }
+
+        for j in safe_end..params.width {
+            let mut full = 0u16;
+            let mut shift = template_length as i32 - 1;
+            for k in 0..template_length {
+                let j0 = j as i32 + template_x[k] as i32;
+                if j0 >= 0 && j0 < width_i32 {
+                    let i0 = i as i32 + template_y[k] as i32;
+                    if i0 >= 0
+                        && i0 < height_i32
+                        && bitmap.get_pixel_unchecked(j0 as usize, i0 as usize) != 0
+                    {
+                        full |= 1 << shift;
+                    }
+                }
+                shift -= 1;
+            }
+            context_label = full;
+            let skip_hit = if useskip {
+                let byte_index = i * skip_stride + (j >> 3);
+                let mask = 1u8 << (7 - (j & 7));
+                (skip_data[byte_index] & mask) != 0
+            } else {
+                false
+            };
+            let pixel = if skip_hit {
+                0
+            } else {
+                decoder.read_bit(contexts.as_mut(), context_label as usize)?
+            };
+            bitmap.set_pixel_unchecked(j, i, pixel);
         }
     }
     Ok(bitmap)

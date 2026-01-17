@@ -72,6 +72,17 @@ impl Bitmap {
         (self.data[byte_index] >> bit_index) & 1
     }
 
+    /// Return the pixel value at `(x, y)` without bounds checks.
+    ///
+    /// Caller must ensure `x < width` and `y < height`.
+    #[inline]
+    pub fn get_pixel_unchecked(&self, x: usize, y: usize) -> u8 {
+        debug_assert!(x < self.width && y < self.height);
+        let byte_index = y * self.stride + (x >> 3);
+        let bit_index = 7 - (x & 7);
+        (self.data[byte_index] >> bit_index) & 1
+    }
+
     /// Set the pixel at `(x, y)`; out-of-bounds writes are ignored.
     ///
     /// # Arguments
@@ -87,6 +98,21 @@ impl Bitmap {
         if byte_index >= self.data.len() {
             return;
         }
+        let bit_index = 7 - (x & 7);
+        if value != 0 {
+            self.data[byte_index] |= 1 << bit_index;
+        } else {
+            self.data[byte_index] &= !(1 << bit_index);
+        }
+    }
+
+    /// Set the pixel at `(x, y)` without bounds checks.
+    ///
+    /// Caller must ensure `x < width` and `y < height`.
+    #[inline]
+    pub fn set_pixel_unchecked(&mut self, x: usize, y: usize, value: u8) {
+        debug_assert!(x < self.width && y < self.height);
+        let byte_index = y * self.stride + (x >> 3);
         let bit_index = 7 - (x & 7);
         if value != 0 {
             self.data[byte_index] |= 1 << bit_index;
