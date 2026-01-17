@@ -32,8 +32,9 @@ def parse_profile(stderr):
 def main():
     root = Path(__file__).resolve().parents[1]
     ubc = root / "tests" / "resources" / "ubc"
-    out_dir = Path("/tmp/jbig2-profile")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    bin_path = root / "target" / "release" / "examples" / "decode_file"
+    if os.name == "nt":
+        bin_path = bin_path.with_suffix(".exe")
     runs = int(os.environ.get("JBIG2_PROFILE_RUNS", "5"))
     if runs < 1:
         raise SystemExit("JBIG2_PROFILE_RUNS must be >= 1")
@@ -45,6 +46,22 @@ def main():
     aggregate = {}
     file_totals = {}
     per_file_labels = {}
+
+    build_cmd = [
+        "cargo",
+        "build",
+        "--example",
+        "decode_file",
+        "--release",
+        "--quiet",
+    ]
+    build_proc = subprocess.run(build_cmd, cwd=root, capture_output=True, text=True)
+    if build_proc.returncode != 0:
+        print("failed to build release example")
+        print(build_proc.stderr)
+        raise SystemExit(1)
+    if not bin_path.exists():
+        raise SystemExit(f"release example binary not found at {bin_path}")
 
     total_files = len(files)
     for run_idx in range(1, runs + 1):
@@ -61,18 +78,11 @@ def main():
                 f"(elapsed {elapsed:.1f}s, eta {eta:.1f}s)"
             )
             print(f"\r{status}", end="", flush=True)
-            out_path = out_dir / (path.stem + ".bin")
             cmd = [
-                "cargo",
-                "run",
-                "--example",
-                "decode_file",
-                "--release",
-                "--quiet",
-                "--",
+                str(bin_path),
                 "--profile",
+                "--no-output",
                 str(path),
-                str(out_path),
             ]
             proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
             if proc.returncode != 0:
@@ -123,7 +133,8 @@ def main():
         f.write("# JBIG2 Decode Profiling Report\n\n")
         f.write(
             "Profiling run across UBC fixtures using "
-            "`cargo run --example decode_file --release --profile`.\n\n"
+            "the release example binary "
+            "(`cargo build --example decode_file --release`).\n\n"
         )
         f.write(f"Averaged over {runs} run(s).\n\n")
         f.write("## Slowest Decoder Sections (Aggregated)\n\n")

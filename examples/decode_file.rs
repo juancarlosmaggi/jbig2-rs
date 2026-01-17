@@ -15,6 +15,10 @@ struct Args {
     /// Emit decode profiling report to stderr
     #[arg(long)]
     profile: bool,
+
+    /// Skip writing bitmap output
+    #[arg(long)]
+    no_output: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -51,14 +55,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Bitmap size: {} bytes", bitmap_data.len());
         println!("  Bits per pixel: 1 (monochrome)");
 
-        fs::write(output_path, &bitmap_data)?;
-        println!("\nSaved bitmap data to: {}", output_path);
+        if !args.no_output {
+            fs::write(output_path, &bitmap_data)?;
+            println!("\nSaved bitmap data to: {}", output_path);
 
-        println!("\nThe output file contains raw bitmap data:");
-        println!("  - 1 bit per pixel (0=white, 1=black)");
-        println!("  - Packed into bytes (8 pixels per byte)");
-        println!("Stride: {} bytes", page.page_info.width.div_ceil(8));
-        println!("  - Total rows: {}", page.page_info.height);
+            println!("\nThe output file contains raw bitmap data:");
+            println!("  - 1 bit per pixel (0=white, 1=black)");
+            println!("  - Packed into bytes (8 pixels per byte)");
+            println!("Stride: {} bytes", page.page_info.width.div_ceil(8));
+            println!("  - Total rows: {}", page.page_info.height);
+        }
     } else {
         eprintln!("Error: No pages found in document");
         std::process::exit(1);
