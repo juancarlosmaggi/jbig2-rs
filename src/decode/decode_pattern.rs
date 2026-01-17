@@ -41,7 +41,7 @@ pub fn decode_pattern_dictionary(
     let collective_bitmap = decode_bitmap(&decode_params, decoding_context)?;
 
     // Split the collective bitmap into individual pattern tiles.
-    let mut patterns = Vec::new();
+    let mut patterns = Vec::with_capacity(params.max_pattern_index.saturating_add(1));
     let collective_stride = collective_bitmap.stride;
     let rem_bits = params.pattern_width & 7;
     let tail_mask = if rem_bits == 0 {

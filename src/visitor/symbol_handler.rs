@@ -16,7 +16,8 @@ pub(super) fn collect_input_symbols(
 
     for &segment_id in referred_segments {
         if let Some(symbols) = symbols.get(&segment_id) {
-            input_symbols.extend(symbols.clone());
+            input_symbols.reserve(symbols.len());
+            input_symbols.extend_from_slice(symbols);
         }
     }
     input_symbols

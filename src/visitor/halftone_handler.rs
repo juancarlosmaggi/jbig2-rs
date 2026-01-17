@@ -1,9 +1,10 @@
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
-use crate::decode::decode_halftone::decode_halftone_region;
+use crate::decode::decode_halftone::{ShiftedPattern, decode_halftone_region_with_shifted};
 use crate::error::Jbig2Error;
 use crate::segment::{PageInfo, RegionInfo};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::region_handlers::draw_bitmap;
 
@@ -14,6 +15,7 @@ pub(super) fn on_immediate_halftone_region(
     current_bitmap: &mut Option<Bitmap>,
     current_y: usize,
     patterns: &HashMap<u32, Vec<Bitmap>>,
+    pattern_shifts: &HashMap<u32, Arc<Vec<ShiftedPattern>>>,
     region_info: &RegionInfo,
     mmr: bool,
     template: usize,
@@ -73,6 +75,7 @@ pub(super) fn on_immediate_halftone_region(
     } else {
         return Ok(());
     };
+    let shifted_patterns = pattern_shifts.get(&pattern_segment).cloned();
 
     let slice = &data[start..end];
     let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
@@ -94,7 +97,11 @@ pub(super) fn on_immediate_halftone_region(
         grid_vector_y,
     };
 
-    let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
+    let bitmap = decode_halftone_region_with_shifted(
+        &params,
+        shifted_patterns,
+        &mut decoding_context,
+    )?;
 
     draw_bitmap(
         current_page_info,
@@ -110,6 +117,7 @@ pub(super) fn on_immediate_halftone_region(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_intermediate_halftone_region(
     patterns: &HashMap<u32, Vec<Bitmap>>,
+    pattern_shifts: &HashMap<u32, Arc<Vec<ShiftedPattern>>>,
     bitmaps: &mut HashMap<u32, Bitmap>,
     region_info: &RegionInfo,
     mmr: bool,
@@ -139,6 +147,7 @@ pub(super) fn on_intermediate_halftone_region(
     } else {
         return Ok(());
     };
+    let shifted_patterns = pattern_shifts.get(&pattern_segment).cloned();
 
     let slice = &data[start..end];
     let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
@@ -160,7 +169,11 @@ pub(super) fn on_intermediate_halftone_region(
         grid_vector_y,
     };
 
-    let bitmap = decode_halftone_region(&params, &mut decoding_context)?;
+    let bitmap = decode_halftone_region_with_shifted(
+        &params,
+        shifted_patterns,
+        &mut decoding_context,
+    )?;
 
     bitmaps.insert(segment_number, bitmap);
     Ok(())

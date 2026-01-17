@@ -21,7 +21,7 @@ struct ShiftedRows {
     data: Vec<u8>,
 }
 
-struct ShiftedPattern {
+pub(crate) struct ShiftedPattern {
     shifts: [ShiftedRows; 8],
     has_black: bool,
 }
@@ -105,6 +105,10 @@ fn build_shifted_pattern(pattern: &Bitmap) -> ShiftedPattern {
     ShiftedPattern { shifts, has_black }
 }
 
+pub(crate) fn build_shifted_patterns(patterns: &[Bitmap]) -> Arc<Vec<ShiftedPattern>> {
+    Arc::new(patterns.iter().map(build_shifted_pattern).collect())
+}
+
 fn compute_patterns_hash(patterns: &[Bitmap]) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     patterns.len().hash(&mut hasher);
@@ -125,7 +129,7 @@ fn get_shifted_patterns(patterns: &[Bitmap]) -> Arc<Vec<ShiftedPattern>> {
         if let Some(cached) = cache.get(&hash) {
             return Arc::clone(cached);
         }
-        let shifted = Arc::new(patterns.iter().map(build_shifted_pattern).collect());
+        let shifted = build_shifted_patterns(patterns);
         if cache.len() >= SHIFTED_PATTERN_CACHE_LIMIT {
             cache.clear();
         }
@@ -617,7 +621,7 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
         for byte_index in 0..full_bytes {
             let mut p0 = plane0_row[byte_index];
             for _ in 0..8 {
-                let mut pattern_index = ((p0 & 0x80) != 0) as usize;
+                let mut pattern_index = (p0 >> 7) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -642,7 +646,7 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
         if tail_bits != 0 {
             let mut p0 = plane0_row[full_bytes];
             for _ in 0..tail_bits {
-                let mut pattern_index = ((p0 & 0x80) != 0) as usize;
+                let mut pattern_index = (p0 >> 7) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -705,8 +709,7 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
             let mut p0 = plane0_row[byte_index];
             let mut p1 = plane1_row[byte_index];
             for _ in 0..8 {
-                let mut pattern_index =
-                    ((p0 & 0x80) != 0) as usize | (((p1 & 0x80) != 0) as usize) << 1;
+                let mut pattern_index = ((p0 >> 7) | ((p1 >> 7) << 1)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -733,8 +736,7 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
             let mut p0 = plane0_row[full_bytes];
             let mut p1 = plane1_row[full_bytes];
             for _ in 0..tail_bits {
-                let mut pattern_index =
-                    ((p0 & 0x80) != 0) as usize | (((p1 & 0x80) != 0) as usize) << 1;
+                let mut pattern_index = ((p0 >> 7) | ((p1 >> 7) << 1)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -801,9 +803,8 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
             let mut p1 = plane1_row[byte_index];
             let mut p2 = plane2_row[byte_index];
             for _ in 0..8 {
-                let mut pattern_index = ((p0 & 0x80) != 0) as usize
-                    | (((p1 & 0x80) != 0) as usize) << 1
-                    | (((p2 & 0x80) != 0) as usize) << 2;
+                let mut pattern_index =
+                    ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -832,9 +833,8 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
             let mut p1 = plane1_row[full_bytes];
             let mut p2 = plane2_row[full_bytes];
             for _ in 0..tail_bits {
-                let mut pattern_index = ((p0 & 0x80) != 0) as usize
-                    | (((p1 & 0x80) != 0) as usize) << 1
-                    | (((p2 & 0x80) != 0) as usize) << 2;
+                let mut pattern_index =
+                    ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -905,10 +905,10 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
             let mut p2 = plane2_row[byte_index];
             let mut p3 = plane3_row[byte_index];
             for _ in 0..8 {
-                let mut pattern_index = ((p0 & 0x80) != 0) as usize
-                    | (((p1 & 0x80) != 0) as usize) << 1
-                    | (((p2 & 0x80) != 0) as usize) << 2
-                    | (((p3 & 0x80) != 0) as usize) << 3;
+                let mut pattern_index = ((p0 >> 7)
+                    | ((p1 >> 7) << 1)
+                    | ((p2 >> 7) << 2)
+                    | ((p3 >> 7) << 3)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -939,10 +939,10 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
             let mut p2 = plane2_row[full_bytes];
             let mut p3 = plane3_row[full_bytes];
             for _ in 0..tail_bits {
-                let mut pattern_index = ((p0 & 0x80) != 0) as usize
-                    | (((p1 & 0x80) != 0) as usize) << 1
-                    | (((p2 & 0x80) != 0) as usize) << 2
-                    | (((p3 & 0x80) != 0) as usize) << 3;
+                let mut pattern_index = ((p0 >> 7)
+                    | ((p1 >> 7) << 1)
+                    | ((p2 >> 7) << 2)
+                    | ((p3 >> 7) << 3)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -1091,6 +1091,14 @@ pub fn decode_halftone_region(
     params: &HalftoneRegionParams<'_>,
     decoding_context: &mut DecodingContext<'_>,
 ) -> Result<Bitmap, Jbig2Error> {
+    decode_halftone_region_with_shifted(params, None, decoding_context)
+}
+
+pub(crate) fn decode_halftone_region_with_shifted(
+    params: &HalftoneRegionParams<'_>,
+    shifted_patterns: Option<Arc<Vec<ShiftedPattern>>>,
+    decoding_context: &mut DecodingContext<'_>,
+) -> Result<Bitmap, Jbig2Error> {
     if params.combination_operator != 0 {
         return Err(Jbig2Error::new("only OR combination operator is supported"));
     }
@@ -1187,7 +1195,7 @@ pub fn decode_halftone_region(
         }
     }
     // Render patterns into the output bitmap using the grid geometry.
-    let shifted_patterns = get_shifted_patterns(params.patterns);
+    let shifted_patterns = shifted_patterns.unwrap_or_else(|| get_shifted_patterns(params.patterns));
     let grid_vector_x = params.grid_vector_x as i64;
     let grid_vector_y = params.grid_vector_y as i64;
     let grid_offset_x = params.grid_offset_x as i64;

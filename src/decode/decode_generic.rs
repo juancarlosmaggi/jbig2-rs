@@ -87,41 +87,65 @@ fn decode_bitmap_template0(
         let row_start = y * rowstride;
         let (before, after) = bitmap.data.split_at_mut(row_start);
         let (row, _) = after.split_at_mut(rowstride);
-        let line1 = if y >= 1 {
-            Some(&before[(y - 1) * rowstride..y * rowstride])
-        } else {
-            None
-        };
-        let line2 = if y >= 2 {
-            Some(&before[(y - 2) * rowstride..(y - 1) * rowstride])
-        } else {
-            None
-        };
+        if y == 0 {
+            let mut context = 0u32;
+            for x in (0..padded_width).step_by(8) {
+                let minor_width = if width - x > 8 { 8 } else { width - x };
+                let mut result = 0u8;
+                for x_minor in 0..minor_width {
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= (bit as u8) << (7 - x_minor);
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+                }
+                row[x >> 3] = result;
+            }
+            continue;
+        }
 
-        let mut line_m1 = line1.map_or(0u32, |l| l[0] as u32);
-        let mut line_m2 = line2.map_or(0u32, |l| (l[0] as u32) << 6);
-        let mut context = (line_m1 & 0x7f0) | (line_m2 & 0xf800);
+        let line1_row = &before[(y - 1) * rowstride..y * rowstride];
+        let mut line_m1 = line1_row[0] as u32;
 
-        for x in (0..padded_width).step_by(8) {
-            let minor_width = if width - x > 8 { 8 } else { width - x };
-
-            if let Some(line1_row) = line1 {
+        if y == 1 {
+            let mut context = line_m1 & 0x7f0;
+            for x in (0..padded_width).step_by(8) {
+                let minor_width = if width - x > 8 { 8 } else { width - x };
                 let next = if x + 8 < width {
                     line1_row[(x >> 3) + 1] as u32
                 } else {
                     0
                 };
                 line_m1 = (line_m1 << 8) | next;
-            }
 
-            if let Some(line2_row) = line2 {
-                let next = if x + 8 < width {
-                    line2_row[(x >> 3) + 1] as u32
-                } else {
-                    0
-                };
-                line_m2 = (line_m2 << 8) | (next << 6);
+                let mut result = 0u8;
+                for x_minor in 0..minor_width {
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= (bit as u8) << (7 - x_minor);
+                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
+                }
+                row[x >> 3] = result;
             }
+            continue;
+        }
+
+        let line2_row = &before[(y - 2) * rowstride..(y - 1) * rowstride];
+        let mut line_m2 = (line2_row[0] as u32) << 6;
+        let mut context = (line_m1 & 0x7f0) | (line_m2 & 0xf800);
+
+        for x in (0..padded_width).step_by(8) {
+            let minor_width = if width - x > 8 { 8 } else { width - x };
+            let next1 = if x + 8 < width {
+                line1_row[(x >> 3) + 1] as u32
+            } else {
+                0
+            };
+            line_m1 = (line_m1 << 8) | next1;
+            let next2 = if x + 8 < width {
+                line2_row[(x >> 3) + 1] as u32
+            } else {
+                0
+            };
+            line_m2 = (line_m2 << 8) | (next2 << 6);
 
             let mut result = 0u8;
             for x_minor in 0..minor_width {
@@ -159,62 +183,155 @@ fn decode_bitmap_template0_with_skip(
         let row_start = y * rowstride;
         let (before, after) = bitmap.data.split_at_mut(row_start);
         let (row, _) = after.split_at_mut(rowstride);
-        let line1 = if y >= 1 {
-            Some(&before[(y - 1) * rowstride..y * rowstride])
-        } else {
-            None
-        };
-        let line2 = if y >= 2 {
-            Some(&before[(y - 2) * rowstride..(y - 1) * rowstride])
-        } else {
-            None
-        };
         let skip_row_start = y * skip.stride;
         let skip_row = &skip.data[skip_row_start..skip_row_start + skip.stride];
 
-        let mut line_m1 = line1.map_or(0u32, |l| l[0] as u32);
-        let mut line_m2 = line2.map_or(0u32, |l| (l[0] as u32) << 6);
-        let mut context = (line_m1 & 0x7f0) | (line_m2 & 0xf800);
+        if y == 0 {
+            let mut context = 0u32;
+            for x in (0..padded_width).step_by(8) {
+                let minor_width = if width - x > 8 { 8 } else { width - x };
+                let skip_byte = skip_row[x >> 3];
+                if skip_byte == 0 {
+                    let mut result = 0u8;
+                    for x_minor in 0..minor_width {
+                        let bit = decoder.read_bit(contexts, context as usize)?;
+                        result |= (bit as u8) << (7 - x_minor);
+                        context = ((context & 0x7bf7) << 1) | (bit as u32);
+                    }
+                    row[x >> 3] = result;
+                } else if skip_byte == 0xFF {
+                    for _ in 0..minor_width {
+                        context = (context & 0x7bf7) << 1;
+                    }
+                    row[x >> 3] = 0;
+                } else {
+                    let mut result = 0u8;
+                    let mut skip_mask = 0x80u8;
+                    for x_minor in 0..minor_width {
+                        let skip_set = (skip_byte & skip_mask) != 0;
+                        let bit = if skip_set {
+                            0
+                        } else {
+                            decoder.read_bit(contexts, context as usize)?
+                        };
+                        result |= (bit as u8) << (7 - x_minor);
+                        context = ((context & 0x7bf7) << 1) | (bit as u32);
+                        skip_mask >>= 1;
+                    }
+                    row[x >> 3] = result;
+                }
+            }
+            continue;
+        }
 
-        for x in (0..padded_width).step_by(8) {
-            let minor_width = if width - x > 8 { 8 } else { width - x };
+        let line1_row = &before[(y - 1) * rowstride..y * rowstride];
+        let mut line_m1 = line1_row[0] as u32;
 
-            if let Some(line1_row) = line1 {
+        if y == 1 {
+            let mut context = line_m1 & 0x7f0;
+            for x in (0..padded_width).step_by(8) {
+                let minor_width = if width - x > 8 { 8 } else { width - x };
                 let next = if x + 8 < width {
                     line1_row[(x >> 3) + 1] as u32
                 } else {
                     0
                 };
                 line_m1 = (line_m1 << 8) | next;
-            }
 
-            if let Some(line2_row) = line2 {
-                let next = if x + 8 < width {
-                    line2_row[(x >> 3) + 1] as u32
+                let skip_byte = skip_row[x >> 3];
+                if skip_byte == 0 {
+                    let mut result = 0u8;
+                    for x_minor in 0..minor_width {
+                        let bit = decoder.read_bit(contexts, context as usize)?;
+                        result |= (bit as u8) << (7 - x_minor);
+                        let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                        context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
+                    }
+                    row[x >> 3] = result;
+                } else if skip_byte == 0xFF {
+                    for x_minor in 0..minor_width {
+                        let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                        context = ((context & 0x7bf7) << 1) | line_m1_bit;
+                    }
+                    row[x >> 3] = 0;
                 } else {
-                    0
-                };
-                line_m2 = (line_m2 << 8) | (next << 6);
+                    let mut result = 0u8;
+                    let mut skip_mask = 0x80u8;
+                    for x_minor in 0..minor_width {
+                        let skip_set = (skip_byte & skip_mask) != 0;
+                        let bit = if skip_set {
+                            0
+                        } else {
+                            decoder.read_bit(contexts, context as usize)?
+                        };
+                        result |= (bit as u8) << (7 - x_minor);
+                        let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                        context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
+                        skip_mask >>= 1;
+                    }
+                    row[x >> 3] = result;
+                }
             }
+            continue;
+        }
 
-            let mut result = 0u8;
-            let mut skip_mask = 0x80u8;
+        let line2_row = &before[(y - 2) * rowstride..(y - 1) * rowstride];
+        let mut line_m2 = (line2_row[0] as u32) << 6;
+        let mut context = (line_m1 & 0x7f0) | (line_m2 & 0xf800);
+
+        for x in (0..padded_width).step_by(8) {
+            let minor_width = if width - x > 8 { 8 } else { width - x };
+            let next1 = if x + 8 < width {
+                line1_row[(x >> 3) + 1] as u32
+            } else {
+                0
+            };
+            line_m1 = (line_m1 << 8) | next1;
+            let next2 = if x + 8 < width {
+                line2_row[(x >> 3) + 1] as u32
+            } else {
+                0
+            };
+            line_m2 = (line_m2 << 8) | (next2 << 6);
+
             let skip_byte = skip_row[x >> 3];
-            for x_minor in 0..minor_width {
-                let skip_set = (skip_byte & skip_mask) != 0;
-                let bit = if skip_set {
-                    0
-                } else {
-                    decoder.read_bit(contexts, context as usize)?
-                };
-                result |= (bit as u8) << (7 - x_minor);
-                let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
-                let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
-                context =
-                    ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
-                skip_mask >>= 1;
+            if skip_byte == 0 {
+                let mut result = 0u8;
+                for x_minor in 0..minor_width {
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= (bit as u8) << (7 - x_minor);
+                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                    let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                    context =
+                        ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                }
+                row[x >> 3] = result;
+            } else if skip_byte == 0xFF {
+                for x_minor in 0..minor_width {
+                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                    let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                    context = ((context & 0x7bf7) << 1) | line_m1_bit | line_m2_bit;
+                }
+                row[x >> 3] = 0;
+            } else {
+                let mut result = 0u8;
+                let mut skip_mask = 0x80u8;
+                for x_minor in 0..minor_width {
+                    let skip_set = (skip_byte & skip_mask) != 0;
+                    let bit = if skip_set {
+                        0
+                    } else {
+                        decoder.read_bit(contexts, context as usize)?
+                    };
+                    result |= (bit as u8) << (7 - x_minor);
+                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                    let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                    context =
+                        ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                    skip_mask >>= 1;
+                }
+                row[x >> 3] = result;
             }
-            row[x >> 3] = result;
         }
     }
     Ok(bitmap)

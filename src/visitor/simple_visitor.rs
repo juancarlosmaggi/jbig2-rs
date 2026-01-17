@@ -1,9 +1,11 @@
 use crate::bitmap::Bitmap;
+use crate::decode::decode_halftone::ShiftedPattern;
 use crate::error::Jbig2Error;
 use crate::huffman::HuffmanTable;
 use crate::profile::DecodeProfile;
 use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // Re-export Jbig2Page from page_handler.
@@ -18,6 +20,7 @@ pub struct SimpleSegmentVisitor {
     pub current_y: usize,
     pub symbols: HashMap<u32, Vec<Bitmap>>,
     pub patterns: HashMap<u32, Vec<Bitmap>>,
+    pub(crate) pattern_shifts: HashMap<u32, Arc<Vec<ShiftedPattern>>>,
     pub custom_tables: HashMap<u32, HuffmanTable>,
     pub bitmaps: HashMap<u32, Bitmap>,
     profile: Option<DecodeProfile>,
@@ -207,6 +210,7 @@ impl SimpleSegmentVisitor {
         self.time_call("pattern_dictionary", |this| {
             super::pattern_handler::on_pattern_dictionary(
                 &mut this.patterns,
+                &mut this.pattern_shifts,
                 mmr,
                 pattern_width,
                 pattern_height,
@@ -247,6 +251,7 @@ impl SimpleSegmentVisitor {
                 &mut this.current_bitmap,
                 this.current_y,
                 &this.patterns,
+                &this.pattern_shifts,
                 region_info,
                 mmr,
                 template,
@@ -390,6 +395,7 @@ impl SimpleSegmentVisitor {
         self.time_call("intermediate_halftone_region", |this| {
             super::halftone_handler::on_intermediate_halftone_region(
                 &this.patterns,
+                &this.pattern_shifts,
                 &mut this.bitmaps,
                 region_info,
                 mmr,
