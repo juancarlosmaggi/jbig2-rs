@@ -42,7 +42,6 @@ pub fn decode_halftone_region(
         return Ok(region_bitmap);
     }
     let pattern0 = &params.patterns[0];
-    let _pattern_width = pattern0.width;
     let pattern_width = pattern0.width;
     let pattern_height = pattern0.height;
     let bits_per_value = crate::core_utils::log2(number_of_patterns as u32) as usize;
@@ -56,25 +55,33 @@ pub fn decode_halftone_region(
         vec![]
     };
     // Build a skip bitmap from the grid geometry when enabled.
-    let skip_bitmap = if params.enable_skip {
+    let skip_bitmap = if params.enable_skip && !params.mmr {
         let mut skip = Bitmap::new(params.grid_width, params.grid_height);
+        let grid_vector_x = params.grid_vector_x as i64;
+        let grid_vector_y = params.grid_vector_y as i64;
+        let grid_offset_x = params.grid_offset_x as i64;
+        let grid_offset_y = params.grid_offset_y as i64;
+        let region_width = params.region_width as i64;
+        let region_height = params.region_height as i64;
+        let pattern_width = pattern_width as i64;
+        let pattern_height = pattern_height as i64;
         for mg in 0..params.grid_height {
+            let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+            let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+            let mut x = base_x;
+            let mut y = base_y;
             for ng in 0..params.grid_width {
-                let x = (params.grid_offset_x as i64
-                    + mg as i64 * params.grid_vector_y as i64
-                    + ng as i64 * params.grid_vector_x as i64)
-                    >> 8;
-                let y = (params.grid_offset_y as i64
-                    + mg as i64 * params.grid_vector_x as i64
-                    - ng as i64 * params.grid_vector_y as i64)
-                    >> 8;
-                let outside = x + pattern_width as i64 <= 0
-                    || x >= params.region_width as i64
-                    || y + pattern_height as i64 <= 0
-                    || y >= params.region_height as i64;
+                let region_x = x >> 8;
+                let region_y = y >> 8;
+                let outside = region_x + pattern_width <= 0
+                    || region_x >= region_width
+                    || region_y + pattern_height <= 0
+                    || region_y >= region_height;
                 if outside {
                     skip.set_pixel(ng, mg, 1);
                 }
+                x += grid_vector_x;
+                y -= grid_vector_y;
             }
         }
         Some(skip)
@@ -82,8 +89,7 @@ pub fn decode_halftone_region(
         None
     };
     // Decode gray-scale bit planes from MSB to LSB, then gray-decode with XOR.
-    let mut gray_scale_bit_planes =
-        vec![Bitmap::new(params.grid_width, params.grid_height); bits_per_value];
+    let mut gray_scale_bit_planes = vec![Bitmap::new(0, 0); bits_per_value];
     for j in (0..bits_per_value).rev() {
         let decode_params = DecodeBitmapParams {
             mmr: params.mmr,
@@ -102,75 +108,56 @@ pub fn decode_halftone_region(
             }
         }
     }
-    let mut pattern_indices = vec![0usize; params.grid_width * params.grid_height];
+    // Render patterns into the output bitmap using the grid geometry.
+    let patterns_len = params.patterns.len();
+    let grid_vector_x = params.grid_vector_x as i64;
+    let grid_vector_y = params.grid_vector_y as i64;
+    let grid_offset_x = params.grid_offset_x as i64;
+    let grid_offset_y = params.grid_offset_y as i64;
+    let region_width = params.region_width as i64;
+    let region_height = params.region_height as i64;
+    let plane_stride = if bits_per_value > 0 {
+        gray_scale_bit_planes[0].stride
+    } else {
+        0
+    };
     for mg in 0..params.grid_height {
+        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+        let mut x = base_x;
+        let mut y = base_y;
+        let row_offset = mg * plane_stride;
         for ng in 0..params.grid_width {
             let mut pattern_index = 0usize;
-            for j in 0..bits_per_value {
-                let plane_bit = gray_scale_bit_planes[j].get_pixel(ng, mg);
-                pattern_index |= (plane_bit as usize) << j;
+            if bits_per_value > 0 {
+                let byte_index = row_offset + (ng >> 3);
+                let bit_mask = 1u8 << (7 - (ng & 7));
+                for (j, plane) in gray_scale_bit_planes.iter().enumerate() {
+                    if (plane.data[byte_index] & bit_mask) != 0 {
+                        pattern_index |= 1usize << j;
+                    }
+                }
             }
-            if pattern_index >= params.patterns.len() {
-                pattern_index = params.patterns.len().saturating_sub(1);
+            if pattern_index >= patterns_len {
+                pattern_index = patterns_len.saturating_sub(1);
             }
-            pattern_indices[mg * params.grid_width + ng] = pattern_index;
-        }
-    }
-    // Render patterns into the output bitmap using the grid geometry.
-    for mg in 0..params.grid_height {
-        for ng in 0..params.grid_width {
-            let pattern_index = pattern_indices[mg * params.grid_width + ng];
             let pattern_bitmap = &params.patterns[pattern_index];
-            let x = ((params.grid_offset_x as i64
-                + mg as i64 * params.grid_vector_y as i64
-                + ng as i64 * params.grid_vector_x as i64)
-                >> 8) as i32;
-            let y = ((params.grid_offset_y as i64
-                + mg as i64 * params.grid_vector_x as i64
-                - ng as i64 * params.grid_vector_y as i64)
-                >> 8) as i32;
-            // Draw pattern
-            if x >= 0
-                && x + pattern_bitmap.width as i32 <= params.region_width as i32
-                && y >= 0
-                && y + pattern_bitmap.height as i32 <= params.region_height as i32
+            let region_x = x >> 8;
+            let region_y = y >> 8;
+            let pattern_width = pattern_bitmap.width as i64;
+            let pattern_height = pattern_bitmap.height as i64;
+            if region_x + pattern_width <= 0
+                || region_x >= region_width
+                || region_y + pattern_height <= 0
+                || region_y >= region_height
             {
-                for i in 0..pattern_bitmap.height {
-                    for j in 0..pattern_bitmap.width {
-                        let src_pixel = pattern_bitmap.get_pixel(j, i);
-                        let dst_pixel = region_bitmap
-                            .get_pixel((x + j as i32) as usize, (y + i as i32) as usize);
-                        let new_pixel = src_pixel | dst_pixel;
-                        region_bitmap.set_pixel(
-                            (x + j as i32) as usize,
-                            (y + i as i32) as usize,
-                            new_pixel,
-                        );
-                    }
-                }
-            } else {
-                // Handle partial patterns that fall outside the region bounds.
-                for i in 0..pattern_height {
-                    let region_y = y + i as i32;
-                    if region_y < 0 || region_y >= params.region_height as i32 {
-                        continue;
-                    }
-                    for j in 0..pattern_bitmap.width {
-                        let region_x = x + j as i32;
-                        if region_x >= 0 && region_x < params.region_width as i32 {
-                            let src_pixel = pattern_bitmap.get_pixel(j, i);
-                            let dst_pixel =
-                                region_bitmap.get_pixel(region_x as usize, region_y as usize);
-                            let new_pixel = src_pixel | dst_pixel;
-                            region_bitmap.set_pixel(
-                                region_x as usize,
-                                region_y as usize,
-                                new_pixel,
-                            );
-                        }
-                    }
-                }
+                x += grid_vector_x;
+                y -= grid_vector_y;
+                continue;
             }
+            region_bitmap.combine(pattern_bitmap, region_x as isize, region_y as isize, 0);
+            x += grid_vector_x;
+            y -= grid_vector_y;
         }
     }
     Ok(region_bitmap)

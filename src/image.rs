@@ -1,6 +1,8 @@
 use crate::error::Jbig2Error;
+use crate::profile::DecodeProfile;
 use crate::segment::{process_segments, read_segments};
 use crate::visitor::{Jbig2Page, SimpleSegmentVisitor};
+use std::time::Instant;
 
 /// Represents a slice of JBIG2 data used for incremental decoding.
 ///
@@ -149,6 +151,79 @@ impl Jbig2Document {
         })
     }
 
+    pub fn parse_with_profile(data: &[u8]) -> Result<(Self, DecodeProfile), Jbig2Error> {
+        let total_start = Instant::now();
+        let magic = b"\x97\x4a\x42\x32\x0d\x0a\x1a\x0a";
+        let (has_file_header, sequential, num_pages, pos) =
+            if data.len() >= 8 && &data[0..8] == magic {
+                let mut pos = 8;
+                if data.len() <= pos {
+                    return Err(Jbig2Error::new("insufficient data for file header"));
+                }
+                let flags = data[pos];
+                pos += 1;
+                let sequential = (flags & 1) != 0;
+                let has_num_pages = (flags & 2) == 0;
+                if (flags & 0xfc) != 0 {
+                    return Err(Jbig2Error::new("invalid file header flags"));
+                }
+                let num_pages = if has_num_pages {
+                    if data.len() < pos + 4 {
+                        return Err(Jbig2Error::new("insufficient data for num_pages"));
+                    }
+                    let num_pages = ((data[pos] as u32) << 24)
+                        | ((data[pos + 1] as u32) << 16)
+                        | ((data[pos + 2] as u32) << 8)
+                        | (data[pos + 3] as u32);
+                    pos += 4;
+                    if num_pages == 0 { 1 } else { num_pages }
+                } else {
+                    1
+                };
+                (true, sequential, num_pages, pos)
+            } else {
+                (false, true, 1u32, 0)
+            };
+        let data_start = pos;
+
+        let mut visitor = SimpleSegmentVisitor::new_with_profile();
+        let read_start = Instant::now();
+        let segments = read_segments(
+            data,
+            pos,
+            data.len(),
+            sequential,
+            data_start,
+            has_file_header,
+        )?;
+        visitor.record_profile("read_segments", read_start.elapsed());
+        if segments.is_empty() {
+            return Err(Jbig2Error::new("no segments found"));
+        }
+
+        process_segments(&segments, &mut visitor)?;
+
+        visitor.finalize_current_page();
+
+        if visitor.pages.is_empty() {
+            return Err(Jbig2Error::new(
+                "no pages created after processing segments",
+            ));
+        }
+
+        if has_file_header
+            && !sequential
+            && num_pages != 0
+            && num_pages as usize != visitor.pages.len()
+        {
+            return Err(Jbig2Error::new("page count mismatch"));
+        }
+
+        visitor.record_profile("total_decode", total_start.elapsed());
+        let profile = visitor.take_profile().unwrap_or_default();
+        Ok((Jbig2Document { pages: visitor.pages }, profile))
+    }
+
     /// Parse JBIG2 data from multiple chunks.
     ///
     /// Chunks are processed sequentially and are treated as headerless data.
@@ -190,6 +265,33 @@ impl Jbig2Document {
         Ok(Jbig2Document {
             pages: visitor.pages,
         })
+    }
+
+    pub fn parse_chunks_with_profile(
+        chunks: &[Jbig2Chunk],
+    ) -> Result<(Self, DecodeProfile), Jbig2Error> {
+        let total_start = Instant::now();
+        let mut visitor = SimpleSegmentVisitor::new_with_profile();
+        for chunk in chunks {
+            if chunk.start > chunk.end || chunk.end > chunk.data.len() {
+                return Err(Jbig2Error::new("invalid chunk bounds"));
+            }
+            let read_start = Instant::now();
+            let segments = read_segments(
+                &chunk.data,
+                chunk.start,
+                chunk.end,
+                true,
+                chunk.start,
+                false,
+            )?;
+            visitor.record_profile("read_segments", read_start.elapsed());
+            process_segments(&segments, &mut visitor)?;
+        }
+        visitor.finalize_current_page();
+        visitor.record_profile("total_decode", total_start.elapsed());
+        let profile = visitor.take_profile().unwrap_or_default();
+        Ok((Jbig2Document { pages: visitor.pages }, profile))
     }
 
     /// Return the total number of pages in the document.

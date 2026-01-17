@@ -8,14 +8,23 @@ pub(super) fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
     let height = bitmap.height;
     let row_size = width.div_ceil(8); // bytes per row
     let mut packed = vec![0u8; row_size * height];
+    if row_size == 0 || height == 0 {
+        return packed;
+    }
+    let rem_bits = width % 8;
+    let mask = if rem_bits == 0 {
+        0xFF
+    } else {
+        0xFFu8 << (8 - rem_bits)
+    };
     for y in 0..height {
-        for x in 0..width {
-            let pixel = bitmap.get_pixel(x, y);
-            if pixel != 0 {
-                let byte_index = y * row_size + (x / 8);
-                let bit_index = 7 - (x % 8); // MSB first
-                packed[byte_index] |= 1 << bit_index;
-            }
+        let dst_start = y * row_size;
+        let src_start = y * bitmap.stride;
+        let src_end = src_start + row_size;
+        packed[dst_start..dst_start + row_size]
+            .copy_from_slice(&bitmap.data[src_start..src_end]);
+        if rem_bits != 0 {
+            packed[dst_start + row_size - 1] &= mask;
         }
     }
     packed

@@ -118,12 +118,14 @@ pub mod decoder;
 pub mod error;
 pub mod huffman;
 pub mod image;
+pub mod profile;
 pub mod reader;
 pub mod segment;
 pub mod validation;
 pub mod visitor;
 pub use error::Jbig2Error;
 pub use image::{Jbig2Chunk, Jbig2Document, Jbig2Image};
+pub use profile::DecodeProfile;
 
 #[cfg(test)]
 mod tests {

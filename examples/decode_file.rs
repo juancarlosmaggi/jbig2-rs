@@ -1,28 +1,40 @@
 //! Example: Decode a JBIG2 file to raw bitmap data.
+use clap::Parser;
 use jbig2_rs::Jbig2Document;
-use std::env;
 use std::fs;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <input.jb2> [output.bin]", args[0]);
-        eprintln!("\nDecodes a JBIG2 file and saves the first page as raw bitmap data.");
-        std::process::exit(1);
-    }
+/// Decode a JBIG2 file to raw 1bpp bitmap data.
+#[derive(Parser)]
+struct Args {
+    /// Input JBIG2 file path
+    input: String,
 
-    let input_path = &args[1];
-    let output_path = if args.len() >= 3 {
-        &args[2]
-    } else {
-        "output.bin"
-    };
+    /// Output file path (defaults to output.bin)
+    output: Option<String>,
+
+    /// Emit decode profiling report to stderr
+    #[arg(long)]
+    profile: bool,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+    let input_path = &args.input;
+    let output_path = args.output.as_deref().unwrap_or("output.bin");
 
     println!("Reading JBIG2 file: {}", input_path);
 
     let data = fs::read(input_path)?;
 
-    let document = Jbig2Document::parse(&data)?;
+    let (document, profile) = if args.profile {
+        let (document, profile) = Jbig2Document::parse_with_profile(&data)?;
+        (document, Some(profile))
+    } else {
+        (Jbig2Document::parse(&data)?, None)
+    };
+    if let Some(profile) = profile {
+        eprintln!("{}", profile.report());
+    }
 
     println!("Document parsed successfully!");
     println!("Number of pages: {}", document.page_count());
