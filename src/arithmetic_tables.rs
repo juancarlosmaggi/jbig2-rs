@@ -1,6 +1,6 @@
-// QE probability estimation table for arithmetic coding
-// Based on ITU-T T.88 (JBIG2) Annex E
+// Probability estimation table used by the arithmetic decoder state machine.
 
+/// One entry in the arithmetic decoder state table.
 #[derive(Clone)]
 pub struct QeEntry {
     pub qe: u16,
@@ -9,6 +9,7 @@ pub struct QeEntry {
     pub switch_flag: u8,
 }
 
+/// Fixed probability state table indexed by context state.
 pub const QE_TABLE: [QeEntry; 47] = [
     QeEntry {
         qe: 0x5601,

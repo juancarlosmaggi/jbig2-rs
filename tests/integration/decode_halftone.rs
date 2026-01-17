@@ -17,7 +17,7 @@ mod tests {
             region_height: 100,
             default_pixel_value: 0,
             enable_skip: false,
-            combination_operator: 1, // Invalid (only 0 is supported)
+            combination_operator: 1,
             grid_width: 8,
             grid_height: 8,
             grid_offset_x: 0,
@@ -37,7 +37,7 @@ mod tests {
 
         let params = HalftoneRegionParams {
             mmr: false,
-            patterns: vec![], // No patterns
+            patterns: vec![],
             template: 0,
             region_width: 64,
             region_height: 64,
@@ -68,7 +68,7 @@ mod tests {
             mmr: false,
             patterns: vec![],
             template: 0,
-            region_width: 0, // Zero width
+            region_width: 0,
             region_height: 100,
             default_pixel_value: 0,
             enable_skip: false,
@@ -113,7 +113,6 @@ mod tests {
         };
 
         let result = decode_halftone_region(&params, &mut context);
-        // With dummy data, this may fail, but should not panic
         let _ = result;
     }
 
@@ -145,7 +144,6 @@ mod tests {
             };
 
             let result = decode_halftone_region(&params, &mut context);
-            // Should handle different templates without crashing
             let _ = result;
         }
     }
@@ -164,7 +162,7 @@ mod tests {
             region_width: 32,
             region_height: 32,
             default_pixel_value: 0,
-            enable_skip: true, // Test skip functionality
+            enable_skip: true,
             combination_operator: 0,
             grid_width: 8,
             grid_height: 8,
@@ -175,7 +173,6 @@ mod tests {
         };
 
         let result = decode_halftone_region(&params, &mut context);
-        // Should handle skip mode without crashing
         let _ = result;
     }
 
@@ -187,7 +184,7 @@ mod tests {
         let patterns = vec![Bitmap::new(8, 8)];
 
         let params = HalftoneRegionParams {
-            mmr: true, // Test MMR mode
+            mmr: true,
             patterns,
             template: 0,
             region_width: 32,
@@ -204,7 +201,6 @@ mod tests {
         };
 
         let result = decode_halftone_region(&params, &mut context);
-        // Should handle MMR mode without crashing
         let _ = result;
     }
 
@@ -226,14 +222,13 @@ mod tests {
             combination_operator: 0,
             grid_width: 5,
             grid_height: 5,
-            grid_offset_x: 2, // Non-zero offset
+            grid_offset_x: 2,
             grid_offset_y: 3,
             grid_vector_x: 5,
             grid_vector_y: 5,
         };
 
         let result = decode_halftone_region(&params, &mut context);
-        // Should handle custom grid parameters without crashing
         let _ = result;
     }
 

@@ -2,10 +2,9 @@ use crate::error::Jbig2Error;
 use crate::segment::{process_segments, read_segments};
 use crate::visitor::{Jbig2Page, SimpleSegmentVisitor};
 
-/// Represents a chunk of JBIG2 data for incremental or embedded decoding.
+/// Represents a slice of JBIG2 data used for incremental decoding.
 ///
-/// Chunks are useful for processing JBIG2 data that is split across multiple
-/// buffers, such as when embedded in PDF streams.
+/// Chunks allow callers to decode JBIG2 content that arrives in separate buffers.
 ///
 /// # Fields
 ///
@@ -19,10 +18,9 @@ pub struct Jbig2Chunk {
     pub end: usize,
 }
 
-/// Represents a complete JBIG2 document with one or more pages.
+/// Represents a decoded JBIG2 document with one or more pages.
 ///
-/// This is the main entry point for decoding JBIG2 data. A document can contain
-/// multiple pages and is created by parsing JBIG2 file data or processing chunks.
+/// A document is built by parsing a full data stream or a sequence of chunks.
 ///
 /// # Examples
 ///
@@ -55,16 +53,15 @@ impl Default for Jbig2Document {
     }
 }
 impl Jbig2Document {
-    /// Creates a new empty JBIG2 document.
+    /// Create an empty document with no pages.
     pub fn new() -> Self {
         Jbig2Document { pages: Vec::new() }
     }
 
-    /// Parses JBIG2 data from a byte slice and returns a document.
+    /// Parse JBIG2 data from a byte slice and return a document.
     ///
-    /// This method handles both file-header and random-access JBIG2 formats.
-    /// File-header format includes a magic signature and metadata,
-    /// while random-access format starts directly with segments.
+    /// The parser accepts streams with or without a file header, and handles
+    /// both sequential and random-access segment ordering.
     ///
     /// # Arguments
     ///
@@ -152,9 +149,9 @@ impl Jbig2Document {
         })
     }
 
-    /// Parses JBIG2 data from multiple chunks (useful for embedded JBIG2 in PDFs).
+    /// Parse JBIG2 data from multiple chunks.
     ///
-    /// Chunks are processed sequentially, assuming no file header.
+    /// Chunks are processed sequentially and are treated as headerless data.
     ///
     /// # Arguments
     ///
@@ -195,12 +192,12 @@ impl Jbig2Document {
         })
     }
 
-    /// Returns the total number of pages in the document.
+    /// Return the total number of pages in the document.
     pub fn page_count(&self) -> usize {
         self.pages.len()
     }
 
-    /// Gets a reference to a specific page by index.
+    /// Return a reference to a page by index.
     ///
     /// # Arguments
     ///
@@ -217,13 +214,13 @@ impl Jbig2Document {
 
 /// Type alias for a single JBIG2 page (backward compatibility).
 ///
-/// For new code, prefer using [`Jbig2Document`] and accessing pages via [`Jbig2Document::get_page`].
+/// Prefer [`Jbig2Document`] and [`Jbig2Document::get_page`] in new code.
 pub type Jbig2Image = Jbig2Page;
 
 impl Jbig2Image {
-    /// Convenience method to parse a JBIG2 file and return the first page's image data.
+    /// Parse JBIG2 data and return the first page's image data.
     ///
-    /// This is a simplified API for single-page documents.
+    /// This helper assumes a single-page document.
     ///
     /// # Returns
     ///

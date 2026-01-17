@@ -2,27 +2,12 @@
 
 use jbig2_rs::bitmap::Bitmap;
 
-/// Create a simple bitmap filled with a single value.
-///
-/// # Arguments
-/// * `width` - Bitmap width
-/// * `height` - Bitmap height
-/// * `fill_value` - Value to fill (0 or 1)
-///
-/// # Returns
-/// A new Bitmap filled with the specified value.
+/// Create an empty bitmap with the given dimensions.
 pub fn simple_bitmap(width: usize, height: usize, _fill_value: u8) -> Bitmap {
     Bitmap::new(width, height)
 }
 
 /// Create a checkerboard pattern bitmap.
-///
-/// # Arguments
-/// * `width` - Bitmap width
-/// * `height` - Bitmap height
-///
-/// # Returns
-/// A Bitmap with a checkerboard pattern (alternating 0s and 1s).
 pub fn checkerboard_bitmap(width: usize, height: usize) -> Bitmap {
     let mut bitmap = Bitmap::new(width, height);
 
@@ -37,15 +22,7 @@ pub fn checkerboard_bitmap(width: usize, height: usize) -> Bitmap {
     bitmap
 }
 
-/// Create a bitmap with a border.
-///
-/// # Arguments
-/// * `width` - Bitmap width
-/// * `height` - Bitmap height
-/// * `border_width` - Width of the border in pixels
-///
-/// # Returns
-/// A Bitmap with a white border and black interior.
+/// Create a bitmap with a border of set pixels.
 pub fn bordered_bitmap(width: usize, height: usize, border_width: usize) -> Bitmap {
     let mut bitmap = Bitmap::new(width, height);
 
@@ -64,10 +41,7 @@ pub fn bordered_bitmap(width: usize, height: usize, border_width: usize) -> Bitm
     bitmap
 }
 
-/// Create a minimal valid JBIG2 file header.
-///
-/// # Returns
-/// A byte vector containing a minimal JBIG2 file header.
+/// Create a minimal JBIG2 file header byte sequence.
 pub fn valid_jbig2_header() -> Vec<u8> {
     vec![
         // File ID string
@@ -78,15 +52,7 @@ pub fn valid_jbig2_header() -> Vec<u8> {
     ]
 }
 
-/// Create a JBIG2 segment header.
-///
-/// # Arguments
-/// * `segment_number` - Segment number
-/// * `segment_type` - Segment type byte
-/// * `data_length` - Length of segment data
-///
-/// # Returns
-/// A byte vector containing the segment header.
+/// Create a basic segment header byte sequence.
 pub fn segment_header(segment_number: u32, segment_type: u8, data_length: u32) -> Vec<u8> {
     let mut header = Vec::new();
 
@@ -108,15 +74,7 @@ pub fn segment_header(segment_number: u32, segment_type: u8, data_length: u32) -
     header
 }
 
-/// Create a gradient bitmap (0 on left, 1 on right).
-///
-/// # Arguments
-/// * `width` - Bitmap width
-/// * `height` - Bitmap height
-/// * `threshold` - X coordinate where gradient switches from 0 to 1
-///
-/// # Returns
-/// A Bitmap with a vertical gradient.
+/// Create a bitmap that transitions from 0 to 1 at the given threshold.
 pub fn gradient_bitmap(width: usize, height: usize, threshold: usize) -> Bitmap {
     let mut bitmap = Bitmap::new(width, height);
 
@@ -140,7 +98,7 @@ mod tests {
         let bitmap = simple_bitmap(10, 10, 1);
         assert_eq!(bitmap.width, 10);
         assert_eq!(bitmap.height, 10);
-        // Note: simple_bitmap no longer fills, just creates
+        // simple_bitmap creates an empty bitmap.
         assert_eq!(bitmap.get_pixel(0, 0), 0);
         assert_eq!(bitmap.get_pixel(9, 9), 0);
     }
@@ -157,10 +115,10 @@ mod tests {
     #[test]
     fn test_bordered_bitmap() {
         let bitmap = bordered_bitmap(10, 10, 2);
-        // Corner should be border (1)
+        // Corners should be in the border.
         assert_eq!(bitmap.get_pixel(0, 0), 1);
         assert_eq!(bitmap.get_pixel(1, 1), 1);
-        // Center should be interior (0)
+        // Center should be interior.
         assert_eq!(bitmap.get_pixel(5, 5), 0);
     }
 
@@ -168,7 +126,7 @@ mod tests {
     fn test_valid_jbig2_header() {
         let header = valid_jbig2_header();
         assert_eq!(header.len(), 10);
-        // Check magic bytes
+        // Check the magic bytes.
         assert_eq!(
             &header[0..8],
             &[0x97, 0x4A, 0x42, 0x32, 0x0D, 0x0A, 0x1A, 0x0A]
@@ -179,15 +137,15 @@ mod tests {
     fn test_segment_header() {
         let header = segment_header(1, 0x30, 100);
         assert!(!header.is_empty());
-        // Segment type should be at correct position
+        // Segment type should be at the expected position.
         assert_eq!(header[5], 0x30);
     }
 
     #[test]
     fn test_gradient_bitmap() {
         let bitmap = gradient_bitmap(10, 5, 5);
-        assert_eq!(bitmap.get_pixel(4, 0), 0); // Left of threshold
-        assert_eq!(bitmap.get_pixel(5, 0), 1); // At threshold
-        assert_eq!(bitmap.get_pixel(9, 4), 1); // Right of threshold
+        assert_eq!(bitmap.get_pixel(4, 0), 0);
+        assert_eq!(bitmap.get_pixel(5, 0), 1);
+        assert_eq!(bitmap.get_pixel(9, 4), 1);
     }
 }

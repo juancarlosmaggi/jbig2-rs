@@ -1,7 +1,4 @@
-//! Integration tests for JBIG2 decoding functionality.
-//!
-//! This module contains comprehensive integration tests for all decoder types
-//! and end-to-end document parsing.
+//! Integration tests for decoder behavior and end-to-end parsing.
 
 mod decode_generic;
 mod decode_halftone;

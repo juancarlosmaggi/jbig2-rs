@@ -5,11 +5,13 @@ const REFINEMENT_REUSED_CONTEXTS: [u16; 2] = [
     0x0020, // '000' + '0' (coding) + '00010000' + '0' (reference)
     0x0008, // '0000' + '001000'
 ];
+/// Coding and reference templates for refinement decoding.
 #[derive(Clone)]
 pub struct RefinementTemplate {
     pub coding: Vec<(i8, i8)>,
     pub reference: Vec<(i8, i8)>,
 }
+/// Return the refinement template set for the given index.
 pub fn get_refinement_template(index: usize) -> RefinementTemplate {
     match index {
         0 => RefinementTemplate {
@@ -35,6 +37,7 @@ pub fn get_refinement_template(index: usize) -> RefinementTemplate {
         },
     }
 }
+/// Inputs required to decode a refinement region.
 #[derive(Clone)]
 pub struct RefinementParams<'a> {
     pub width: usize,
@@ -46,15 +49,16 @@ pub struct RefinementParams<'a> {
     pub prediction: bool,
     pub at: Vec<(i8, i8)>,
 }
+/// Decode a refinement bitmap using the reference bitmap and context templates.
 pub fn decode_refinement<'a>(
     params: &RefinementParams<'a>,
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    // Validate template index
+    // Validate template index.
     if params.template_index > 1 {
         return Err(Jbig2Error::new("invalid refinement template index"));
     }
-    // Validate AT parameters
+    // Validate AT parameters.
     if params.template_index == 0 && params.at.len() < 2 {
         return Err(Jbig2Error::new("template 0 requires 2 AT parameters"));
     }
@@ -97,7 +101,7 @@ pub fn decode_refinement<'a>(
             let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize)? as i32;
             ltp ^= sltp;
             if ltp != 0 {
-                // Duplicate previous row
+                // Duplicate the previous row when prediction triggers.
                 for j in 0..params.width {
                     let pixel = bitmap.get_pixel(j, i - 1);
                     bitmap.set_pixel(j, i, pixel);

@@ -2,7 +2,7 @@ use jbig2_rs::bitmap::Bitmap;
 use proptest::prelude::*;
 
 proptest! {
-    /// Property: A bitmap's dimensions should match what was requested
+    /// Bitmap dimensions should match the requested size.
     #[test]
     fn prop_bitmap_dimensions(width in 1usize..200, height in 1usize..200) {
         let bitmap = Bitmap::new(width, height);
@@ -10,7 +10,7 @@ proptest! {
         prop_assert_eq!(bitmap.height, height);
     }
 
-    /// Property: Newly created bitmaps should be all zeros
+    /// New bitmaps should start with all pixels cleared.
     #[test]
     fn prop_new_bitmap_is_zero(width in 1usize..100, height in 1usize..100) {
         let bitmap = Bitmap::new(width, height);
@@ -21,7 +21,7 @@ proptest! {
         }
     }
 
-    /// Property: set_pixel followed by get_pixel should return the same value
+    /// set_pixel followed by get_pixel should round-trip the value.
     #[test]
     fn prop_set_get_pixel_roundtrip(
         width in 10usize..50,
@@ -35,7 +35,7 @@ proptest! {
         prop_assert_eq!(bitmap.get_pixel(x, y), value);
     }
 
-    /// Property: Setting a pixel shouldn't affect other pixels
+    /// Setting one pixel should not affect others.
     #[test]
     fn prop_set_pixel_isolation(
         width in 20usize..50,
@@ -58,7 +58,7 @@ proptest! {
         }
     }
 
-    /// Property: Out-of-bounds get_pixel should return 0
+    /// Out-of-bounds get_pixel should return 0.
     #[test]
     fn prop_get_pixel_oob_returns_zero(
         width in 1usize..50,
@@ -72,7 +72,7 @@ proptest! {
         prop_assert_eq!(bitmap.get_pixel(x, y), 0);
     }
 
-    /// Property: Out-of-bounds set_pixel should not panic
+    /// Out-of-bounds set_pixel should not panic.
     #[test]
     fn prop_set_pixel_oob_no_panic(
         width in 1usize..50,
@@ -87,7 +87,7 @@ proptest! {
         bitmap.set_pixel(x, y, value); // Should not panic
     }
 
-    /// Property: OR combine is commutative (A | B == B | A)
+    /// OR combine should be commutative.
     #[test]
     fn prop_combine_or_commutative(
         width in 10usize..30,
@@ -124,7 +124,7 @@ proptest! {
         }
     }
 
-    /// Property: AND with itself should produce the same bitmap
+    /// AND with itself should preserve the bitmap.
     #[test]
     fn prop_combine_and_idempotent(
         width in 10usize..30,
@@ -154,7 +154,7 @@ proptest! {
         }
     }
 
-    /// Property: Combining with zero-bitmap using AND should produce all zeros
+    /// AND with a zero bitmap should clear all pixels.
     #[test]
     fn prop_combine_and_with_zero(
         width in 10usize..30,

@@ -12,12 +12,11 @@ mod tests {
             mmr: false,
             pattern_width: 8,
             pattern_height: 8,
-            max_pattern_index: 0, // Only one pattern (index 0)
+            max_pattern_index: 0,
             template: 0,
         };
 
         let result = decode_pattern_dictionary(&params, &mut context);
-        // With dummy data, this may fail, but should not panic
         let _ = result;
     }
 
@@ -31,7 +30,7 @@ mod tests {
             pattern_width: 8,
             pattern_height: 8,
             max_pattern_index: 1,
-            template: 99, // Invalid template
+            template: 99,
         };
 
         let result = decode_pattern_dictionary(&params, &mut context);
@@ -44,7 +43,7 @@ mod tests {
         let mut context = DecodingContext::new(data.clone(), 0, data.len());
 
         let params = PatternDictionaryParams {
-            mmr: true, // Test MMR mode
+            mmr: true,
             pattern_width: 8,
             pattern_height: 8,
             max_pattern_index: 3,
@@ -52,7 +51,6 @@ mod tests {
         };
 
         let result = decode_pattern_dictionary(&params, &mut context);
-        // Should handle MMR mode without crashing
         let _ = result;
     }
 
@@ -73,7 +71,6 @@ mod tests {
             };
 
             let result = decode_pattern_dictionary(&params, &mut context);
-            // Should handle different templates without crashing
             let _ = result;
         }
     }
@@ -87,12 +84,11 @@ mod tests {
             mmr: false,
             pattern_width: 8,
             pattern_height: 8,
-            max_pattern_index: 7, // 8 patterns total
+            max_pattern_index: 7,
             template: 0,
         };
 
         let result = decode_pattern_dictionary(&params, &mut context);
-        // Should handle multiple patterns without crashing
         let _ = result;
     }
 
@@ -110,7 +106,6 @@ mod tests {
         };
 
         let result = decode_pattern_dictionary(&params, &mut context);
-        // Should handle large patterns without crashing
         let _ = result;
     }
 
@@ -131,7 +126,6 @@ mod tests {
             };
 
             let result = decode_pattern_dictionary(&params, &mut context);
-            // Should handle different sizes without crashing
             let _ = result;
         }
     }
@@ -153,7 +147,6 @@ mod tests {
             };
 
             let result = decode_pattern_dictionary(&params, &mut context);
-            // Should handle different max indices without crashing
             let _ = result;
         }
     }

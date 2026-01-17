@@ -4,21 +4,13 @@ use jbig2_rs::bitmap::Bitmap;
 use jbig2_rs::reader::Reader;
 use std::fs;
 
-/// Load a test file from the resources directory.
-///
-/// # Arguments
-/// * `filename` - Name of the file in `tests/resources/`
-///
-/// # Panics
-/// Panics if the file cannot be read.
+/// Load a test fixture from `tests/resources`.
 pub fn load_test_file(filename: &str) -> Vec<u8> {
     let path = format!("tests/resources/{}", filename);
     fs::read(&path).unwrap_or_else(|_| panic!("Failed to read test file: {}", path))
 }
 
-/// Assert that two bitmaps are exactly equal.
-///
-/// Checks dimensions and all pixel values.
+/// Assert that two bitmaps are identical in size and pixels.
 #[allow(dead_code)]
 pub fn assert_bitmap_equals(actual: &Bitmap, expected: &Bitmap) {
     assert_eq!(actual.width, expected.width, "Bitmap widths differ");
@@ -37,13 +29,7 @@ pub fn assert_bitmap_equals(actual: &Bitmap, expected: &Bitmap) {
     }
 }
 
-/// Assert that all pixels in a given range have the expected value.
-///
-/// # Arguments
-/// * `bitmap` - The bitmap to check
-/// * `x_range` - Range of x coordinates (inclusive)
-/// * `y_range` - Range of y coordinates (inclusive)
-/// * `expected_value` - Expected pixel value (0 or 1)
+/// Assert that all pixels in the given ranges match the expected value.
 pub fn assert_pixel_range(
     bitmap: &Bitmap,
     x_range: (usize, usize),
@@ -65,23 +51,13 @@ pub fn assert_pixel_range(
     }
 }
 
-/// Create a Reader from test data.
-///
-/// # Arguments
-/// * `data` - The byte data for the reader
-///
-/// # Returns
-/// A Reader positioned at the start of the data.
+/// Create a Reader over the full test buffer.
 pub fn create_test_reader(data: Vec<u8>) -> Reader {
     let len = data.len();
     Reader::new(data, 0, len)
 }
 
 /// Print a hex dump of data for debugging.
-///
-/// # Arguments
-/// * `data` - The data to dump
-/// * `max_bytes` - Maximum number of bytes to display
 pub fn hex_dump(data: &[u8], max_bytes: usize) {
     let bytes_to_show = data.len().min(max_bytes);
     print!("Hex dump ({} bytes): ", bytes_to_show);
@@ -108,13 +84,11 @@ mod tests {
     fn test_create_test_reader() {
         let data = vec![1, 2, 3, 4, 5];
         let _reader = create_test_reader(data);
-        // Reader should be created successfully
     }
 
     #[test]
     fn test_assert_pixel_range() {
         let bitmap = Bitmap::new(10, 10);
-        // Should not panic - all pixels are 0
         assert_pixel_range(&bitmap, (0, 9), (0, 9), 0);
     }
 

@@ -1,8 +1,7 @@
-// MMR (CCITT Group 4 Fax) run-length code lookup tables
-// Derived from jbig2dec's jbig2_mmr.c decode tables
-// Generated automatically; do not edit manually
+// MMR run-length code lookup tables.
+// Generated automatically; do not edit manually.
 
-/// White run length terminating codes (0-63 pixels)
+/// White run-length terminating codes (0-63 pixels).
 pub fn get_white_run(code: u32, length: usize) -> i32 {
     match (code, length) {
         (0b00110101, 8) => 0,
@@ -73,7 +72,7 @@ pub fn get_white_run(code: u32, length: usize) -> i32 {
     }
 }
 
-/// Black run length terminating codes (0-63 pixels)
+/// Black run-length terminating codes (0-63 pixels).
 pub fn get_black_run(code: u32, length: usize) -> i32 {
     match (code, length) {
         (0b0000110111, 10) => 0,
@@ -144,7 +143,7 @@ pub fn get_black_run(code: u32, length: usize) -> i32 {
     }
 }
 
-/// White make-up codes (multiples of 64 from 64 to 2560)
+/// White make-up codes (multiples of 64 from 64 to 2560).
 pub fn get_white_makeup(code: u32, length: usize) -> i32 {
     match (code, length) {
         (0b11011, 5) => 64,
@@ -191,7 +190,7 @@ pub fn get_white_makeup(code: u32, length: usize) -> i32 {
     }
 }
 
-/// Black make-up codes (multiples of 64 from 64 to 2560)
+/// Black make-up codes (multiples of 64 from 64 to 2560).
 pub fn get_black_makeup(code: u32, length: usize) -> i32 {
     match (code, length) {
         (0b0000001111, 10) => 64,
@@ -237,4 +236,3 @@ pub fn get_black_makeup(code: u32, length: usize) -> i32 {
         _ => -1,
     }
 }
-

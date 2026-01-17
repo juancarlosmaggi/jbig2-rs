@@ -3,6 +3,7 @@ use crate::contexts::DecodingContext;
 use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
 
+/// Inputs required to decode a pattern dictionary.
 #[derive(Clone)]
 pub struct PatternDictionaryParams {
     pub mmr: bool,
@@ -12,6 +13,7 @@ pub struct PatternDictionaryParams {
     pub template: usize,
 }
 
+/// Decode a pattern dictionary into individual pattern bitmaps.
 pub fn decode_pattern_dictionary(
     params: &PatternDictionaryParams,
     decoding_context: &mut DecodingContext,
@@ -38,7 +40,7 @@ pub fn decode_pattern_dictionary(
     };
     let collective_bitmap = decode_bitmap(&decode_params, decoding_context)?;
 
-    // Divide collective bitmap into individual patterns
+    // Split the collective bitmap into individual pattern tiles.
     let mut patterns = Vec::new();
     for i in 0..=params.max_pattern_index {
         let x_start = i * params.pattern_width;
@@ -47,7 +49,7 @@ pub fn decode_pattern_dictionary(
         for y in 0..params.pattern_height {
             let collective_byte_offset = y * collective_bitmap.stride + (x_start >> 3);
 
-            // Extract bytes for this row of the pattern, handling bit alignment
+            // Extract row pixels with bit alignment.
             for px in 0..params.pattern_width {
                 let collective_x = x_start + px;
                 let collective_byte_idx = collective_x >> 3;

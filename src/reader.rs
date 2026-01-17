@@ -1,3 +1,4 @@
+/// Bit/byte reader with a movable window over a data buffer.
 #[derive(Clone)]
 pub struct Reader {
     data: Vec<u8>,
@@ -8,6 +9,7 @@ pub struct Reader {
 }
 
 impl Reader {
+    /// Create a reader over `data[start..end]`.
     pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
         Reader {
             data,
@@ -18,6 +20,7 @@ impl Reader {
         }
     }
 
+    /// Read the next bit, advancing the internal position.
     pub fn read_bit(&mut self) -> Result<u8, crate::error::Jbig2Error> {
         if self.shift < 0 {
             if self.position >= self.end {
@@ -34,6 +37,7 @@ impl Reader {
         Ok(bit)
     }
 
+    /// Read a multi-bit value MSB-first from the stream.
     pub fn read_bits(&mut self, num_bits: u32) -> Result<u32, crate::error::Jbig2Error> {
         let mut result = 0;
         for i in (0..num_bits).rev() {
@@ -42,42 +46,52 @@ impl Reader {
         Ok(result)
     }
 
+    /// Align the reader to the next byte boundary.
     pub fn byte_align(&mut self) {
         self.shift = -1;
     }
 
+    /// Return the underlying buffer.
     pub fn get_data(&self) -> &[u8] {
         &self.data
     }
 
+    /// Return the current byte position.
     pub fn get_position(&self) -> usize {
         self.position
     }
 
+    /// Set the current byte position.
     pub fn set_position(&mut self, pos: usize) {
         self.position = pos;
     }
 
+    /// Set the current bit shift within the buffered byte.
     pub fn set_shift(&mut self, shift: i32) {
         self.shift = shift;
     }
 
+    /// Return the current bit shift within the buffered byte.
     pub fn get_shift(&self) -> i32 {
         self.shift
     }
 
+    /// Return the last buffered byte.
     pub fn get_current_byte(&self) -> u8 {
         self.current_byte
     }
 
+    /// Set the buffered byte without advancing the position.
     pub fn set_current_byte(&mut self, byte: u8) {
         self.current_byte = byte;
     }
 
+    /// Return the byte limit for this reader.
     pub fn get_end(&self) -> usize {
         self.end
     }
 
+    /// Read the next byte and advance the position.
     pub fn read_byte(&mut self) -> Option<u8> {
         if self.position >= self.end {
             return None;
@@ -87,10 +101,12 @@ impl Reader {
         Some(b)
     }
 
+    /// Advance the position by `amount` bytes.
     pub fn skip(&mut self, amount: usize) {
         self.position += amount;
     }
 
+    /// Limit reads to `limit` bytes from the current position.
     pub fn set_limit(&mut self, limit: usize) {
         self.end = self.position + limit;
         if self.end > self.data.len() {
@@ -119,12 +135,12 @@ mod tests {
         assert_eq!(reader.read_byte(), Some(0xAB));
         assert_eq!(reader.read_byte(), Some(0xCD));
         assert_eq!(reader.read_byte(), Some(0xEF));
-        assert_eq!(reader.read_byte(), None); // EOF
+        assert_eq!(reader.read_byte(), None);
     }
 
     #[test]
     fn test_read_bit() {
-        let data = vec![0b10110100]; // Binary: 10110100
+        let data = vec![0b10110100];
         let mut reader = Reader::new(data, 0, 1);
 
         assert_eq!(reader.read_bit().unwrap(), 1);
@@ -136,13 +152,12 @@ mod tests {
         assert_eq!(reader.read_bit().unwrap(), 0);
         assert_eq!(reader.read_bit().unwrap(), 0);
 
-        // Should error on 9th bit
         assert!(reader.read_bit().is_err());
     }
 
     #[test]
     fn test_read_bits_multiple() {
-        let data = vec![0xFF, 0x00]; // 11111111 00000000
+        let data = vec![0xFF, 0x00];
         let mut reader = Reader::new(data, 0, 2);
 
         assert_eq!(reader.read_bits(4).unwrap(), 0b1111);
@@ -155,15 +170,12 @@ mod tests {
         let data = vec![0b10110100, 0b11001100];
         let mut reader = Reader::new(data, 0, 2);
 
-        // Read 3 bits
         assert_eq!(reader.read_bit().unwrap(), 1);
         assert_eq!(reader.read_bit().unwrap(), 0);
         assert_eq!(reader.read_bit().unwrap(), 1);
 
-        // Byte align (should skip remaining 5 bits of first byte)
         reader.byte_align();
 
-        // Next read should start from second byte
         assert_eq!(reader.read_bit().unwrap(), 1);
         assert_eq!(reader.read_bit().unwrap(), 1);
     }
@@ -203,7 +215,7 @@ mod tests {
 
         assert_eq!(reader.read_byte(), Some(0x01));
         assert_eq!(reader.read_byte(), Some(0x02));
-        assert_eq!(reader.read_byte(), None); // Limited to 2 bytes
+        assert_eq!(reader.read_byte(), None);
     }
 
     #[test]
@@ -211,7 +223,6 @@ mod tests {
         let data = vec![0xFF];
         let mut reader = Reader::new(data, 0, 1);
 
-        // Try to read more bits than available
         let result = reader.read_bits(16);
         assert!(result.is_err());
     }

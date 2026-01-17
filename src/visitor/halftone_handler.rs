@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use super::region_handlers::draw_bitmap;
 
-/// Handle immediate halftone region
+/// Decode an immediate halftone region and draw it on the page.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_immediate_halftone_region(
     current_page_info: &mut Option<PageInfo>,
@@ -35,9 +35,7 @@ pub(super) fn on_immediate_halftone_region(
     if region_info.width == 0 || region_info.height == 0 {
         return Ok(());
     }
-    // Prevent integer overflow when calculating bitmap buffer size
-    // stride = ((width - 1) / 8) + 1 bytes per row
-    // total_size = stride * height must not exceed INT32_MAX
+    // Prevent integer overflow when computing the bitmap buffer size.
     let stride = ((region_info.width - 1) / 8) + 1;
     if region_info.height > (i32::MAX as u32) / stride {
         return Err(Jbig2Error::new("bitmap size causes integer overflow"));
@@ -63,15 +61,15 @@ pub(super) fn on_immediate_halftone_region(
         ));
     }
 
-    // Get patterns from referred segment
+    // Resolve the pattern dictionary referenced by this segment.
     if referred_to.is_empty() {
-        return Ok(()); // Skip if no referred
+        return Ok(());
     }
     let pattern_segment = referred_to[0];
     let patterns_vec = if let Some(p) = patterns.get(&pattern_segment) {
         p.clone()
     } else {
-        return Ok(()); // Skip if not found
+        return Ok(());
     };
     if trace_halftone {
         let (pat_w, pat_h) = patterns_vec
@@ -129,7 +127,7 @@ pub(super) fn on_immediate_halftone_region(
     Ok(())
 }
 
-/// Handle intermediate halftone region
+/// Decode an intermediate halftone region and store it by segment number.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_intermediate_halftone_region(
     patterns: &HashMap<u32, Vec<Bitmap>>,
@@ -152,7 +150,7 @@ pub(super) fn on_intermediate_halftone_region(
     end: usize,
     segment_number: u32,
 ) -> Result<(), Jbig2Error> {
-    // Get patterns from referred segment
+    // Resolve the pattern dictionary referenced by this segment.
     if referred_to.is_empty() {
         return Ok(());
     }

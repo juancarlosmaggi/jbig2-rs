@@ -2,8 +2,8 @@ use crate::arithmetic::ArithmeticDecoder;
 use crate::contexts::ContextCache;
 use crate::contexts::DecodingContext;
 use crate::error::Jbig2Error;
-// Annex A. Arithmetic Integer Decoding Procedure
-// A.2 Procedure for decoding values
+
+/// Decode a signed integer using arithmetic decoding contexts.
 pub fn decode_integer(
     context_cache: &mut ContextCache,
     procedure: &str,
@@ -73,7 +73,8 @@ pub fn decode_integer(
     };
     Ok(Some(signed_value))
 }
-// A.3 The IAID decoding procedure
+
+/// Decode an IAID value using arithmetic coding contexts.
 pub fn decode_iaid(
     context_cache: &mut ContextCache,
     decoder: &mut ArithmeticDecoder,
@@ -91,24 +92,30 @@ pub fn decode_iaid(
         Ok((prev & 0x7fffffff) as u32)
     }
 }
+
+/// Decode a signed integer from a shared decoding context.
 pub fn decode_integer_context(
     decoding_context: &mut DecodingContext,
     procedure: &str,
 ) -> Result<Option<i32>, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
-    // Use get_decoder() which auto-initializes if None
+    // Initialize the decoder lazily to preserve state across calls.
     let mut decoder = decoding_context.get_decoder();
     decode_integer(&mut context_cache, procedure, &mut decoder)
 }
+
+/// Decode an IAID value from a shared decoding context.
 pub fn decode_iaid_context(
     decoding_context: &mut DecodingContext,
     code_length: usize,
 ) -> Result<u32, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
-    // Use get_decoder() which auto-initializes if None
+    // Initialize the decoder lazily to preserve state across calls.
     let mut decoder = decoding_context.get_decoder();
     decode_iaid(&mut context_cache, &mut decoder, code_length)
 }
+
+/// Decode a signed integer using either Huffman or arithmetic coding.
 pub fn decode_i32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
@@ -124,6 +131,8 @@ where
         decode_integer_context(decoding_context, arith_proc).map(|opt| opt.unwrap_or(0))
     }
 }
+
+/// Decode an optional signed integer using either Huffman or arithmetic coding.
 pub fn decode_option_i32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
@@ -139,6 +148,8 @@ where
         decode_integer_context(decoding_context, arith_proc)
     }
 }
+
+/// Decode an unsigned integer using either Huffman or arithmetic coding.
 pub fn decode_u32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,

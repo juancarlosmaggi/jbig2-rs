@@ -4,9 +4,10 @@ use crate::huffman::HuffmanTable;
 use crate::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams};
 use std::collections::HashMap;
 
-// Re-export Jbig2Page from page_handler
+// Re-export Jbig2Page from page_handler.
 pub use super::page_handler::Jbig2Page;
 
+/// Visitor that accumulates decoded segments into pages.
 #[derive(Default)]
 pub struct SimpleSegmentVisitor {
     pub pages: Vec<Jbig2Page>,
@@ -20,10 +21,12 @@ pub struct SimpleSegmentVisitor {
 }
 
 impl SimpleSegmentVisitor {
+    /// Create a visitor with empty state.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Apply page information to the current decode state.
     pub fn on_page_information(&mut self, info: PageInfo) {
         super::page_handler::on_page_information(
             &mut self.current_page_info,
@@ -34,10 +37,12 @@ impl SimpleSegmentVisitor {
         );
     }
 
+    /// Advance the current stripe offset.
     pub fn on_end_of_stripe(&mut self, height: usize) {
         super::page_handler::on_end_of_stripe(&mut self.current_y, height);
     }
 
+    /// Composite a bitmap onto the current page.
     pub fn draw_bitmap(
         &mut self,
         region_info: &RegionInfo,
@@ -52,6 +57,7 @@ impl SimpleSegmentVisitor {
         )
     }
 
+    /// Decode and draw an immediate generic region.
     pub fn on_immediate_generic_region(
         &mut self,
         region: &GenericRegion,
@@ -70,6 +76,7 @@ impl SimpleSegmentVisitor {
         )
     }
 
+    /// Decode and draw an immediate generic refinement region.
     pub fn on_immediate_generic_refinement_region(
         &mut self,
         region_info: &RegionInfo,
@@ -91,6 +98,7 @@ impl SimpleSegmentVisitor {
         )
     }
 
+    /// Decode and store a symbol dictionary segment.
     pub fn on_symbol_dictionary(
         &mut self,
         params: &SymbolDictionaryParams,
@@ -99,6 +107,7 @@ impl SimpleSegmentVisitor {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Decode and draw an immediate text region.
     pub fn on_immediate_text_region(
         &mut self,
         region_info: &RegionInfo,
@@ -126,6 +135,7 @@ impl SimpleSegmentVisitor {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Decode and store a pattern dictionary segment.
     pub fn on_pattern_dictionary(
         &mut self,
         mmr: bool,
@@ -153,6 +163,7 @@ impl SimpleSegmentVisitor {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Decode and draw an immediate halftone region.
     pub fn on_immediate_halftone_region(
         &mut self,
         region_info: &RegionInfo,
@@ -206,6 +217,7 @@ impl SimpleSegmentVisitor {
         super::tables_handler::on_tables(&mut self.custom_tables, segment_number, data, start, end)
     }
 
+    /// Decode and store an intermediate generic region.
     pub fn on_intermediate_generic_region(
         &mut self,
         region: &GenericRegion,
@@ -229,6 +241,7 @@ impl SimpleSegmentVisitor {
         )
     }
 
+    /// Decode and store an intermediate generic refinement region.
     pub fn on_intermediate_generic_refinement_region(
         &mut self,
         region_info: &RegionInfo,
@@ -250,6 +263,7 @@ impl SimpleSegmentVisitor {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Decode an intermediate text region (no page compositing).
     pub fn on_intermediate_text_region(
         &mut self,
         region_info: &RegionInfo,
@@ -278,6 +292,7 @@ impl SimpleSegmentVisitor {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Decode and store an intermediate halftone region.
     pub fn on_intermediate_halftone_region(
         &mut self,
         region_info: &RegionInfo,
@@ -321,7 +336,7 @@ impl SimpleSegmentVisitor {
         )
     }
 
-    // Finalize the current page and add it to the pages vector
+    /// Finalize the current page and store it in the page list.
     pub fn finalize_current_page(&mut self) {
         super::page_handler::finalize_current_page(
             &mut self.current_page_info,

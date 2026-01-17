@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 pub(super) const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
 
-/// Draw a decoded bitmap onto the current page
+/// Composite a decoded region bitmap onto the current page bitmap.
 pub(super) fn draw_bitmap(
     current_page_info: &Option<PageInfo>,
     current_bitmap: &mut Option<Bitmap>,
@@ -30,20 +30,19 @@ pub(super) fn draw_bitmap(
         .as_mut()
         .ok_or(Jbig2Error::new("no current bitmap"))?;
 
-    // Region coordinates are validated by checking bounds below
     let reg_x = region_info.x as usize;
     let reg_y = region_info.y as usize + current_y;
 
-    // Check if region is completely outside page bounds
+    // Skip if the region lies entirely outside the page.
     if reg_x >= page_width || reg_y >= page_height {
-        return Ok(()); // Nothing to draw
+        return Ok(());
     }
 
     dst.combine(src_bitmap, reg_x as isize, reg_y as isize, combo_op);
     Ok(())
 }
 
-/// Handle immediate generic region
+/// Decode an immediate generic region and draw it on the page.
 pub(super) fn on_immediate_generic_region(
     current_page_info: &mut Option<PageInfo>,
     current_bitmap: &mut Option<Bitmap>,
@@ -57,9 +56,7 @@ pub(super) fn on_immediate_generic_region(
     if region_info.width == 0 || region_info.height == 0 {
         return Ok(());
     }
-    // Prevent integer overflow when calculating bitmap buffer size
-    // stride = ((width - 1) / 8) + 1 bytes per row
-    // total_size = stride * height must not exceed INT32_MAX
+    // Prevent integer overflow when computing the bitmap buffer size.
     let stride = ((region_info.width - 1) / 8) + 1;
     if region_info.height > (i32::MAX as u32) / stride {
         return Err(Jbig2Error::new("bitmap size causes integer overflow"));
@@ -85,7 +82,7 @@ pub(super) fn on_immediate_generic_region(
     let at_bytes = region.at.len() * 2;
     let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
     if decoding_start > end {
-        return Ok(()); // Allow short data for minimal test
+        return Ok(());
     }
 
     let slice = &data[decoding_start..end];
@@ -112,7 +109,7 @@ pub(super) fn on_immediate_generic_region(
     Ok(())
 }
 
-/// Handle immediate generic refinement region
+/// Decode an immediate generic refinement region and draw it on the page.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_immediate_generic_refinement_region(
     current_page_info: &mut Option<PageInfo>,
@@ -143,7 +140,7 @@ pub(super) fn on_immediate_generic_refinement_region(
         *current_bitmap = Some(bitmap_utils::create_initialized_bitmap(width, height, 0));
     }
 
-    // Parse refinement region parameters
+    // Parse refinement flags and optional AT offsets.
     let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
     let generic_region_segment_flags = data[pos];
     pos += 1;
@@ -152,22 +149,22 @@ pub(super) fn on_immediate_generic_refinement_region(
     let at = if at_length > 0 {
         parse_at_parameters(data, pos, at_length)?
     } else {
-        Vec::new() // Default to empty if insufficient data
+        Vec::new()
     };
     pos += at_length * 2;
     if pos > end {
-        return Ok(()); // Allow short data
+        return Ok(());
     }
 
-    // Get reference bitmap from referred segment
+    // Resolve the reference bitmap from the first referred segment.
     if referred_to.is_empty() {
-        return Ok(()); // Skip if no referred
+        return Ok(());
     }
     let ref_segment = referred_to[0];
     let reference_bitmap = if let Some(bm) = bitmaps.get(&ref_segment) {
         bm
     } else {
-        return Ok(()); // Skip if not found
+        return Ok(());
     };
 
     let slice = &data[pos..end];
@@ -179,7 +176,7 @@ pub(super) fn on_immediate_generic_refinement_region(
             height: region_info.height as usize,
             template_index: template,
             reference_bitmap,
-            offset_x: 0, // Default offset
+            offset_x: 0,
             offset_y: 0,
             prediction: false,
             at,
@@ -197,7 +194,7 @@ pub(super) fn on_immediate_generic_refinement_region(
     Ok(())
 }
 
-/// Handle intermediate generic region
+/// Decode an intermediate generic region and store it by segment number.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_intermediate_generic_region(
     symbols: &HashMap<u32, Vec<Bitmap>>,
@@ -211,7 +208,7 @@ pub(super) fn on_intermediate_generic_region(
     end: usize,
     segment_number: u32,
 ) -> Result<(), Jbig2Error> {
-    // Basic validation: check that referred segments exist
+    // Validate that referenced segments are already available.
     for &seg_id in referred_to {
         if !symbols.contains_key(&seg_id)
             && !patterns.contains_key(&seg_id)
@@ -227,7 +224,7 @@ pub(super) fn on_intermediate_generic_region(
     let at_bytes = region.at.len() * 2;
     let decoding_start = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1 + at_bytes;
     if decoding_start > end {
-        return Ok(()); // Allow short data
+        return Ok(());
     }
 
     let slice = &data[decoding_start..end];
@@ -249,7 +246,7 @@ pub(super) fn on_intermediate_generic_region(
     Ok(())
 }
 
-/// Handle intermediate generic refinement region
+/// Decode an intermediate generic refinement region and store it by segment number.
 pub(super) fn on_intermediate_generic_refinement_region(
     bitmaps: &mut HashMap<u32, Bitmap>,
     region_info: &RegionInfo,
@@ -259,7 +256,7 @@ pub(super) fn on_intermediate_generic_refinement_region(
     end: usize,
     segment_number: u32,
 ) -> Result<(), Jbig2Error> {
-    // Parse refinement region parameters
+    // Parse refinement flags and optional AT offsets.
     let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
     let generic_region_segment_flags = data[pos];
     pos += 1;
@@ -275,7 +272,7 @@ pub(super) fn on_intermediate_generic_refinement_region(
         return Ok(());
     }
 
-    // Get reference bitmap from referred segment
+    // Resolve the reference bitmap from the first referred segment.
     if referred_to.is_empty() {
         return Ok(());
     }
@@ -295,7 +292,7 @@ pub(super) fn on_intermediate_generic_refinement_region(
             height: region_info.height as usize,
             template_index: template,
             reference_bitmap,
-            offset_x: 0, // Default offset
+            offset_x: 0,
             offset_y: 0,
             prediction: false,
             at,

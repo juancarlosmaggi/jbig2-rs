@@ -1,9 +1,9 @@
-//! Bitmap Module
+//! Bitmap storage and operations for 1-bit images.
 //!
-//! This module provides the [`Bitmap`] struct for storing and manipulating 1-bit monochrome images.
-//! It handles memory management, pixel access, and coordinate bounds checking.
+//! The [`Bitmap`] type owns packed pixel data and provides safe accessors,
+//! bounds checks, and composition helpers used by region decoding.
 
-/// Represents a 2D bitmap image with 1 bit per pixel.
+/// Packed 1bpp bitmap with row-aligned storage.
 ///
 /// The bitmap data is stored as a packed byte vector, with 8 pixels per byte.
 /// The stride (bytes per row) is automatically calculated based on the width.
@@ -23,23 +23,15 @@ pub struct Bitmap {
 }
 
 impl Bitmap {
-    /// Creates a new bitmap with the specified dimensions.
-    ///
-    /// Initializes all pixels to 0 (white/background).
+    /// Create a new bitmap initialized to all zeros.
     ///
     /// # Arguments
     ///
     /// * `width` - Width in pixels
     /// * `height` - Height in pixels
     ///
-    /// # Panics
-    ///
-    /// Panics if dimensions are unreasonably large (> 200,000,000) or if memory allocation fails.
     pub fn new(width: usize, height: usize) -> Self {
-        // Sanity check dimensions before any arithmetic
-// removed unreasonable check to match reference decoders
-
-        // Use checked arithmetic to prevent overflow
+        // Use checked arithmetic to avoid overflow in stride and buffer sizing.
         let stride = width
             .checked_add(7)
             .expect("width too large for stride calculation")
@@ -57,7 +49,7 @@ impl Bitmap {
         }
     }
 
-    /// Gets the pixel value at the specified coordinates.
+    /// Return the pixel value at `(x, y)`, or 0 for out-of-bounds reads.
     ///
     /// # Arguments
     ///
@@ -80,9 +72,7 @@ impl Bitmap {
         (self.data[byte_index] >> bit_index) & 1
     }
 
-    /// Sets the pixel value at the specified coordinates.
-    ///
-    /// Silently ignores out-of-bounds coordinates.
+    /// Set the pixel at `(x, y)`; out-of-bounds writes are ignored.
     ///
     /// # Arguments
     ///
@@ -105,6 +95,7 @@ impl Bitmap {
         }
     }
 
+    /// Count the number of set pixels across the entire bitmap.
     pub fn count_black_pixels(&self) -> u32 {
         if self.width == 0 || self.height == 0 {
             return 0;
@@ -130,6 +121,7 @@ impl Bitmap {
         total
     }
 
+    /// Return `(min, max, full_rows)` black pixel counts per row.
     pub fn row_black_stats(&self) -> (u32, u32, u32) {
         if self.width == 0 || self.height == 0 {
             return (0, 0, 0);
@@ -170,9 +162,9 @@ impl Bitmap {
         (min_row, max_row, full_rows)
     }
 
-    /// Combines another bitmap into this one at the specified coordinates using the given operator.
+    /// Combine another bitmap at `(x, y)` using the operator code.
     ///
-    /// This method is optimized to use byte-level operations where possible.
+    /// This uses a byte-oriented loop for aligned runs.
     ///
     /// # Arguments
     ///
@@ -185,7 +177,7 @@ impl Bitmap {
             self.combine_naive(other, x, y, operator);
             return;
         }
-        // Clip to bounds
+        // Clip to destination bounds before iterating.
         let start_y = y.max(0) as usize;
         let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
 
@@ -200,12 +192,12 @@ impl Bitmap {
             return;
         }
 
-        // Calculate source offsets
+        // Track corresponding source offsets for each clipped row.
         let src_start_y = (start_y as isize - y) as usize;
         let src_start_x = (start_x as isize - x) as usize;
         let _width = end_x - start_x;
 
-        // Optimization: Process byte-by-byte
+        // Process the row in chunks to minimize per-pixel work.
         for i in 0..(end_y - start_y) {
             let dst_y = start_y + i;
             let src_y = src_start_y + i;
@@ -222,7 +214,7 @@ impl Bitmap {
                 let bits_left_in_byte = 8 - (current_x & 7);
                 let bits_to_process = bits_left_in_byte.min(end_x - current_x);
 
-                // Construct source byte aligned to dest
+                // Align the source bits to the destination byte boundary.
                 let src_byte_idx = src_row_start + (current_src_x >> 3);
                 let src_byte = other.data[src_byte_idx];
                 let next_byte = if src_byte_idx + 1 < src_row_end {
@@ -238,9 +230,7 @@ impl Bitmap {
                     src_aligned >>= dst_bit_offset;
                 }
 
-                // Create mask for the bits we are processing
-                // e.g. bits_to_process=3, dst_bit_offset=0 -> 11100000
-                // e.g. bits_to_process=3, dst_bit_offset=2 -> 00111000
+                // Mask off only the destination bits covered by this chunk.
                 let mask_high = 0xFFu8 >> (current_x & 7);
                 let shift_low = (current_x & 7) + bits_to_process;
                 let mask_low = if shift_low >= 8 {
@@ -258,12 +248,12 @@ impl Bitmap {
                     1 => new_byte = (dst_byte & src_aligned & mask) | (dst_byte & !mask), // AND within mask, preserve outside
                     2 => new_byte ^= src_aligned & mask, // XOR
                     3 => {
-                        // XNOR
+                        // XNOR.
                         let xor = dst_byte ^ src_aligned;
                         new_byte = (new_byte & !mask) | (!xor & mask);
                     }
                     4 => {
-                        // REPLACE
+                        // REPLACE.
                         new_byte = (new_byte & !mask) | (src_aligned & mask);
                     }
                     _ => {}
@@ -277,6 +267,7 @@ impl Bitmap {
         }
     }
 
+    /// Combine bit-by-bit, used for debugging or validation.
     fn combine_naive(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
         let start_y = y.max(0) as usize;
         let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
@@ -319,13 +310,13 @@ mod tests {
         let bitmap = Bitmap::new(10, 10);
         assert_eq!(bitmap.width, 10);
         assert_eq!(bitmap.height, 10);
-        assert_eq!(bitmap.stride, 2); // (10 + 7) / 8 = 2
+        assert_eq!(bitmap.stride, 2);
     }
 
     #[test]
     fn test_bitmap_get_pixel_default() {
         let bitmap = Bitmap::new(8, 8);
-        // All pixels should be 0 by default
+        // The buffer initializes to all zeros.
         for y in 0..8 {
             for x in 0..8 {
                 assert_eq!(bitmap.get_pixel(x, y), 0);
@@ -346,7 +337,7 @@ mod tests {
         bitmap.set_pixel(3, 3, 1);
         assert_eq!(bitmap.get_pixel(3, 3), 1);
 
-        // Clear a pixel
+        // Clearing a pixel should flip it back to zero.
         bitmap.set_pixel(3, 3, 0);
         assert_eq!(bitmap.get_pixel(3, 3), 0);
     }
@@ -355,30 +346,30 @@ mod tests {
     fn test_bitmap_out_of_bounds() {
         let mut bitmap = Bitmap::new(5, 5);
 
-        // Out of bounds get should return 0
+        // Out-of-range reads return zero.
         assert_eq!(bitmap.get_pixel(10, 10), 0);
         assert_eq!(bitmap.get_pixel(5, 5), 0);
 
-        // Out of bounds set should not panic
+        // Out-of-range writes are ignored.
         bitmap.set_pixel(10, 10, 1);
         bitmap.set_pixel(5, 5, 1);
     }
 
     #[test]
     fn test_bitmap_stride_calculation() {
-        // Width 1: (1 + 7) / 8 = 1 byte
+        // Width 1 maps to a single byte row.
         let bm1 = Bitmap::new(1, 1);
         assert_eq!(bm1.stride, 1);
 
-        // Width 8: (8 + 7) / 8 = 1 byte
+        // Width 8 still fits in one byte.
         let bm8 = Bitmap::new(8, 1);
         assert_eq!(bm8.stride, 1);
 
-        // Width 9: (9 + 7) / 8 = 2 bytes
+        // Width 9 rounds up to two bytes.
         let bm9 = Bitmap::new(9, 1);
         assert_eq!(bm9.stride, 2);
 
-        // Width 16: (16 + 7) / 8 = 2 bytes
+        // Width 16 stays at two bytes.
         let bm16 = Bitmap::new(16, 1);
         assert_eq!(bm16.stride, 2);
     }
@@ -388,18 +379,18 @@ mod tests {
         let mut bm1 = Bitmap::new(8, 8);
         let mut bm2 = Bitmap::new(4, 4);
 
-        // Set some pixels in bm1
+        // Seed bm1 with a couple of set pixels.
         bm1.set_pixel(0, 0, 1);
         bm1.set_pixel(1, 1, 1);
 
-        // Set some pixels in bm2
+        // Seed bm2 with a different pattern.
         bm2.set_pixel(0, 0, 1);
         bm2.set_pixel(2, 2, 1);
 
-        // Combine with OR
+        // OR should merge both patterns.
         bm1.combine(&bm2, 0, 0, 0); // operator 0 = OR
 
-        // Check that both sets of pixels are now set
+        // Both source and destination pixels should remain set.
         assert_eq!(bm1.get_pixel(0, 0), 1);
         assert_eq!(bm1.get_pixel(1, 1), 1);
         assert_eq!(bm1.get_pixel(2, 2), 1);
@@ -435,24 +426,24 @@ mod tests {
         let mut bm1 = Bitmap::new(8, 8);
         let mut bm2 = Bitmap::new(8, 8);
 
-        // Fill bm1 completely with 1s
+        // Fill bm1 with ones to exercise AND behavior.
         for y in 0..8 {
             for x in 0..8 {
                 bm1.set_pixel(x, y, 1);
             }
         }
 
-        // Fill bm2 completely with 1s
+        // Fill bm2 with ones as well.
         for y in 0..8 {
             for x in 0..8 {
                 bm2.set_pixel(x, y, 1);
             }
         }
 
-        // Combine with AND: 1 AND 1 = 1, should stay all 1s
+        // AND with all-ones should keep all pixels set.
         bm1.combine(&bm2, 0, 0, 1); // operator 1 = AND
 
-        // All pixels should still be 1
+        // Spot-check a few pixels for correctness.
         assert_eq!(bm1.get_pixel(0, 0), 1);
         assert_eq!(bm1.get_pixel(4, 4), 1);
         assert_eq!(bm1.get_pixel(7, 7), 1);
@@ -461,26 +452,26 @@ mod tests {
     #[test]
     fn test_bitmap_combine_and_with_zeros() {
         let mut bm1 = Bitmap::new(8, 8);
-        let bm2 = Bitmap::new(8, 8); // All zeros by default
+        let bm2 = Bitmap::new(8, 8);
 
-        // Fill bm1 with 1s
+        // Fill bm1 with ones to ensure AND clears them.
         for y in 0..8 {
             for x in 0..8 {
                 bm1.set_pixel(x, y, 1);
             }
         }
 
-        // Verify bm2 is all zeros
+        // Verify bm2 starts at all zeros.
         for y in 0..8 {
             for x in 0..8 {
                 assert_eq!(bm2.get_pixel(x, y), 0, "bm2({},{}) should be 0", x, y);
             }
         }
 
-        // Combine with AND: 1 AND 0 = 0
+        // AND with zero should clear the destination.
         bm1.combine(&bm2, 0, 0, 1);
 
-        // Check each pixel
+        // Check each pixel for zero after the combine.
         for y in 0..8 {
             for x in 0..8 {
                 assert_eq!(
@@ -499,26 +490,24 @@ mod tests {
         let mut bm1 = Bitmap::new(8, 8);
         let bm2 = Bitmap::new(4, 4);
 
-        // Fill bm1
+        // Fill bm1 with ones to make the replace visible.
         for y in 0..8 {
             for x in 0..8 {
                 bm1.set_pixel(x, y, 1);
             }
         }
 
-        // bm2 is all zeros (default)
-
         // Combine with REPLACE
         bm1.combine(&bm2, 0, 0, 4); // operator 4 = REPLACE
 
-        // The 4x4 region should now be zeros
+        // The replaced region should now be zeros.
         for y in 0..4 {
             for x in 0..4 {
                 assert_eq!(bm1.get_pixel(x, y), 0);
             }
         }
 
-        // Rest should still be ones
+        // Outside the region should remain unchanged.
         assert_eq!(bm1.get_pixel(5, 5), 1);
     }
 
@@ -527,13 +516,13 @@ mod tests {
         let mut bm1 = Bitmap::new(10, 10);
         let mut bm2 = Bitmap::new(3, 3);
 
-        // Set a pixel in bm2
+        // Set a single pixel in bm2 to test offsets.
         bm2.set_pixel(1, 1, 1);
 
-        // Combine at offset (2, 2)
+        // Combine with an offset to move the source pixel.
         bm1.combine(&bm2, 2, 2, 0); // OR
 
-        // Pixel should appear at (2+1, 2+1) = (3, 3)
+        // The source pixel should land at the translated coordinate.
         assert_eq!(bm1.get_pixel(3, 3), 1);
         assert_eq!(bm1.get_pixel(1, 1), 0);
     }
@@ -543,21 +532,17 @@ mod tests {
         let mut bm1 = Bitmap::new(10, 10);
         let mut bm2 = Bitmap::new(4, 4);
 
-        // Set all pixels in bm2
+        // Fill bm2 so clipping behavior is visible.
         for y in 0..4 {
             for x in 0..4 {
                 bm2.set_pixel(x, y, 1);
             }
         }
 
-        // Combine with negative offset (partially off-screen)
+        // Combine with a negative offset so the source is clipped.
         bm1.combine(&bm2, -2, -2, 0);
 
-        // Pixels that fall within bm1 should be set
-        // bm2 at offset (-2,-2) means:
-        // bm2(0,0) -> bm1(-2,-2) = off-screen
-        // bm2(2,2) -> bm1(0,0) = on-screen
-        // bm2(3,3) -> bm1(1,1) = on-screen
+        // Pixels that map into bm1 should be set.
         assert_eq!(bm1.get_pixel(0, 0), 1);
         assert_eq!(bm1.get_pixel(1, 1), 1);
     }

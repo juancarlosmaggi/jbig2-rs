@@ -4,14 +4,14 @@ use crate::error::Jbig2Error;
 use crate::reader::Reader;
 use std::collections::HashMap;
 
-// Custom Huffman table decoder
+// Custom Huffman table decoding and selection helpers.
+/// Decode a custom Huffman table from a tables segment payload.
 pub fn decode_tables_segment(
     data: &[u8],
     start: usize,
     end: usize,
 ) -> Result<HuffmanTable, Jbig2Error> {
-    // Decodes a Tables segment, i.e., a custom Huffman table.
-    // Annex B.2 Code table structure.
+    // Parse header fields and decode the table lines.
     let flags = data[start];
     let lowest_value = ((data[start + 1] as u32) << 24)
         | ((data[start + 2] as u32) << 16)
@@ -29,7 +29,7 @@ pub fn decode_tables_segment(
     let mut lines = Vec::new();
     let mut current_range_low = lowest_value as i32;
 
-    // Normal table lines
+    // Emit table lines that cover the normal range.
     while current_range_low < highest_value as i32 {
         let prefix_length = reader.read_bits(prefix_size_bits)?;
         let range_length = reader.read_bits(range_size_bits)?;
@@ -42,7 +42,7 @@ pub fn decode_tables_segment(
         current_range_low += 1i32 << range_length;
     }
 
-    // Lower range table line
+    // Lower-range line encodes values below the minimum.
     let prefix_length = reader.read_bits(prefix_size_bits)?;
     lines.push(HuffmanLine::new(vec![
         lowest_value as i32 - 1,
@@ -50,9 +50,9 @@ pub fn decode_tables_segment(
         32,
         0,
         1,
-    ])); // "lower"
+    ]));
 
-    // Upper range table line
+    // Upper-range line encodes values above the maximum.
     let prefix_length = reader.read_bits(prefix_size_bits)?;
     lines.push(HuffmanLine::new(vec![
         highest_value as i32,
@@ -62,7 +62,7 @@ pub fn decode_tables_segment(
     ]));
 
     if (flags & 1) != 0 {
-        // Out-of-band table line
+        // Optional out-of-band code line.
         let prefix_length = reader.read_bits(prefix_size_bits)?;
         lines.push(HuffmanLine::new(vec![prefix_length as i32, 0]));
     }
@@ -70,6 +70,7 @@ pub fn decode_tables_segment(
     Ok(HuffmanTable::new(lines, false))
 }
 
+/// Huffman tables used when decoding symbol dictionary segments.
 #[derive(Clone)]
 pub struct SymbolDictionaryHuffmanTables {
     pub table_delta_height: HuffmanTable,
@@ -78,6 +79,7 @@ pub struct SymbolDictionaryHuffmanTables {
     pub table_aggregate_instances: HuffmanTable,
 }
 
+/// Select symbol dictionary Huffman tables from standard and custom sources.
 pub fn get_symbol_dictionary_huffman_tables(
     huffman_dh_selector: u8,
     huffman_dw_selector: u8,
@@ -129,6 +131,7 @@ pub fn get_symbol_dictionary_huffman_tables(
     })
 }
 
+/// Huffman table selector flags parsed from text region parameters.
 #[derive(Clone)]
 pub struct TextRegionHuffmanParams {
     pub huffman_fs: u8,
@@ -142,6 +145,7 @@ pub struct TextRegionHuffmanParams {
     pub huffman_ri: bool,
 }
 
+/// Huffman tables required for decoding a text region.
 #[derive(Clone)]
 pub struct TextRegionHuffmanTables {
     pub symbol_id_table: HuffmanTable,
@@ -156,23 +160,21 @@ pub struct TextRegionHuffmanTables {
     pub table_refinement_ri: Option<HuffmanTable>,
 }
 
+/// Decode the symbol ID Huffman table from the bitstream.
 fn decode_symbol_id_huffman_table(
     reader: &mut Reader,
     number_of_symbols: usize,
 ) -> Result<HuffmanTable, Jbig2Error> {
     let trace_huffman = std::env::var_os("JBIG2_RS_TRACE_HUFFMAN").is_some();
-    // 7.4.3.1.7 Symbol ID Huffman table decoding
-    // Read code lengths for RUNCODEs 0...34.
+    // Read code lengths for the run-length codes.
     let mut codes = Vec::new();
     for i in 0..=34 {
         let code_length = reader.read_bits(4)?;
         codes.push(HuffmanLine::new(vec![i, code_length as i32, 0, 0]));
     }
-    // Assign Huffman codes for RUNCODEs.
     let run_codes_table = HuffmanTable::new(codes, false);
 
-    // Read a Huffman code using the assignment above.
-    // Interpret the RUNCODE codes and the additional bits (if any).
+    // Decode run-length codes and expand them into prefix lengths.
     codes = Vec::new();
     let mut i = 0;
     while i < number_of_symbols {
@@ -247,6 +249,7 @@ fn decode_symbol_id_huffman_table(
     Ok(HuffmanTable::new(codes, false))
 }
 
+/// Select text region Huffman tables based on the parameter selectors.
 pub fn get_text_region_huffman_tables(
     params: &TextRegionHuffmanParams,
     referred_to: &[u32],
@@ -256,7 +259,6 @@ pub fn get_text_region_huffman_tables(
 ) -> Result<TextRegionHuffmanTables, Jbig2Error> {
     let symbol_id_table = decode_symbol_id_huffman_table(reader, number_of_symbols)?;
 
-    // 7.4.3.1.6 Text region segment Huffman table selection
     let mut custom_index = 0;
     let table_first_s = match params.huffman_fs {
         0 | 1 => get_standard_table(params.huffman_fs as u32 + 6)?,
@@ -287,7 +289,7 @@ pub fn get_text_region_huffman_tables(
         _ => return Err(Jbig2Error::new("invalid Huffman DT selector")),
     };
 
-    // Refinement tables
+    // Optional refinement tables follow the base selectors.
     let table_refinement_dw = match params.huffman_refinement_dw {
         0..=2 => Some(get_standard_table(params.huffman_refinement_dw as u32 + 2)?),
         3 => {
@@ -376,6 +378,7 @@ pub fn get_text_region_huffman_tables(
     })
 }
 
+/// Return Huffman tables for aggregate symbol refinement decoding.
 pub fn get_aggregate_symbol_huffman_tables(
     reader: &mut Reader,
     number_of_symbols: usize,
@@ -384,18 +387,19 @@ pub fn get_aggregate_symbol_huffman_tables(
 
     Ok(TextRegionHuffmanTables {
         symbol_id_table,
-        table_first_s: get_standard_table(6)?,  // B.6
-        table_delta_s: get_standard_table(8)?,  // B.8
-        table_delta_t: get_standard_table(11)?, // B.11
-        table_refinement_dw: Some(get_standard_table(15)?), // B.15
+        table_first_s: get_standard_table(6)?,
+        table_delta_s: get_standard_table(8)?,
+        table_delta_t: get_standard_table(11)?,
+        table_refinement_dw: Some(get_standard_table(15)?),
         table_refinement_dh: Some(get_standard_table(15)?),
         table_refinement_dx: Some(get_standard_table(15)?),
         table_refinement_dy: Some(get_standard_table(15)?),
-        table_refinement_size: Some(get_standard_table(1)?), // B.1
+        table_refinement_size: Some(get_standard_table(1)?),
         table_refinement_ri: Some(get_standard_table(1)?),
     })
 }
 
+/// Fetch a custom Huffman table by index from referred segments.
 fn get_custom_huffman_table(
     index: u32,
     referred_to: &[u32],

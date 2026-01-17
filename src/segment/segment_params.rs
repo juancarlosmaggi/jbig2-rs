@@ -1,8 +1,8 @@
-// Parameter structures for segment parsing
+// Parameter structures produced by segment parsers.
 
 use super::types::RegionInfo;
 
-/// Parameters parsed from halftone region segment
+/// Parsed parameters for a halftone region segment.
 #[derive(Debug)]
 pub struct HalftoneRegionParams {
     pub region_info: RegionInfo,
@@ -19,7 +19,7 @@ pub struct HalftoneRegionParams {
     pub grid_vector_y: i16,
 }
 
-/// Parameters parsed from text region segment
+/// Parsed parameters for a text region segment.
 #[derive(Debug)]
 pub struct TextRegionParams {
     pub region_info: RegionInfo,
@@ -27,7 +27,7 @@ pub struct TextRegionParams {
     pub number_of_symbol_instances: u32,
 }
 
-/// Parameters parsed from pattern dictionary segment
+/// Parsed parameters for a pattern dictionary segment.
 #[derive(Debug)]
 pub struct PatternDictionaryParams {
     pub mmr: bool,

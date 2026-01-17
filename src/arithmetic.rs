@@ -1,17 +1,9 @@
-//! Arithmetic Decoder Module
-//!
-//! This module implements the MQ arithmetic decoder used in JBIG2, as specified in
-//! ITU-T T.88 Annex E (with decoder modifications as per clause 6 and jbig2dec reference behavior).
-//!
-//! The implementation follows the jbig2dec "software convention" initialization and BYTEIN
-//! handling to match marker/stuffing behavior.
+//! Arithmetic decoder used by region and symbol decoders.
 
 use crate::arithmetic_tables::QE_TABLE;
 use crate::error::Jbig2Error;
 
-/// MQ Arithmetic Decoder implementation.
-///
-/// C is the 32-bit register, A is the interval register (16-bit value), and CT is the bit counter.
+/// MQ arithmetic decoder with internal interval and bit counter state.
 pub struct ArithmeticDecoder {
     data: Vec<u8>,
     offset: usize,
@@ -23,10 +15,7 @@ pub struct ArithmeticDecoder {
 }
 
 impl ArithmeticDecoder {
-    /// Creates a new arithmetic decoder instance.
-    ///
-    /// Initializes C from the first byte, then performs a BYTEIN and normalization
-    /// per Figure E.20 and jbig2dec's software convention.
+    /// Create a new decoder initialized from the provided byte stream.
     pub fn new(data: &[u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
             data: data.to_vec(),
@@ -46,13 +35,12 @@ impl ArithmeticDecoder {
         }
         decoder.offset = bytes;
 
-        // Figure F.1
+        // Initialize the C register from the first input byte.
         decoder.c = (!(decoder.next_word >> 8)) & 0xFF0000;
 
-        // Figure E.20 (2)
         decoder.byte_in();
 
-        // Figure E.20 (3)
+        // Normalize after the initial byte-in.
         decoder.c <<= 7;
         decoder.ct -= 7;
         decoder.a = 0x8000;
@@ -88,7 +76,7 @@ impl ArithmeticDecoder {
         (val, ret)
     }
 
-    /// Input a byte into the C register, handling 0xFF stuffing and marker codes.
+    /// Pull the next byte into the C register with marker/stuffing handling.
     fn byte_in(&mut self) {
         let b = ((self.next_word >> 24) & 0xFF) as u8;
 
@@ -159,10 +147,7 @@ impl ArithmeticDecoder {
         }
     }
 
-    /// Decodes a single bit using the specified context.
-    ///
-    /// Follows the DECODE procedure from Annex E Figure E.15 (with MPS/LPS exchange
-    /// and renormalization as per Figures E.16–E.18).
+    /// Decode a single bit using the specified context state.
     #[inline(always)]
     pub fn read_bit(
         &mut self,
@@ -184,16 +169,16 @@ impl ArithmeticDecoder {
         let qe = qe_entry.qe as u32;
         let mut mps = (ctx_val & 1) as u8;
 
-        // A -= Qe
+        // Shrink the interval by Qe.
         self.a = self.a.wrapping_sub(qe);
 
         let d: u8;
         let new_cx_index: usize;
 
         if (self.c >> 16) < self.a {
-            // MPS path
+            // MPS path.
             if (self.a & 0x8000) != 0 {
-                // No renormalization needed – keep context unchanged (jbig2dec behavior)
+                // No renormalization needed; keep context unchanged.
                 return Ok(mps);
             }
             if self.a < qe {
@@ -207,7 +192,7 @@ impl ArithmeticDecoder {
                 new_cx_index = qe_entry.nmps as usize;
             }
         } else {
-            // LPS path – subtract A from C (A is shifted left 16 bits)
+            // LPS path; subtract A from C (A is shifted left 16 bits).
             self.c = self.c.wrapping_sub(self.a << 16);
 
             if self.a < qe {
@@ -224,7 +209,7 @@ impl ArithmeticDecoder {
             }
         }
 
-        // Renormalization (Figure E.18)
+        // Renormalize the interval and code registers.
         loop {
             if self.ct == 0 {
                 self.byte_in();
@@ -237,7 +222,7 @@ impl ArithmeticDecoder {
             }
         }
 
-        // Update context
+        // Update the context state for the next symbol.
         unsafe {
             *contexts.get_unchecked_mut(pos) = ((new_cx_index as i8) << 1) | (mps as i8);
         }
@@ -245,7 +230,7 @@ impl ArithmeticDecoder {
         Ok(d)
     }
 
-    /// Returns the number of bytes consumed from the input stream.
+    /// Return the number of bytes consumed from the input stream.
     pub fn get_bytes_read(&self) -> usize {
         self.offset.saturating_sub(self.next_word_bytes)
     }

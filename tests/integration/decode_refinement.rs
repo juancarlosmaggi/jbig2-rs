@@ -17,7 +17,6 @@ mod tests {
                 assert!(!template.coding.is_empty());
                 assert!(!template.reference.is_empty());
             } else {
-                // Invalid indices return empty templates
                 assert!(template.coding.is_empty());
                 assert!(template.reference.is_empty());
             }
@@ -30,12 +29,12 @@ mod tests {
         assert_eq!(template.coding.len(), 3);
         assert_eq!(template.reference.len(), 8);
 
-        // Check specific coding positions
+        // Spot-check coding positions.
         assert_eq!(template.coding[0], (0, -1));
         assert_eq!(template.coding[1], (1, -1));
         assert_eq!(template.coding[2], (-1, 0));
 
-        // Check specific reference positions
+        // Spot-check reference positions.
         assert_eq!(template.reference[0], (0, -1));
         assert_eq!(template.reference[1], (1, -1));
         assert_eq!(template.reference[2], (-1, 0));
@@ -48,7 +47,7 @@ mod tests {
         assert_eq!(template.coding.len(), 4);
         assert_eq!(template.reference.len(), 6);
 
-        // Check specific coding positions
+        // Spot-check coding positions.
         assert_eq!(template.coding[0], (-1, -1));
         assert_eq!(template.coding[1], (0, -1));
         assert_eq!(template.coding[2], (1, -1));
@@ -62,14 +61,14 @@ mod tests {
         let reference = Bitmap::new(16, 16);
 
         let params = RefinementParams {
-            width: 0, // Invalid
+            width: 0,
             height: 16,
             template_index: 0,
             reference_bitmap: &reference,
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![(0, 0)], // Template 0 requires AT parameters
+            at: vec![(0, 0)],
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -85,12 +84,12 @@ mod tests {
         let params = RefinementParams {
             width: 16,
             height: 16,
-            template_index: 99, // Invalid
+            template_index: 99,
             reference_bitmap: &reference,
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![(0, 0), (0, 0)], // Provide AT parameters even for invalid template (shouldn't be used)
+            at: vec![(0, 0), (0, 0)],
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -108,14 +107,13 @@ mod tests {
             height: 16,
             template_index: 0,
             reference_bitmap: &reference,
-            offset_x: 8, // Non-zero offset
+            offset_x: 8,
             offset_y: 8,
             prediction: false,
-            at: vec![(0, 0)], // Template 0 requires AT parameters
+            at: vec![(0, 0)],
         };
 
         let result = decode_refinement(&params, &mut context);
-        // Should handle offsets without crashing
         let _ = result;
     }
 
@@ -132,12 +130,11 @@ mod tests {
             reference_bitmap: &reference,
             offset_x: 0,
             offset_y: 0,
-            prediction: true,         // Test prediction
-            at: vec![(0, 0), (0, 0)], // Template 0 requires 2 AT parameters
+            prediction: true,
+            at: vec![(0, 0), (0, 0)],
         };
 
         let result = decode_refinement(&params, &mut context);
-        // Should handle prediction without crashing
         let _ = result;
     }
 
@@ -151,9 +148,9 @@ mod tests {
             let reference = Bitmap::new(16, 16);
 
             let at = if template_index == 0 {
-                vec![(0, 0)] // Template 0 requires AT parameters
+                vec![(0, 0)]
             } else {
-                vec![] // Template 1 does not
+                vec![]
             };
 
             let params = RefinementParams {
@@ -168,7 +165,6 @@ mod tests {
             };
 
             let result = decode_refinement(&params, &mut context);
-            // Should handle different templates without crashing
             let _ = result;
         }
     }
@@ -187,11 +183,10 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![(1, -1), (2, -1)], // Custom AT pixels
+            at: vec![(1, -1), (2, -1)],
         };
 
         let result = decode_refinement(&params, &mut context);
-        // Should handle custom AT pixels without crashing
         let _ = result;
     }
 
@@ -212,11 +207,10 @@ mod tests {
                 offset_x: 0,
                 offset_y: 0,
                 prediction: false,
-                at: vec![(0, 0)], // Template 0 requires at least 1 AT parameter
+            at: vec![(0, 0)],
             };
 
             let result = decode_refinement(&params, &mut context);
-            // Should handle different sizes without crashing
             let _ = result;
         }
     }

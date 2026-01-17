@@ -4,7 +4,7 @@ use crate::decode::decode_pattern::decode_pattern_dictionary;
 use crate::error::Jbig2Error;
 use std::path::PathBuf;
 
-/// Handle pattern dictionary segment
+/// Decode a pattern dictionary segment and store the patterns.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_pattern_dictionary(
     patterns: &mut std::collections::HashMap<u32, Vec<Bitmap>>,
@@ -32,6 +32,7 @@ pub(super) fn on_pattern_dictionary(
     let patterns_vec = decode_pattern_dictionary(&params, &mut decoding_context)?;
 
     if let Some(dir) = std::env::var_os("JBIG2_RS_DUMP_PATTERNS") {
+        // Optionally dump patterns to PBM files for inspection.
         let dir = PathBuf::from(dir);
         std::fs::create_dir_all(&dir)
             .map_err(|e| Jbig2Error::new(&format!("pattern dump mkdir failed: {e}")))?;

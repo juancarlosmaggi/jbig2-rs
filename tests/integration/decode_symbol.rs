@@ -12,7 +12,7 @@ mod tests {
             huffman: false,
             refinement: false,
             symbols: vec![],
-            number_of_new_symbols: 0, // Invalid
+            number_of_new_symbols: 0,
             number_of_exported_symbols: 0,
             template_index: 0,
             at: vec![],
@@ -36,7 +36,7 @@ mod tests {
             symbols: vec![],
             number_of_new_symbols: 1,
             number_of_exported_symbols: 0,
-            template_index: 99, // Invalid
+            template_index: 99,
             at: vec![],
             refinement_template_index: 0,
             refinement_at: vec![],
@@ -56,7 +56,7 @@ mod tests {
             huffman: false,
             refinement: false,
             symbols: vec![],
-            number_of_new_symbols: 20000000, // Too many (> 2^24-1)
+            number_of_new_symbols: 20000000,
             number_of_exported_symbols: 0,
             template_index: 0,
             at: vec![],
@@ -84,11 +84,10 @@ mod tests {
             at: vec![],
             refinement_template_index: 0,
             refinement_at: vec![],
-            huffman_tables: None, // Missing tables for Huffman
+            huffman_tables: None,
         };
 
         let result = decode_symbol_dictionary(&params, &mut context, None);
-        // Should fail because Huffman requires tables
         assert!(result.is_err());
     }
 }

@@ -2,7 +2,7 @@ use crate::bitmap::Bitmap;
 use crate::bitmap_utils;
 use crate::segment::PageInfo;
 
-/// Convert a bitmap to bit-packed format (MSB first)
+/// Convert a bitmap to bit-packed rows (MSB first).
 pub(super) fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
     let width = bitmap.width;
     let height = bitmap.height;
@@ -29,6 +29,7 @@ pub struct Jbig2Page {
 }
 
 impl Jbig2Page {
+    /// Expand the packed bitmap into 8-bit grayscale pixels.
     pub fn to_image_data(&self) -> Vec<u8> {
         let width = self.page_info.width as usize;
         let height = self.page_info.height as usize;
@@ -38,7 +39,7 @@ impl Jbig2Page {
             for x in 0..width {
                 let byte_index = y * row_size + (x / 8);
                 let bit_index = 7 - (x % 8);
-                // JBIG2 uses 1=black, 0=white; GrayImage expects 0=black, 255=white.
+                // Map packed bits into grayscale pixels.
                 let pixel = if (self.bit_packed_data[byte_index] & (1 << bit_index)) != 0 {
                     0
                 } else {
@@ -51,7 +52,7 @@ impl Jbig2Page {
     }
 }
 
-/// Handle page information and initialization
+/// Initialize a new page, finalizing any existing page state.
 pub(super) fn on_page_information(
     current_page_info: &mut Option<PageInfo>,
     current_bitmap: &mut Option<Bitmap>,
@@ -59,13 +60,12 @@ pub(super) fn on_page_information(
     pages: &mut Vec<Jbig2Page>,
     info: PageInfo,
 ) {
-    // Validate dimensions: only check for zero, not for max size
-    // Large dimensions are allowed - allocation will naturally fail if too large
+    // Skip empty pages; allocation handles oversized dimensions.
     if info.width == 0 || info.height == 0 {
         return;
     }
 
-    // If we have a previous page, finalize it
+    // Finalize the previous page, if any.
     if let (Some(page_info), Some(bitmap)) = (current_page_info.take(), current_bitmap.take()) {
         let bit_packed_data = bitmap_to_bit_packed(&bitmap);
         pages.push(Jbig2Page {
@@ -83,7 +83,7 @@ pub(super) fn on_page_information(
     *current_bitmap = Some(bitmap);
 }
 
-/// Handle end of stripe
+/// Advance the current vertical stripe offset.
 pub(super) fn on_end_of_stripe(current_y: &mut usize, height: usize) {
     if std::env::var_os("JBIG2_RS_TRACE_SEGMENTS").is_some() {
         eprintln!("end_of_stripe: current_y={} height={}", *current_y, height);
@@ -91,7 +91,7 @@ pub(super) fn on_end_of_stripe(current_y: &mut usize, height: usize) {
     *current_y += height;
 }
 
-/// Finalize the current page and add it to the pages vector
+/// Finalize the current page and store it in the page list.
 pub(super) fn finalize_current_page(
     current_page_info: &mut Option<PageInfo>,
     current_bitmap: &mut Option<Bitmap>,

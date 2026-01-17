@@ -2,7 +2,7 @@ use crate::error::Jbig2Error;
 use crate::huffman::{HuffmanTable, decode_tables_segment};
 use std::collections::HashMap;
 
-/// Handle custom Huffman tables segment
+/// Decode a custom Huffman tables segment and store it by segment id.
 pub(super) fn on_tables(
     custom_tables: &mut HashMap<u32, HuffmanTable>,
     segment_number: u32,

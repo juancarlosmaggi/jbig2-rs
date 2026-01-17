@@ -21,7 +21,6 @@ fn test_decode_mmr_simple() {
 fn test_decode_mmr_zero_dimensions() {
     let data = vec![0u8; 10];
 
-    // Zero width
     let mut reader = create_test_reader(data.clone());
     let result = decode_mmr_bitmap(&mut reader, 0, 8, false);
     assert!(result.is_ok());
@@ -29,7 +28,6 @@ fn test_decode_mmr_zero_dimensions() {
     assert_eq!(bitmap.width, 0);
     assert_eq!(bitmap.height, 8);
 
-    // Zero height
     let mut reader = create_test_reader(data);
     let result = decode_mmr_bitmap(&mut reader, 8, 0, false);
     assert!(result.is_ok());
@@ -63,7 +61,6 @@ fn test_decode_mmr_insufficient_data() {
     let bitmap = result.unwrap();
     assert_eq!(bitmap.width, 64);
     assert_eq!(bitmap.height, 64);
-    // Spot check zeros
     assert_eq!(bitmap.get_pixel(0, 0), 0);
     assert_eq!(bitmap.get_pixel(63, 0), 0);
     assert_eq!(bitmap.get_pixel(0, 63), 0);
@@ -127,7 +124,6 @@ fn test_decode_mmr_large_dimensions() {
     let bitmap = result.unwrap();
     assert_eq!(bitmap.width, 1000);
     assert_eq!(bitmap.height, 1000);
-    // Spot-check corners
     assert_eq!(bitmap.get_pixel(0, 0), 0);
     assert_eq!(bitmap.get_pixel(999, 0), 0);
     assert_eq!(bitmap.get_pixel(0, 999), 0);

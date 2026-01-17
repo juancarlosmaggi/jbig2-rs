@@ -137,11 +137,11 @@ mod tests {
 
     #[test]
     fn test_jbig2_header_validation() {
-        // Invalid header (too short)
+        // Reject inputs that are shorter than the minimal header.
         let invalid_data = b"\x00\x00\x00\x00";
         assert!(Jbig2Document::parse(invalid_data).is_err());
 
-        // Invalid header (wrong magic)
+        // Reject inputs with the wrong magic bytes.
         let invalid_data2 = b"\x00\x4a\x42\x32\x0d\x0a\x1a\x0a\x00\x00\x00\x00";
         assert!(Jbig2Document::parse(invalid_data2).is_err());
     }
@@ -153,24 +153,25 @@ mod tests {
         assert_eq!(bitmap.get_pixel(5, 5), 1);
         assert_eq!(bitmap.get_pixel(0, 0), 0);
 
-        // Test bounds checking
-        assert_eq!(bitmap.get_pixel(15, 15), 0); // Out of bounds
-        bitmap.set_pixel(15, 15, 1); // Should not panic
+        // Out-of-range reads return zero and writes are ignored.
+        assert_eq!(bitmap.get_pixel(15, 15), 0);
+        bitmap.set_pixel(15, 15, 1);
     }
 
     #[test]
     fn test_huffman_tables() {
-        // Test standard table retrieval
+        // Standard table lookup should succeed for a known ID.
         let table1 = crate::huffman::get_standard_table(1);
         assert!(table1.is_ok());
 
+        // Unknown table IDs should report an error.
         let table_invalid = crate::huffman::get_standard_table(999);
         assert!(table_invalid.is_err());
     }
 
     #[test]
     fn test_segment_header_parsing() {
-        // Minimal valid segment header data
+        // Minimal segment header should parse without error.
         let data = vec![
             0x00, 0x00, 0x00, 0x01, // segment number
             0x00, // flags (type 0)

@@ -68,6 +68,7 @@ pub fn get_coding_template(index: usize) -> &'static [(i8, i8)] {
     }
 }
 
+/// Decode a generic region using the default template 0 fast path.
 fn decode_bitmap_template0(
     width: usize,
     height: usize,
@@ -136,6 +137,7 @@ fn decode_bitmap_template0(
     Ok(bitmap)
 }
 
+/// Inputs required to decode a generic region bitmap.
 #[derive(Clone)]
 pub struct DecodeBitmapParams<'a> {
     pub mmr: bool,
@@ -147,16 +149,17 @@ pub struct DecodeBitmapParams<'a> {
     pub at: Vec<(i8, i8)>,
 }
 
+/// Decode a generic region bitmap using either MMR or arithmetic coding.
 pub fn decode_bitmap(
     params: &DecodeBitmapParams,
     decoding_context: &mut DecodingContext,
 ) -> Result<Bitmap, Jbig2Error> {
-    // Early return for zero dimensions
+    // Early return for zero dimensions.
     if params.width == 0 || params.height == 0 {
         return Ok(Bitmap::new(params.width, params.height));
     }
 
-    // Validate parameters (now allows zero via updated validation)
+    // Validate parameters before decoding.
     validation::validate_generic_decode_params(params.width, params.height, params.template_index)?;
 
     if params.mmr {
@@ -170,7 +173,7 @@ pub fn decode_bitmap(
         return Ok(bitmap);
     }
 
-    // Use optimized version for the most common case
+    // Use an optimized path for the common template-0 case.
     if params.template_index == 0
         && params.skip.is_none()
         && !params.prediction
@@ -188,6 +191,7 @@ pub fn decode_bitmap(
     }
 
     let useskip = params.skip.is_some();
+    // Build and sort the context template for reuse decisions.
     let template = get_coding_template(params.template_index)
         .iter()
         .cloned()

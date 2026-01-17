@@ -2,12 +2,14 @@ use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use jbig2_rs::bitmap::Bitmap;
 use jbig2_rs::bitmap_utils;
 
+/// Benchmark bitmap allocation.
 fn bench_bitmap_new(c: &mut Criterion) {
     c.bench_function("bitmap_new_1000x1000", |b| {
         b.iter(|| Bitmap::new(black_box(1000), black_box(1000)))
     });
 }
 
+/// Benchmark repeated pixel reads.
 fn bench_bitmap_get_pixel(c: &mut Criterion) {
     let bitmap = Bitmap::new(1000, 1000);
     c.bench_function("bitmap_get_pixel", |b| {
@@ -21,6 +23,7 @@ fn bench_bitmap_get_pixel(c: &mut Criterion) {
     });
 }
 
+/// Benchmark repeated pixel writes.
 fn bench_bitmap_set_pixel(c: &mut Criterion) {
     let mut bitmap = Bitmap::new(1000, 1000);
     c.bench_function("bitmap_set_pixel", |b| {
@@ -34,10 +37,11 @@ fn bench_bitmap_set_pixel(c: &mut Criterion) {
     });
 }
 
+/// Benchmark compositing a symbol bitmap.
 fn bench_draw_symbol(c: &mut Criterion) {
     let mut dst = Bitmap::new(2000, 2000);
     let src = Bitmap::new(100, 100);
-    // Fill src with some pattern
+    // Fill src with a simple checker pattern.
     let mut src = src;
     for y in 0..100 {
         for x in 0..100 {
@@ -54,7 +58,7 @@ fn bench_draw_symbol(c: &mut Criterion) {
                 black_box(&src),
                 black_box(500),
                 black_box(500),
-                black_box(0), // OR
+                black_box(0),
             )
         })
     });

@@ -1,6 +1,4 @@
-//! Integration tests for jbig2-rs.
-//!
-//! This test module provides Integration and property tests for jbig2-rs
+//! Integration and property test modules.
 
 mod common;
 mod integration;

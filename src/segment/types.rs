@@ -1,4 +1,4 @@
-// Data structures and constants for JBIG2 segment handling
+// Data structures and constants for segment handling.
 
 pub const ERR_INSUFFICIENT_DATA: &str = "insufficient data";
 pub const ERR_INVALID_SEGMENT: &str = "invalid segment";
@@ -6,6 +6,7 @@ pub const ERR_OVERRUN: &str = "segment overruns data";
 pub const ERR_MISMATCH: &str = "data mismatch";
 pub const ERR_UNKNOWN_LENGTH: &str = "invalid unknown segment length";
 
+/// Segment type names indexed by type id.
 pub const SEGMENT_TYPES: [&str; 63] = [
     "SymbolDictionary",
     "",
@@ -72,8 +73,10 @@ pub const SEGMENT_TYPES: [&str; 63] = [
     "Extension",
 ];
 
+/// Byte length of the fixed region information block.
 pub const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
 
+/// Parsed segment header metadata.
 #[derive(Debug, Clone)]
 pub struct SegmentHeader {
     pub number: u32,
@@ -87,6 +90,7 @@ pub struct SegmentHeader {
     pub header_end: usize,
 }
 
+/// A segment with its header and slice boundaries into the source data.
 #[derive(Clone)]
 pub struct Segment<'a> {
     pub header: SegmentHeader,
@@ -95,6 +99,7 @@ pub struct Segment<'a> {
     pub end: usize,
 }
 
+/// Page-level metadata extracted from the page information segment.
 #[derive(Debug, Clone)]
 pub struct PageInfo {
     pub width: u32,
@@ -109,6 +114,7 @@ pub struct PageInfo {
     pub combination_operator_override: bool,
 }
 
+/// Region geometry and composition parameters.
 #[derive(Debug, Clone)]
 pub struct RegionInfo {
     pub width: u32,
@@ -118,6 +124,7 @@ pub struct RegionInfo {
     pub combination_operator: u8,
 }
 
+/// Parsed generic region parameters.
 #[derive(Debug)]
 pub struct GenericRegion {
     pub info: RegionInfo,
@@ -127,6 +134,7 @@ pub struct GenericRegion {
     pub at: Vec<(i8, i8)>,
 }
 
+/// Parameters and payload bounds for symbol dictionary segments.
 #[derive(Clone)]
 pub struct SymbolDictionaryParams<'a> {
     pub dictionary_flags: u16,

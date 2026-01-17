@@ -1,10 +1,11 @@
-// Segment header and data parsing functions
+// Segment header parsing and parameter extraction helpers.
 
 use super::segment_params::{HalftoneRegionParams, PatternDictionaryParams, TextRegionParams};
 use super::types::*;
 use super::utils::*;
 use crate::error::Jbig2Error;
 
+/// Parse a segment header starting at `start`.
 pub fn read_segment_header(
     data: &[u8],
     start: usize,
@@ -89,7 +90,7 @@ pub fn read_segment_header(
     if data.len().saturating_sub(pos) < 4 {
         return Err(Jbig2Error::new(ERR_INSUFFICIENT_DATA));
     }
-    // Length field is ALWAYS 4 bytes
+    // Length field is always four bytes regardless of header size flags.
     let length_u32 = read_u32(data, pos);
     pos += 4;
     let mut length = length_u32 as usize;
@@ -141,6 +142,7 @@ pub fn read_segment_header(
     })
 }
 
+/// Read the fixed-size region information block.
 pub fn read_region_segment_information(data: &[u8], start: usize) -> RegionInfo {
     RegionInfo {
         width: read_u32(data, start),
@@ -151,6 +153,7 @@ pub fn read_region_segment_information(data: &[u8], start: usize) -> RegionInfo 
     }
 }
 
+/// Parse a generic region segment header and its AT parameters.
 pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, Jbig2Error> {
     let info = read_region_segment_information(data, start);
     let generic_region_segment_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
@@ -169,8 +172,7 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
     })
 }
 
-/// Parse halftone region parameters (segments 20, 22, 23)
-/// Extracts region info, flags, and grid parameters
+/// Parse halftone region parameters including grid setup.
 pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegionParams {
     let region_info = read_region_segment_information(data, start);
     let halftone_region_flags = data[start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH];
@@ -204,8 +206,7 @@ pub fn parse_halftone_region_params(data: &[u8], start: usize) -> HalftoneRegion
     }
 }
 
-/// Parse text region common parameters (segments 4, 6, 7)
-/// Returns region info, flags, and symbol instance count
+/// Parse text region parameters and symbol instance count.
 pub fn parse_text_region_params(data: &[u8], start: usize) -> TextRegionParams {
     let region_info = read_region_segment_information(data, start);
     let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
@@ -231,7 +232,7 @@ pub fn parse_text_region_params(data: &[u8], start: usize) -> TextRegionParams {
     }
 }
 
-/// Parse pattern dictionary parameters (segment 16)
+/// Parse pattern dictionary parameters.
 pub fn parse_pattern_dictionary_params(data: &[u8], start: usize) -> PatternDictionaryParams {
     let pattern_dictionary_flags = data[start];
     let mmr = (pattern_dictionary_flags & 1) != 0;
@@ -249,6 +250,7 @@ pub fn parse_pattern_dictionary_params(data: &[u8], start: usize) -> PatternDict
     }
 }
 
+/// Parse segments from a stream in sequential or random-access mode.
 pub fn read_segments<'a>(
     data: &'a [u8],
     start: usize,
@@ -261,7 +263,7 @@ pub fn read_segments<'a>(
     let mut pos = start;
 
     if sequential {
-        // SEQUENTIAL MODE: Parse header and data together
+        // Sequential mode parses headers and payloads in one pass.
         while pos < end {
             if pos + 11 > end {
                 break;
@@ -269,10 +271,10 @@ pub fn read_segments<'a>(
 
             match read_segment_header(data, pos, has_file_header) {
                 Ok(segment_header) => {
-                    // Move past header
+                    // Move past the header to the segment data.
                     pos = segment_header.header_end;
 
-                    // EOF segment has no data
+                    // EOF segments have no payload.
                     if segment_header.segment_type == 51 {
                         segments.push(Segment {
                             header: segment_header,
@@ -283,7 +285,7 @@ pub fn read_segments<'a>(
                         break;
                     }
 
-                    // Calculate data range
+                    // Record the data range for this segment.
                     let segment_start = pos;
                     let segment_end = (pos + segment_header.length).min(end);
 
@@ -294,16 +296,14 @@ pub fn read_segments<'a>(
                         end: segment_end,
                     });
 
-                    // Move to next segment
+                    // Advance to the next segment header.
                     pos = segment_end;
                 }
                 Err(_) => break,
             }
         }
     } else {
-        // RANDOM-ACCESS MODE: Two-phase parsing
-
-        // PHASE 1: Parse ALL segment headers (directory)
+        // Random-access mode parses headers first, then payloads.
 
         let mut headers = vec![];
 
@@ -314,14 +314,14 @@ pub fn read_segments<'a>(
 
             match read_segment_header(data, pos, has_file_header) {
                 Ok(segment_header) => {
-                    // Move past header
+                    // Move past the header to the directory entry.
                     pos = segment_header.header_end;
 
-                    // Store header for phase 2
+                    // Save the header for payload parsing later.
                     let is_eof = segment_header.segment_type == 51;
                     headers.push(segment_header);
 
-                    // EOF segment marks end of directory
+                    // EOF indicates the end of the header directory.
                     if is_eof {
                         break;
                     }
@@ -330,7 +330,7 @@ pub fn read_segments<'a>(
             }
         }
 
-        // PHASE 2: Parse ALL segment data (in same order as headers)
+        // Parse each payload in the same order as the headers.
 
         let _data_area_start = pos;
 
@@ -338,7 +338,7 @@ pub fn read_segments<'a>(
             let segment_start = pos;
             let segment_end = pos + header.length;
 
-            // Validate we have enough data
+            // Ensure the payload fits within the available data.
             if segment_end > end {
                 return Err(Jbig2Error::new(ERR_OVERRUN));
             }
@@ -350,7 +350,7 @@ pub fn read_segments<'a>(
                 end: segment_end,
             });
 
-            // Move to next segment's data
+            // Advance to the next payload.
             pos = segment_end;
         }
     }

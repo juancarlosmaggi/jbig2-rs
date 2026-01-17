@@ -2,7 +2,7 @@ use image::{GrayImage, Luma};
 use jbig2_rs::image::Jbig2Document;
 use std::fs;
 
-/// Convert JBIG2 bitmap to PNG image
+/// Convert a 1bpp bitmap to PNG and write it to disk.
 fn save_as_png(
     bitmap: &jbig2_rs::bitmap::Bitmap,
     output_path: &str,
@@ -10,11 +10,9 @@ fn save_as_png(
     let width = bitmap.width as u32;
     let height = bitmap.height as u32;
 
-    // Create a grayscale image
     let mut img = GrayImage::new(width, height);
 
-    // Convert 1-bit bitmap to 8-bit grayscale
-    // 0 = white (255), 1 = black (0)
+    // Map 1-bit pixels to 8-bit grayscale values.
     for y in 0..height {
         for x in 0..width {
             let pixel_value = bitmap.get_pixel(x as usize, y as usize);
@@ -31,7 +29,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Processing 4 JBIG2 test resource files...\n");
     println!("{}", "=".repeat(60));
 
-    // Create output directory
     let output_dir = "output";
     fs::create_dir_all(output_dir)?;
     println!("Output directory: {}/\n", output_dir);
@@ -52,7 +49,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         println!("{}", "-".repeat(60));
 
-        // Read the file
         let data = match fs::read(filename) {
             Ok(d) => d,
             Err(e) => {
@@ -63,13 +59,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("   File size: {} bytes", data.len());
 
-        // Parse the JBIG2 document
         match Jbig2Document::parse(&data) {
             Ok(doc) => {
                 println!("   ✅ Successfully parsed!");
                 println!("   Pages: {}", doc.page_count());
 
-                // Process and save each page
                 for page_num in 0..doc.page_count() {
                     match doc.get_page(page_num) {
                         Some(page) => {
@@ -78,7 +72,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 page_num, page.page_info.width, page.page_info.height
                             );
 
-                            // Save as PNG
                             let output_filename = if doc.page_count() > 1 {
                                 format!("{}/{}_{}.png", output_dir, name, page_num)
                             } else {

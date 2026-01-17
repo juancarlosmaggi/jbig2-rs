@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use super::region_handlers::{REGION_SEGMENT_INFORMATION_FIELD_LENGTH, draw_bitmap};
 use super::symbol_handler::collect_input_symbols;
 
-/// Handle immediate text region
+/// Decode an immediate text region and composite it onto the current page.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_immediate_text_region(
     current_page_info: &mut Option<PageInfo>,
@@ -58,13 +58,13 @@ pub(super) fn on_immediate_text_region(
     let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
     let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
 
-    // Collect input symbols from referred segments
+    // Gather the symbol bitmaps referenced by this segment.
     let input_symbols = collect_input_symbols(symbols, referred_to);
     let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
 
-    // Parse Huffman flags and refinement AT
+    // Parse Huffman selector flags and refinement AT offsets.
     let mut refinement_at = Vec::new();
-    let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
+    let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2;
 
     let mut huffman_fs = 0u8;
     let mut huffman_ds = 0u8;
@@ -88,7 +88,7 @@ pub(super) fn on_immediate_text_region(
         huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
         huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
         huffman_ri = (huffman_flags & 0x8000) != 0;
-    } // else default 0
+    }
 
     if refinement && refinement_template == 0 && pos + 4 <= end {
         for _ in 0..2 {
@@ -97,7 +97,7 @@ pub(super) fn on_immediate_text_region(
             refinement_at.push((x, y));
             pos += 2;
         }
-    } // else default empty
+    }
 
     let instances_from_data = if pos + 4 <= end {
         Some(crate::segment::read_u32(data, pos))
@@ -167,7 +167,7 @@ pub(super) fn on_immediate_text_region(
 
     let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
 
-    // Get Huffman tables if needed
+    // Build Huffman tables and readers when Huffman coding is enabled.
     let mut huffman_reader = if huffman {
         Some(Reader::new(slice.to_vec(), 0, slice.len()))
     } else {
@@ -229,7 +229,7 @@ pub(super) fn on_immediate_text_region(
     Ok(())
 }
 
-/// Handle intermediate text region
+/// Decode an intermediate text region without compositing it onto the page.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn on_intermediate_text_region(
     symbols: &HashMap<u32, Vec<Bitmap>>,
@@ -246,7 +246,7 @@ pub(super) fn on_intermediate_text_region(
     _segment_number: u32,
 ) -> Result<(), Jbig2Error> {
     let trace_text = std::env::var_os("JBIG2_RS_TRACE_TEXT").is_some();
-    // Basic validation: check that referred segments exist
+    // Validate that referenced segments are already available.
     for &seg_id in referred_to {
         if !symbols.contains_key(&seg_id)
             && !patterns.contains_key(&seg_id)
@@ -268,13 +268,13 @@ pub(super) fn on_intermediate_text_region(
     let ds_offset = ((text_region_segment_flags as i32) << 17) >> 27;
     let refinement_template = ((text_region_segment_flags >> 15) & 1) as usize;
 
-    // Collect input symbols from referred segments
+    // Gather the symbol bitmaps referenced by this segment.
     let input_symbols = collect_input_symbols(symbols, referred_to);
     let symbol_code_length = crate::core_utils::log2(input_symbols.len() as u32);
 
-    // Parse Huffman flags and refinement AT
+    // Parse Huffman selector flags and refinement AT offsets.
     let mut refinement_at = Vec::new();
-    let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2; // flags are 2 bytes
+    let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2;
 
     let mut huffman_fs = 0u8;
     let mut huffman_ds = 0u8;
@@ -298,7 +298,7 @@ pub(super) fn on_intermediate_text_region(
         huffman_refinement_dy = ((huffman_flags >> 12) & 3) as u8;
         huffman_refinement_size_selector = (huffman_flags & 0x4000) != 0;
         huffman_ri = (huffman_flags & 0x8000) != 0;
-    } // else default 0
+    }
 
     if refinement && refinement_template == 0 && pos + 4 <= end {
         for _ in 0..2 {
@@ -307,7 +307,7 @@ pub(super) fn on_intermediate_text_region(
             refinement_at.push((x, y));
             pos += 2;
         }
-    } // else default empty
+    }
 
     let instances_from_data = if pos + 4 <= end {
         Some(crate::segment::read_u32(data, pos))
@@ -373,7 +373,7 @@ pub(super) fn on_intermediate_text_region(
 
     let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
 
-    // Get Huffman tables if needed
+    // Build Huffman tables and readers when Huffman coding is enabled.
     let mut huffman_reader = if huffman {
         Some(Reader::new(slice.to_vec(), 0, slice.len()))
     } else {
@@ -425,7 +425,6 @@ pub(super) fn on_intermediate_text_region(
 
     let _bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
 
-    // Note: intermediate text region doesn't draw to current page
-    // The bitmap would typically be stored for later use, but current implementation doesn't
+    // Intermediate text regions currently return a decoded bitmap but do not store it.
     Ok(())
 }

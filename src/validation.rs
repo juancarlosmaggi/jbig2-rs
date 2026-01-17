@@ -1,14 +1,13 @@
 use crate::error::Jbig2Error;
 
+/// Validate bitmap dimensions and buffer sizing constraints.
 pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbig2Error> {
-    // Zero dimensions are allowed (empty bitmaps)
+    // Empty bitmaps are allowed.
     if width == 0 && height == 0 {
         return Ok(());
     }
 
-    // Prevent integer overflow when calculating bitmap buffer size
-    // stride = ((width - 1) / 8) + 1 bytes per row
-    // total_size = stride * height must not exceed INT32_MAX
+    // Prevent overflow when computing stride and total buffer size.
     let width_u32 = width as u32;
     let height_u32 = height as u32;
     let stride = if width_u32 == 0 {
@@ -28,6 +27,7 @@ pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbi
     Ok(())
 }
 
+/// Ensure the template index fits the supported range.
 pub fn validate_template_index(index: usize) -> Result<(), Jbig2Error> {
     if index > 3 {
         return Err(Jbig2Error::invalid_template_index(index, 3));
@@ -35,6 +35,7 @@ pub fn validate_template_index(index: usize) -> Result<(), Jbig2Error> {
     Ok(())
 }
 
+/// Ensure the symbol count fits within the segment field size.
 pub fn validate_symbol_count(count: usize) -> Result<(), Jbig2Error> {
     const MAX_SYMBOLS: usize = 16777215; // 2^24 - 1, maximum for 3-byte field
     if count > MAX_SYMBOLS {
@@ -43,6 +44,7 @@ pub fn validate_symbol_count(count: usize) -> Result<(), Jbig2Error> {
     Ok(())
 }
 
+/// Validate reference corner selection for text region decoding.
 pub fn validate_reference_corner(corner: usize) -> Result<(), Jbig2Error> {
     if corner > 3 {
         return Err(Jbig2Error::invalid_reference_corner(corner as u8));
@@ -50,6 +52,7 @@ pub fn validate_reference_corner(corner: usize) -> Result<(), Jbig2Error> {
     Ok(())
 }
 
+/// Validate combination operator selection for bitmap composition.
 pub fn validate_combination_operator(operator: usize) -> Result<(), Jbig2Error> {
     if operator > 7 {
         return Err(Jbig2Error::invalid_combination_operator(operator as u8));
@@ -57,6 +60,7 @@ pub fn validate_combination_operator(operator: usize) -> Result<(), Jbig2Error> 
     Ok(())
 }
 
+/// Validate generic region decode parameters.
 pub fn validate_generic_decode_params(
     width: usize,
     height: usize,
@@ -67,6 +71,7 @@ pub fn validate_generic_decode_params(
     Ok(())
 }
 
+/// Validate text region decode parameters.
 pub fn validate_text_decode_params(
     width: usize,
     height: usize,
@@ -79,6 +84,7 @@ pub fn validate_text_decode_params(
     Ok(())
 }
 
+/// Validate symbol dictionary decode parameters.
 pub fn validate_symbol_decode_params(
     template_index: usize,
     number_of_new_symbols: usize,

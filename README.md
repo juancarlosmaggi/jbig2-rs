@@ -1,46 +1,20 @@
 # JBIG2 Decoder in Rust
 
-A pure Rust implementation of a JBIG2 decoder, ported from Mozilla's PDF.js library.
+A pure Rust implementation of a JBIG2 decoder.
 
-## Description
+## Overview
 
-This crate provides a permissive JBIG2 decoder written entirely in Rust. JBIG2 is a lossless/lossy compression standard for bi-level images, commonly used in PDF files for scanned documents.
+This crate provides a permissive JBIG2 decoder written entirely in Rust. JBIG2 is a lossless/lossy compression standard for bi-level images, commonly used in document imaging workflows.
 
 ## Features
 
-- **Complete JBIG2 decoding**: Supports all major JBIG2 features including arithmetic coding, Huffman coding, and MMR compression
-- **Multi-page support**: Can decode JBIG2 documents with multiple pages
-- **Symbol dictionary support**: Handles both immediate and intermediate symbol dictionaries
-- **Text region decoding**: Supports text regions with symbol instances
-- **Halftone and generic regions**: Full support for halftone patterns and generic bitmap regions
-- **Refinement regions**: Supports refinement decoding for improved quality
-- **Custom Huffman tables**: Supports both standard and custom Huffman tables
-- **Error handling**: Comprehensive validation and error reporting
+- Complete JBIG2 decoding, including arithmetic coding, Huffman coding, and MMR compression
+- Multi-page document support
+- Symbol dictionary, text region, halftone region, generic region, and refinement region decoding
+- Standard and custom Huffman table handling
+- Validation and structured error reporting
 
-## Motivation
-
-The original JBIG2 implementation in PDF.js is written in JavaScript and licensed under Apache-2.0. This Rust port aims to provide a high-performance, memory-safe alternative that can be easily integrated into Rust applications, avoiding the need for JavaScript dependencies.
-
-## Original Source
-
-This implementation is a direct port of the JBIG2 decoder from [Mozilla's PDF.js](https://github.com/mozilla/pdf.js/blob/master/src/core/jbig2.js).
-
-## License
-
-Licensed under MIT OR Apache-2.0, same as the original.
-
-## Architecture
-
-The library is organized into focused modules:
-
-- **`segment`**: Segment parsing and processing (ITU T.88 section 7)
-- **`huffman`**: Huffman decoding with standard and custom tables
-- **`visitor`**: Segment handler pattern for processing decoded segments
-- **`decode`**: Format-specific decoders (MMR, symbol dictionary, text region, etc.)
-- **`image`**: High-level API for document and page management
-- **`arithmetic`**: Arithmetic decoder implementation
-
-## Usage
+## Getting Started
 
 Add this to your `Cargo.toml`:
 
@@ -49,75 +23,186 @@ Add this to your `Cargo.toml`:
 jbig2-rs = "0.1.0"
 ```
 
-### Basic Usage
-
-Decode a JBIG2 file and access the first page:
+### Decode a File
 
 ```rust
 use jbig2_rs::Jbig2Document;
 use std::fs;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Read file data
     let data = fs::read("document.jb2")?;
-    
-    // Parse document
     let document = Jbig2Document::parse(&data)?;
-    
-    println!("Document has {} pages", document.page_count());
-    
-    // Get the first page
+
+    println!("pages: {}", document.page_count());
+
     if let Some(page) = document.get_page(0) {
-        println!("Page dimensions: {}x{}", page.page_info.width, page.page_info.height);
-        
-        // Get raw bitmap data (1 bit per pixel, packed)
-        let bitmap_data = page.to_image_data();
-        
-        // Do something with the data...
+        println!("size: {}x{}", page.page_info.width, page.page_info.height);
+        let bitmap = page.to_image_data();
+        println!("bitmap bytes: {}", bitmap.len());
     }
-    
+
     Ok(())
 }
 ```
 
-### Chunk-Based Decoding
+### Decode Chunks
 
-Decode JBIG2 data embedded in PDF streams (split into chunks):
+Use chunk decoding when the input arrives in multiple buffers.
 
 ```rust
-use jbig2_rs::{Jbig2Document, Jbig2Chunk};
+use jbig2_rs::{Jbig2Chunk, Jbig2Document};
 
 fn decode_chunks(global_data: Vec<u8>, page_data: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
     let chunks = vec![
         Jbig2Chunk {
             data: global_data,
             start: 0,
-            end: 0, // Set to data length
+            end: global_data.len(),
         },
         Jbig2Chunk {
             data: page_data,
             start: 0,
-            end: 0, // Set to data length
+            end: page_data.len(),
         },
     ];
-    
+
     let document = Jbig2Document::parse_chunks(&chunks)?;
-    // ...
+    println!("pages: {}", document.page_count());
     Ok(())
+}
+```
+
+## Output Format
+
+- `page.to_image_data()` returns a packed 1bpp bitmap
+- 8 pixels per byte, MSB-first
+- `stride = (width + 7) / 8`
+
+### Write a PNG
+
+This example expands the packed 1bpp bitmap and writes a PNG file. Add `image` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+image = "0.24"
+jbig2-rs = "0.1.0"
+```
+
+```rust
+use image::{GrayImage, Luma};
+use jbig2_rs::Jbig2Document;
+use std::fs;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let data = fs::read("document.jb2")?;
+    let document = Jbig2Document::parse(&data)?;
+    let page = document.get_page(0).ok_or("no pages")?;
+
+    let width = page.page_info.width as u32;
+    let height = page.page_info.height as u32;
+    let packed = page.to_image_data();
+    let stride = ((width as usize) + 7) / 8;
+
+    let mut img = GrayImage::new(width, height);
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let byte = packed[y * stride + (x >> 3)];
+            let bit = (byte >> (7 - (x & 7))) & 1;
+            let gray = if bit == 1 { 0 } else { 255 };
+            img.put_pixel(x as u32, y as u32, Luma([gray]));
+        }
+    }
+
+    img.save("page_0.png")?;
+    Ok(())
+}
+```
+
+### Write a PBM (No Extra Dependencies)
+
+PBM is a simple 1bpp format. You can write it directly from the packed bitmap:
+
+```rust
+use jbig2_rs::Jbig2Document;
+use std::fs;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let data = fs::read("document.jb2")?;
+    let document = Jbig2Document::parse(&data)?;
+    let page = document.get_page(0).ok_or("no pages")?;
+
+    let width = page.page_info.width as usize;
+    let height = page.page_info.height as usize;
+    let packed = page.to_image_data();
+
+    let mut out = Vec::new();
+    out.extend_from_slice(b"P4\n");
+    out.extend_from_slice(format!(\"{} {}\\n\", width, height).as_bytes());
+    out.extend_from_slice(&packed);
+
+    fs::write(\"page_0.pbm\", out)?;
+    Ok(())
+}
+```
+
+### Expand to 8-bit Grayscale
+
+```rust
+fn expand_to_grayscale(width: usize, height: usize, packed: &[u8]) -> Vec<u8> {
+    let stride = (width + 7) / 8;
+    let mut pixels = vec![0u8; width * height];
+
+    for y in 0..height {
+        for x in 0..width {
+            let byte = packed[y * stride + (x >> 3)];
+            let bit = (byte >> (7 - (x & 7))) & 1;
+            pixels[y * width + x] = if bit == 1 { 0 } else { 255 };
+        }
+    }
+
+    pixels
 }
 ```
 
 ## Examples
 
-The repository includes runnable examples:
-
 ```bash
-# Decode a file and save raw bitmap
+# Decode a file and save raw bitmap output
 cargo run --example decode_file -- input.jb2 output.bin
 
 # Run chunk decoding example
 cargo run --example decode_chunks
 ```
+
+## CLI
+
+This repository includes a CLI tool that decodes a JBIG2 file into PNG pages.
+
+```bash
+# Build the CLI binary
+cargo build --bin jbig2-decoder
+
+# Decode to PNG files in the current directory
+./target/debug/jbig2-decoder --input input.jb2
+
+# Decode to PNG files in a specific directory with a custom prefix
+./target/debug/jbig2-decoder --input input.jb2 --output-dir out --prefix doc
+```
+
+Flags:
+
+- `--input`, `-i`: Input `.jb2` file path (required)
+- `--output-dir`, `-o`: Output directory (default `.`)
+- `--prefix`, `-p`: Output filename prefix (default is input file stem)
+
+## Architecture
+
+- `segment`: Segment parsing and processing
+- `huffman`: Huffman decoding and table management
+- `visitor`: Segment visitor and page assembly
+- `decode`: Region and coding-mode decoders
+- `image`: Document and page types
+- `arithmetic`: Arithmetic decoder implementation
 
 ## Building
 
@@ -130,3 +215,7 @@ cargo build
 ```bash
 cargo test
 ```
+
+## License
+
+Licensed under MIT OR Apache-2.0.

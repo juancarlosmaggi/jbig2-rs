@@ -2,6 +2,7 @@ use crate::bitmap::Bitmap;
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
 
+/// Read a raw 1bpp bitmap from the bitstream, row by row.
 pub fn read_uncompressed_bitmap(
     reader: &mut Reader,
     width: usize,

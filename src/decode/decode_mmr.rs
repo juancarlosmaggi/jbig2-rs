@@ -3,8 +3,7 @@ use crate::bitmap::Bitmap;
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
 
-// CCITT Group 4 (MMR) decoder implementation
-// Based on ITU-T T.6 specification, with JBIG2-specific robustness improvements
+// CCITT Group 4 (MMR) decoder implementation with robustness checks.
 #[derive(Clone)]
 struct CCITTFaxDecoder {
     reader: Reader,
@@ -67,7 +66,7 @@ impl CCITTFaxDecoder {
                     if self.trace {
                         self.invalid_modes = self.invalid_modes.saturating_add(1);
                     }
-                    // Invalid code or end-of-data → finish line with white (jbig2dec behavior)
+                    // Invalid code or end-of-data; finish the line with white.
                     break;
                 }
             };
@@ -155,7 +154,7 @@ impl CCITTFaxDecoder {
             }
         }
 
-        // Remaining pixels on line (after invalid code or early end) are white
+        // Remaining pixels after early termination stay white.
         Ok(())
     }
 
@@ -163,7 +162,7 @@ impl CCITTFaxDecoder {
         let mut code: u32 = 0;
         let mut length: usize = 0;
 
-        // First try normal modes (1–7 bits)
+        // First try normal modes (1–7 bits).
         for _ in 0..7 {
             let bit = self.read_bit()? as u32;
             code = (code << 1) | bit;
@@ -185,9 +184,9 @@ impl CCITTFaxDecoder {
             }
         }
 
-        // If end_of_block, check for EOFB (24-bit 0x001001) without consuming bits unless it matches
+        // If end_of_block, look for the EOFB marker without consuming bits unless matched.
         if self.end_of_block {
-            // Save full reader state
+            // Save full reader state.
             let saved_pos = self.reader.get_position();
             let saved_shift = self.reader.get_shift();
             let saved_current_byte = self.reader.get_current_byte();
@@ -211,9 +210,9 @@ impl CCITTFaxDecoder {
             }
 
             if matched {
-                return Ok(9); // EOFB
+                return Ok(9);
             } else {
-                // Restore full state if not matched
+                // Restore state if the marker was not matched.
                 self.reader.set_position(saved_pos);
                 self.reader.set_shift(saved_shift);
                 self.reader.set_current_byte(saved_current_byte);
@@ -273,13 +272,13 @@ impl CCITTFaxDecoder {
             let mut clen = 0usize;
             let mut found_makeup = false;
 
-            // Read up to 14 bits (max for any single code is 13 bits +1? but safe)
+            // Read up to 14 bits to cover the longest code.
             while clen < 14 {
                 let bit = self.read_bit()? as u32;
                 code = (code << 1) | bit;
                 clen += 1;
 
-                // Terminating code?
+                // Check for a terminating code.
                 let term = if white {
                     get_white_run(code, clen)
                 } else {
@@ -290,7 +289,7 @@ impl CCITTFaxDecoder {
                     return Ok(total);
                 }
 
-                // Make-up code?
+                // Check for a make-up code.
                 let makeup = if white {
                     get_white_makeup(code, clen)
                 } else {
@@ -299,16 +298,16 @@ impl CCITTFaxDecoder {
                 if makeup >= 0 {
                     total += makeup;
                     found_makeup = true;
-                    break; // go to next code (should be terminating)
+                    break;
                 }
             }
 
-            // If we found a makeup code, continue to read the next code
+            // If we found a makeup code, continue to read the next code.
             if found_makeup {
                 continue;
             }
 
-            // Fell off end without matching terminating or makeup → invalid
+            // Fell off the end without a match.
             return Err(Jbig2Error::new("invalid run-length code"));
         }
     }
@@ -326,7 +325,7 @@ impl CCITTFaxDecoder {
             }
 
             std::mem::swap(&mut self.ref_line, &mut self.curr_line);
-            self.curr_line.fill(0); // new current line starts white
+            self.curr_line.fill(0);
 
             y += 1;
         }
@@ -335,6 +334,7 @@ impl CCITTFaxDecoder {
     }
 }
 
+/// Decode an MMR-encoded bitmap from the reader.
 pub fn decode_mmr_bitmap(
     input: &mut Reader,
     width: usize,

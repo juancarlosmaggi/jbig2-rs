@@ -11,6 +11,7 @@ use crate::huffman::{SymbolDictionaryHuffmanTables, get_standard_table};
 use crate::reader::Reader;
 use crate::validation;
 
+/// Inputs required to decode a symbol dictionary segment.
 #[derive(Clone)]
 pub struct SymbolDictionaryParams {
     pub huffman: bool,
@@ -25,6 +26,7 @@ pub struct SymbolDictionaryParams {
     pub huffman_tables: Option<SymbolDictionaryHuffmanTables>,
 }
 
+/// Decode a symbol dictionary and return the exported symbols.
 pub fn decode_symbol_dictionary(
     params: &SymbolDictionaryParams,
     decoding_context: &mut DecodingContext,
@@ -46,9 +48,9 @@ pub fn decode_symbol_dictionary(
         // return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
 
-    // Validate that Huffman tables are provided when Huffman mode is enabled
+    // Validate that Huffman tables are provided when Huffman mode is enabled.
     if params.huffman && params.huffman_tables.is_none() {
-            return Err(Jbig2Error::new(
+        return Err(Jbig2Error::new(
             "Huffman tables required when Huffman mode is enabled",
         ));
     }
@@ -89,7 +91,7 @@ pub fn decode_symbol_dictionary(
     };
 
     while new_symbols.len() < params.number_of_new_symbols {
-        // Height class delta height (IADH / SDHUFFDH)
+        // Decode the delta for the next height class.
         let delta_height: i32 = if huffman {
             let tables = huffman_tables.unwrap();
             let (val, oob) = tables
@@ -122,7 +124,6 @@ pub fn decode_symbol_dictionary(
                 neg_delta_height = neg_delta_height.saturating_add(1);
             }
         }
-        // removed arbitrary limit to match reference decoders
         if current_height < 0 {
             return Err(Jbig2Error::new("invalid height class value"));
         }
@@ -136,7 +137,7 @@ pub fn decode_symbol_dictionary(
         let current_height_usize = current_height as usize;
 
         loop {
-            // Delta width (IADW / SDHUFFDW)
+            // Decode the delta width for this height class.
             let dw: i32 = if huffman {
                 let tables = huffman_tables.unwrap();
                 let (val, oob) = tables
@@ -168,11 +169,9 @@ pub fn decode_symbol_dictionary(
                     "DW value would make symbol width negative",
                 ));
             }
-            // unsigned
             total_width = total_width
                 .checked_add(current_width)
                 .ok_or_else(|| Jbig2Error::new("total width overflow"))?;
-            // removed arbitrary limit
 
             let current_width_usize = current_width as usize;
             if trace_symbol {
@@ -182,7 +181,7 @@ pub fn decode_symbol_dictionary(
                 max_symbol_height = max_symbol_height.max(current_height_usize);
             }
             if refinement {
-                // Number of instances (IAAI / SDHUFFAGGINST)
+                // Decode the instance count for refinement aggregation.
                 let instances = if huffman {
                     let tables = huffman_tables.unwrap();
                     let (val, oob) = tables
@@ -285,7 +284,7 @@ pub fn decode_symbol_dictionary(
                         huffman_input.as_mut().unwrap().skip(bmsize);
                     }
                 } else {
-                    // Aggregate symbol
+                    // Decode an aggregate symbol from multiple instances.
                     let agg_params = AggregateSymbolParams {
                         current_width,
                         current_height,
@@ -308,7 +307,7 @@ pub fn decode_symbol_dictionary(
             } else if huffman {
                 symbol_widths.push(current_width_usize);
             } else {
-                // Direct arithmetic-coded symbol bitmap
+                // Decode a directly coded symbol bitmap.
                 let bitmap = crate::decode::decode_generic::decode_bitmap(
                     &crate::decode::decode_generic::DecodeBitmapParams {
                         mmr: false,
@@ -329,7 +328,7 @@ pub fn decode_symbol_dictionary(
             }
         }
 
-        // Collective bitmap for Huffman + direct mode
+        // Decode a collective bitmap for Huffman direct-mode symbols.
         if huffman
             && !refinement
             && !symbol_widths.is_empty()
@@ -492,7 +491,7 @@ pub fn decode_symbol_dictionary(
         }
     }
 
-    // Exported symbols
+    // Build the export list based on run-length flags.
     let total_symbols = params.symbols.len() + new_symbols.len();
     let mut flags = Vec::with_capacity(total_symbols);
 
@@ -543,7 +542,7 @@ pub fn decode_symbol_dictionary(
             export = !export;
         }
     } else {
-        // Arithmetic mode – IAEX run-lengths toggle export flag (spec 6.5.10)
+        // Arithmetic mode uses run-lengths to toggle export flags.
         let mut export = false;
         let mut i = 0usize;
         let mut exported_count = 0usize;

@@ -1,6 +1,6 @@
 use std::fmt;
 
-// Legacy error constants - will be phased out
+// Legacy error strings kept for older call sites; prefer Jbig2Error constructors.
 pub const ERR_INVALID_DIMENSIONS: &str =
     "invalid bitmap dimensions: width and height must be positive";
 pub const ERR_DIMENSIONS_TOO_LARGE: &str = "bitmap dimensions too large";
@@ -9,7 +9,7 @@ pub const ERR_TOO_MANY_SYMBOLS: &str = "too many symbols";
 pub const ERR_INVALID_REFERENCE_CORNER: &str = "invalid reference corner";
 pub const ERR_INVALID_COMBINATION_OPERATOR: &str = "invalid combination operator";
 
-/// Structured error information providing context for debugging
+/// Optional contextual details attached to an error instance.
 #[derive(Debug, Clone, Default)]
 pub struct ErrorContext {
     pub position: Option<usize>,
@@ -17,10 +17,10 @@ pub struct ErrorContext {
     pub segment_type: Option<usize>,
 }
 
-/// Specific error categories for JBIG2 decoding failures
+/// Specific error categories produced during parsing, validation, and decoding.
 #[derive(Debug, Clone)]
 pub enum Jbig2ErrorKind {
-    // Parsing errors
+    // Parsing errors.
     InsufficientData {
         required: usize,
         available: usize,
@@ -34,7 +34,7 @@ pub enum Jbig2ErrorKind {
         value: String,
     },
 
-    // Validation errors
+    // Validation errors.
     InvalidDimensions {
         width: usize,
         height: usize,
@@ -55,7 +55,7 @@ pub enum Jbig2ErrorKind {
         corner: u8,
     },
 
-    // Decoding errors
+    // Decoding errors.
     MmrDecodingFailed {
         reason: String,
     },
@@ -69,7 +69,7 @@ pub enum Jbig2ErrorKind {
         length: i32,
     },
 
-    // Resource errors
+    // Resource errors.
     TooManySymbols {
         count: usize,
         max: usize,
@@ -85,18 +85,18 @@ pub enum Jbig2ErrorKind {
         resource: String,
     },
 
-    // Feature errors
+    // Feature errors.
     UnsupportedFeature {
         feature: String,
     },
 
-    // Generic fallback for gradual migration
+    // Generic fallback for gradual migration.
     Other {
         message: String,
     },
 }
 
-/// Main error type for JBIG2 operations
+/// Primary error type used throughout the decoding pipeline.
 #[derive(Debug, Clone)]
 pub struct Jbig2Error {
     pub kind: Jbig2ErrorKind,
@@ -104,8 +104,7 @@ pub struct Jbig2Error {
 }
 
 impl Jbig2Error {
-    /// Legacy constructor for backward compatibility
-    /// Prefer using specific error constructors (e.g., `insufficient_data()`)
+    /// Legacy constructor for backward compatibility; prefer specific helpers.
     pub fn new(msg: &str) -> Self {
         Jbig2Error {
             kind: Jbig2ErrorKind::Other {
@@ -115,7 +114,7 @@ impl Jbig2Error {
         }
     }
 
-    // Parsing error constructors
+    // Constructors for parsing errors.
 
     pub fn insufficient_data(required: usize, available: usize) -> Self {
         Self {
@@ -153,7 +152,7 @@ impl Jbig2Error {
         }
     }
 
-    // Validation error constructors
+    // Constructors for validation errors.
 
     pub fn invalid_dimensions(width: usize, height: usize) -> Self {
         Self {
@@ -190,7 +189,7 @@ impl Jbig2Error {
         }
     }
 
-    // Decoding error constructors
+    // Constructors for decoding errors.
 
     pub fn mmr_decoding_failed(reason: impl Into<String>) -> Self {
         Self {
@@ -219,7 +218,7 @@ impl Jbig2Error {
         }
     }
 
-    // Resource error constructors
+    // Constructors for resource and bounds errors.
 
     pub fn too_many_symbols(count: usize, max: usize) -> Self {
         Self {
@@ -262,7 +261,7 @@ impl Jbig2Error {
         }
     }
 
-    // Context builders (fluent API)
+    // Fluent helpers for attaching context.
 
     pub fn with_position(mut self, pos: usize) -> Self {
         self.context
@@ -292,7 +291,7 @@ impl fmt::Display for Jbig2Error {
 
         write!(f, "Jbig2Error: ")?;
 
-        // Format the error kind
+        // Describe the primary error variant.
         match &self.kind {
             InsufficientData {
                 required,
@@ -368,7 +367,7 @@ impl fmt::Display for Jbig2Error {
             }
         }
 
-        // Add context if available
+        // Append contextual fields when present.
         if let Some(ctx) = &self.context
             && (ctx.position.is_some()
                 || ctx.segment_number.is_some()

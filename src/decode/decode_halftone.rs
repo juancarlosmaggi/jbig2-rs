@@ -5,6 +5,7 @@ use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
 use std::path::PathBuf;
 
+/// Inputs needed to decode a halftone region.
 #[derive(Clone)]
 pub struct HalftoneRegionParams {
     pub mmr: bool,
@@ -23,6 +24,7 @@ pub struct HalftoneRegionParams {
     pub grid_vector_y: i16,
 }
 
+/// Decode a halftone region bitmap from the supplied parameters and context.
 pub fn decode_halftone_region(
     params: &HalftoneRegionParams,
     decoding_context: &mut DecodingContext,
@@ -30,7 +32,7 @@ pub fn decode_halftone_region(
     if params.combination_operator != 0 {
         return Err(Jbig2Error::new("only OR combination operator is supported"));
     }
-    // Prepare bitmap
+    // Initialize the output bitmap.
     let mut region_bitmap = bitmap_utils::create_initialized_bitmap(
         params.region_width,
         params.region_height,
@@ -54,7 +56,7 @@ pub fn decode_halftone_region(
     } else {
         vec![]
     };
-    // Skip bitmap (computed from geometry, not decoded)
+    // Build a skip bitmap from the grid geometry when enabled.
     let skip_bitmap = if params.enable_skip {
         let mut skip = Bitmap::new(params.grid_width, params.grid_height);
         for mg in 0..params.grid_height {
@@ -80,7 +82,7 @@ pub fn decode_halftone_region(
     } else {
         None
     };
-    // Gray-scale bit planes (decoded MSB -> LSB, then gray-decode via XOR)
+    // Decode gray-scale bit planes from MSB to LSB, then gray-decode with XOR.
     let mut gray_scale_bit_planes =
         vec![Bitmap::new(params.grid_width, params.grid_height); bits_per_value];
     for j in (0..bits_per_value).rev() {
@@ -132,7 +134,7 @@ pub fn decode_halftone_region(
         std::fs::write(&path, out)
             .map_err(|e| Jbig2Error::new(&format!("halftone grid dump failed: {e}")))?;
     }
-    // Render patterns
+    // Render patterns into the output bitmap using the grid geometry.
     for mg in 0..params.grid_height {
         for ng in 0..params.grid_width {
             let pattern_index = pattern_indices[mg * params.grid_width + ng];
@@ -156,7 +158,7 @@ pub fn decode_halftone_region(
                         let src_pixel = pattern_bitmap.get_pixel(j, i);
                         let dst_pixel = region_bitmap
                             .get_pixel((x + j as i32) as usize, (y + i as i32) as usize);
-                        let new_pixel = src_pixel | dst_pixel; // OR
+                        let new_pixel = src_pixel | dst_pixel;
                         region_bitmap.set_pixel(
                             (x + j as i32) as usize,
                             (y + i as i32) as usize,
@@ -165,7 +167,7 @@ pub fn decode_halftone_region(
                     }
                 }
             } else {
-                // Handle partial patterns at edges
+                // Handle partial patterns that fall outside the region bounds.
                 for i in 0..pattern_height {
                     let region_y = y + i as i32;
                     if region_y < 0 || region_y >= params.region_height as i32 {
@@ -177,7 +179,7 @@ pub fn decode_halftone_region(
                             let src_pixel = pattern_bitmap.get_pixel(j, i);
                             let dst_pixel =
                                 region_bitmap.get_pixel(region_x as usize, region_y as usize);
-                            let new_pixel = src_pixel | dst_pixel; // OR
+                            let new_pixel = src_pixel | dst_pixel;
                             region_bitmap.set_pixel(
                                 region_x as usize,
                                 region_y as usize,

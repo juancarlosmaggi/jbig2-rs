@@ -1,6 +1,7 @@
 use super::{HuffmanLine, HuffmanTable};
 use crate::error::Jbig2Error;
 
+/// Return one of the predefined Huffman tables by id.
 pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
     if number == 0 || number > 15 {
         return Err(Jbig2Error::new("invalid standard Huffman table number"));

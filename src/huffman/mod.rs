@@ -1,52 +1,10 @@
-//! Huffman Decoding for JBIG2
-//!
-//! This module implements Huffman decoding used in JBIG2 for various encoding tasks,
-//! including symbol widths, height deltas, and text region symbol IDs.
-//!
-//! ## Overview
-//!
-//! JBIG2 uses Huffman coding as one of its entropy coding methods (alongside arithmetic coding).
-//! Huffman tables can be either predefined standard tables or custom tables defined within
-//! the data stream.
-//!
-//! ## Standard Tables
-//!
-//! The JBIG2 specification defines 16 standard Huffman tables (ITU T.88 Annex B):
-//! - Tables A-D: Out-of-band (OOB) values supported
-//! - Table E: Special table for HCHEIGHT
-//! - Tables 1-16: Various standard encodings
-//!
-//! Standard tables are accessed via [`get_standard_table`].
-//!
-//! ## Custom Tables
-//!
-//! Custom Huffman tables can be defined in Table segments (type 53) and referenced
-//! by other segments. Custom tables are parsed via [`decode_tables_segment`].
-//!
-//! ## Module Structure
-//!
-//! - **`standard_tables`** - Predefined standard Huffman tables
-//! - **`table_selectors`** - Table selection logic for symbol dictionaries and text regions
-//!
-//! ## Usage
-//!
-//! ```no_run
-//! use jbig2_rs::huffman::get_standard_table;
-//! use jbig2_rs::reader::Reader;
-//!
-//! # fn example() -> Result<(), jbig2_rs::Jbig2Error> {
-//! let table = get_standard_table(1)?;
-//! let mut reader = Reader::new(vec![0x12, 0x34], 0, 2);
-//! let value = table.decode(&mut reader)?;
-//! # Ok(())
-//! # }
-//! ```
+//! Huffman decoding support used by multiple region decoders.
 
-// Huffman module - organized into focused submodules
+// Huffman module split into tables and selector helpers.
 mod standard_tables;
 mod table_selectors;
 
-// Re-export public types and functions
+// Re-export public types and functions.
 pub use standard_tables::get_standard_table;
 pub use table_selectors::{
     SymbolDictionaryHuffmanTables, TextRegionHuffmanParams, TextRegionHuffmanTables,
@@ -54,10 +12,11 @@ pub use table_selectors::{
     get_symbol_dictionary_huffman_tables, get_text_region_huffman_tables,
 };
 
-// Core Huffman types and decoding logic
+// Core Huffman types and decoding logic.
 use crate::error::Jbig2Error;
 use crate::reader::Reader;
 
+/// Represents a single line in a Huffman table definition.
 #[derive(Clone)]
 pub struct HuffmanLine {
     pub is_oob: bool,
@@ -69,9 +28,10 @@ pub struct HuffmanLine {
 }
 
 impl HuffmanLine {
+    /// Build a Huffman line from the parsed numeric representation.
     pub fn new(line_data: Vec<i32>) -> Self {
         if line_data.len() == 2 {
-            // OOB line
+            // OOB line.
             HuffmanLine {
                 is_oob: true,
                 range_low: 0,
@@ -81,19 +41,20 @@ impl HuffmanLine {
                 is_lower_range: false,
             }
         } else {
-            // Normal, upper range or lower range line
+            // Normal, upper range, or lower range line.
             HuffmanLine {
                 is_oob: false,
                 range_low: line_data[0],
                 prefix_length: line_data[1] as u32,
                 range_length: line_data[2] as u32,
                 prefix_code: line_data[3] as u32,
-                is_lower_range: line_data.len() > 4 && line_data[4] == 1, // "lower" as 1
+                is_lower_range: line_data.len() > 4 && line_data[4] == 1,
             }
         }
     }
 }
 
+/// Binary tree node used to decode Huffman codes.
 pub struct HuffmanTreeNode {
     pub children: [Option<Box<HuffmanTreeNode>>; 2],
     pub is_leaf: bool,
@@ -120,6 +81,7 @@ impl Clone for HuffmanTreeNode {
 }
 
 impl HuffmanTreeNode {
+    /// Create a leaf node from a Huffman line definition.
     pub fn new_leaf(line: &HuffmanLine) -> Self {
         HuffmanTreeNode {
             children: [None, None],
@@ -131,6 +93,7 @@ impl HuffmanTreeNode {
         }
     }
 
+    /// Create an internal tree node.
     pub fn new_intermediate() -> Self {
         HuffmanTreeNode {
             children: [None, None],
@@ -142,6 +105,7 @@ impl HuffmanTreeNode {
         }
     }
 
+    /// Insert a Huffman line into the decode tree.
     pub fn build_tree(&mut self, line: &HuffmanLine, shift: u32) {
         let bit = ((line.prefix_code >> shift) & 1) as usize;
         if shift == 0 {
@@ -156,10 +120,11 @@ impl HuffmanTreeNode {
         }
     }
 
+    /// Decode a value by walking the tree with incoming bits.
     pub fn decode_node(&self, reader: &mut Reader) -> Result<(i32, bool), Jbig2Error> {
         if self.is_leaf {
             if self.is_oob {
-                return Ok((0, true)); // OOB
+                return Ok((0, true));
             }
             let ht_offset = reader.read_bits(self.range_length)?;
             let val = self.range_low
@@ -180,12 +145,14 @@ impl HuffmanTreeNode {
     }
 }
 
+/// Huffman table with a decoded binary tree.
 #[derive(Clone)]
 pub struct HuffmanTable {
     pub root_node: HuffmanTreeNode,
 }
 
 impl HuffmanTable {
+    /// Build a table from line definitions, assigning prefix codes as needed.
     pub fn new(mut lines: Vec<HuffmanLine>, prefix_codes_done: bool) -> Self {
         if !prefix_codes_done {
             Self::assign_prefix_codes(&mut lines);
@@ -199,14 +166,17 @@ impl HuffmanTable {
         HuffmanTable { root_node: root }
     }
 
+    /// Decode a value from the input stream.
     pub fn decode(&self, reader: &mut Reader) -> Result<i32, Jbig2Error> {
         self.root_node.decode_node(reader).map(|(val, _)| val)
     }
 
+    /// Decode a value and return whether it was an OOB marker.
     pub fn decode_entry(&self, reader: &mut Reader) -> Result<(i32, bool), Jbig2Error> {
         self.root_node.decode_node(reader)
     }
 
+    /// Assign canonical prefix codes based on line prefix lengths.
     fn assign_prefix_codes(lines: &mut Vec<HuffmanLine>) {
         let mut prefix_length_max = 0;
         for line in &*lines {

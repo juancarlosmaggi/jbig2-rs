@@ -18,7 +18,7 @@ mod tests {
             default_pixel_value: 0,
             number_of_symbol_instances: 1,
             strip_size: 1,
-            input_symbols: vec![], // Empty symbols
+            input_symbols: vec![],
             symbol_code_length: 1,
             transposed: false,
             ds_offset: 0,
@@ -38,7 +38,6 @@ mod tests {
     fn test_decode_text_region_transposed() {
         let data = vec![0u8; 1000];
         let mut context = DecodingContext::new(data.clone(), 0, data.len());
-        // Initialize arithmetic decoder for testing
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol = Bitmap::new(8, 8);
 
@@ -52,7 +51,7 @@ mod tests {
             strip_size: 1,
             input_symbols: vec![symbol],
             symbol_code_length: 1,
-            transposed: true, // Test transposed
+            transposed: true,
             ds_offset: 0,
             reference_corner: 0,
             combination_operator: 0,
@@ -63,7 +62,6 @@ mod tests {
         };
 
         let result = decode_text_region(&params, &mut context, None);
-        // Should handle transposed symbols without crashing
         let _ = result;
     }
 
@@ -85,7 +83,7 @@ mod tests {
             symbol_code_length: 1,
             transposed: false,
             ds_offset: 0,
-            reference_corner: 4, // Invalid (should be 0-3)
+            reference_corner: 4,
             combination_operator: 0,
             log_strip_size: 0,
             huffman_tables: None,
@@ -116,7 +114,7 @@ mod tests {
             transposed: false,
             ds_offset: 0,
             reference_corner: 0,
-            combination_operator: 13, // Invalid (should be 0-12)
+            combination_operator: 13,
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
@@ -135,7 +133,7 @@ mod tests {
 
         let params = TextRegionParams {
             huffman: true,
-            refinement: true, // Invalid combination
+            refinement: true,
             width: 100,
             height: 100,
             default_pixel_value: 0,
@@ -161,7 +159,6 @@ mod tests {
     fn test_decode_text_region_with_huffman_no_tables() {
         let data = vec![0u8; 100];
         let mut context = DecodingContext::new(data.clone(), 0, data.len());
-        // Initialize arithmetic decoder for testing
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol = Bitmap::new(8, 8);
 
@@ -180,7 +177,7 @@ mod tests {
             reference_corner: 0,
             combination_operator: 0,
             log_strip_size: 0,
-            huffman_tables: None, // Missing tables for Huffman
+            huffman_tables: None,
             refinement_template_index: 0,
             refinement_at: vec![],
         };
@@ -193,7 +190,6 @@ mod tests {
     fn test_decode_text_region_valid_minimal() {
         let data = vec![0u8; 1000];
         let mut context = DecodingContext::new(data.clone(), 0, data.len());
-        // Initialize arithmetic decoder for testing
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol = Bitmap::new(8, 8);
 
@@ -218,7 +214,6 @@ mod tests {
         };
 
         let result = decode_text_region(&params, &mut context, None);
-        // With dummy data, this may fail, but should not panic
         let _ = result;
     }
 
@@ -226,7 +221,6 @@ mod tests {
     fn test_decode_text_region_with_multiple_symbols() {
         let data = vec![0u8; 1000];
         let mut context = DecodingContext::new(data.clone(), 0, data.len());
-        // Initialize arithmetic decoder for testing
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol1 = Bitmap::new(8, 8);
         let symbol2 = Bitmap::new(8, 8);
@@ -252,7 +246,6 @@ mod tests {
         };
 
         let result = decode_text_region(&params, &mut context, None);
-        // Should handle multiple symbols without crashing
         let _ = result;
     }
 }

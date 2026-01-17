@@ -17,6 +17,7 @@ const IADT_INDEX: usize = 13;
 const IAIT_INDEX: usize = 14;
 const IADS_INDEX: usize = 15;
 
+/// Lazily allocated arithmetic context storage keyed by symbolic IDs.
 pub struct ContextCache {
     contexts: [Vec<i8>; 16],
     initialized: [bool; 16],
@@ -29,6 +30,7 @@ impl Default for ContextCache {
 }
 
 impl ContextCache {
+    /// Create an empty cache with no context vectors initialized.
     pub fn new() -> Self {
         ContextCache {
             contexts: Default::default(),
@@ -36,6 +38,7 @@ impl ContextCache {
         }
     }
 
+    /// Return the context vector for a given ID, allocating it on first use.
     pub fn get_contexts(&mut self, id: &str) -> &mut Vec<i8> {
         let index = match id {
             "GB" => GB_INDEX,
@@ -64,6 +67,7 @@ impl ContextCache {
     }
 }
 
+/// Holds shared decoding state, including the arithmetic decoder and contexts.
 pub struct DecodingContext {
     pub data: Vec<u8>,
     pub start: usize,
@@ -73,6 +77,7 @@ pub struct DecodingContext {
 }
 
 impl DecodingContext {
+    /// Build a decoding context over the provided data slice bounds.
     pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
         DecodingContext {
             data,
@@ -86,6 +91,7 @@ impl DecodingContext {
     pub fn get_decoder(&self) -> std::cell::RefMut<'_, crate::arithmetic::ArithmeticDecoder> {
         let mut opt = self.decoder.borrow_mut();
         if opt.is_none() {
+            // Initialize on demand so callers can reuse the same stateful decoder.
             *opt = Some(crate::arithmetic::ArithmeticDecoder::new(
                 &self.data[self.start..self.end],
             ));
@@ -93,10 +99,12 @@ impl DecodingContext {
         std::cell::RefMut::map(opt, |o| o.as_mut().unwrap())
     }
 
+    /// Borrow the mutable arithmetic contexts for the requested ID.
     pub fn get_contexts(&self, id: &str) -> std::cell::RefMut<'_, Vec<i8>> {
         std::cell::RefMut::map(self.context_cache.borrow_mut(), |c| c.get_contexts(id))
     }
 
+    /// Report how many bytes the decoder has consumed so far.
     pub fn get_bytes_read(&self) -> usize {
         if let Some(decoder) = self.decoder.borrow().as_ref() {
             decoder.get_bytes_read()

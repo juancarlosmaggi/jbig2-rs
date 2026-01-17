@@ -13,7 +13,7 @@ mod tests {
         let template = jbig2_rs::decode::decode_generic::get_coding_template(index);
         assert_eq!(template.len(), expected_len);
 
-        // Verify coordinates are within reasonable bounds
+        // Ensure template coordinates are within expected bounds.
         for &(x, y) in template {
             assert!((-4..=2).contains(&x));
             assert!((-2..=0).contains(&y));
@@ -24,7 +24,7 @@ mod tests {
     fn test_get_coding_template_template0() {
         let template = jbig2_rs::decode::decode_generic::get_coding_template(0);
         assert_eq!(template.len(), 12);
-        // Check specific positions
+        // Spot-check specific positions.
         assert_eq!(template[0], (-1, -2));
         assert_eq!(template[1], (0, -2));
         assert_eq!(template[2], (1, -2));

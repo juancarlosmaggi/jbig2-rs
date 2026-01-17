@@ -3,7 +3,7 @@ use jbig2_rs::image::Jbig2Document;
 use std::fs;
 use std::path::Path;
 
-/// JBIG2 Decoder CLI Tool
+/// Command-line entry point for decoding a JBIG2 file into per-page images.
 #[derive(Parser)]
 #[command(name = "jbig2-decoder")]
 #[command(about = "Decode JBIG2 files to images")]
@@ -25,16 +25,15 @@ struct Args {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    // Read the input file
     let input_path = Path::new(&args.input);
     if !input_path.exists() {
         eprintln!("Error: Input file '{}' does not exist", args.input);
         std::process::exit(1);
     }
 
+    // Validate input path early to give a clear CLI error before decoding.
     let data = fs::read(&args.input)?;
 
-    // Parse the JBIG2 document
     let document = Jbig2Document::parse(&data)?;
 
     if document.page_count() == 0 {
@@ -42,13 +41,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // Create output directory if it doesn't exist
+    // Ensure the output directory is available for image writes.
     let output_dir = Path::new(&args.output_dir);
     if !output_dir.exists() {
         fs::create_dir_all(output_dir)?;
     }
 
-    // Determine the prefix for output files
+    // Default the prefix to the input file stem to keep output names stable.
     let prefix = args.prefix.unwrap_or_else(|| {
         input_path
             .file_stem()
@@ -63,17 +62,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.input
     );
 
-    // Process each page
     for (page_index, page) in document.pages.iter().enumerate() {
         let image_data = page.to_image_data();
         let width = page.page_info.width;
         let height = page.page_info.height;
 
-        // Create a grayscale image from the raw pixel data
+        // Convert the raw 1bpp page buffer into a grayscale image for PNG output.
         let img = image::GrayImage::from_raw(width, height, image_data)
             .ok_or("Failed to create image from pixel data")?;
 
-        // Generate output filename
         let output_filename = if document.page_count() == 1 {
             format!("{}.png", prefix)
         } else {
@@ -82,7 +79,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let output_path = output_dir.join(output_filename);
 
-        // Save the image
         img.save(&output_path)?;
         println!(
             "Saved page {} to '{}'",

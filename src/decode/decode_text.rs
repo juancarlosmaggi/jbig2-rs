@@ -10,6 +10,8 @@ use crate::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::reader::Reader;
 use crate::validation;
+
+/// Inputs required to decode a text region.
 #[derive(Clone)]
 pub struct TextRegionParams {
     pub huffman: bool,
@@ -30,6 +32,8 @@ pub struct TextRegionParams {
     pub refinement_template_index: usize,
     pub refinement_at: Vec<(i8, i8)>,
 }
+
+/// Decode a text region and return the composed bitmap.
 pub fn decode_text_region(
     params: &TextRegionParams,
     decoding_context: &mut DecodingContext,
@@ -117,7 +121,7 @@ pub fn decode_text_region(
             eprintln!("text_region: symbol_miss requested without ref_bitmap");
         }
     }
-    // Validate parameters
+    // Validate parameters before decoding.
     validation::validate_text_decode_params(
         params.width,
         params.height,
@@ -127,16 +131,12 @@ pub fn decode_text_region(
     if params.input_symbols.is_empty() {
         return Err(Jbig2Error::new("no input symbols for text region"));
     }
-    // Refinement with Huffman is now supported
-    // if params.refinement && params.huffman {
-    //     return Err(Jbig2Error::new("refinement with Huffman is not supported"));
-    // }
     if params.huffman && params.huffman_tables.is_none() {
         return Err(Jbig2Error::new(
             "Huffman tables required for Huffman decoding",
         ));
     }
-    // Prepare bitmap
+    // Initialize the output bitmap.
     let mut bitmap = bitmap_utils::create_initialized_bitmap(
         params.width,
         params.height,

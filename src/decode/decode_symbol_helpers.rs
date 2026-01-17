@@ -1,5 +1,4 @@
-// Helper functions for symbol dictionary decoding
-// Extracted from decode_symbol.rs to reduce duplication and improve maintainability
+// Helpers shared by symbol dictionary decoding paths.
 use crate::bitmap::Bitmap;
 use crate::contexts::DecodingContext;
 use crate::decode::decode_text::TextRegionParams;
@@ -7,6 +6,7 @@ use crate::huffman::{TextRegionHuffmanTables, get_aggregate_symbol_huffman_table
 use crate::reader::Reader;
 use crate::error::Jbig2Error;
 
+/// Parameters for decoding an aggregate symbol bitmap.
 #[derive(Clone)]
 pub struct AggregateSymbolParams {
     pub current_width: i32,
@@ -19,13 +19,14 @@ pub struct AggregateSymbolParams {
     pub huffman: bool,
 }
 
+/// Split a collective bitmap into individual symbol bitmaps.
 pub fn split_collective_bitmap(
     collective_bitmap: &Bitmap,
     symbol_widths: &[usize],
     height: usize,
 ) -> Vec<Bitmap> {
     let mut symbols = Vec::new();
-    let mut x_offset = 0; // ← fixed typo
+    let mut x_offset = 0;
 
     for &width in symbol_widths {
         let mut symbol_bitmap = Bitmap::new(width, height);
@@ -42,6 +43,7 @@ pub fn split_collective_bitmap(
     symbols
 }
 
+/// Build text-region parameters for aggregate symbol decoding.
 pub fn create_aggregate_text_params(
     params: &AggregateSymbolParams,
     input_symbols: Vec<Bitmap>,
@@ -68,6 +70,7 @@ pub fn create_aggregate_text_params(
     }
 }
 
+/// Decode an aggregate symbol bitmap using text-region decoding.
 pub fn decode_aggregate_symbol(
     params: &AggregateSymbolParams,
     existing_symbols: &[Bitmap],

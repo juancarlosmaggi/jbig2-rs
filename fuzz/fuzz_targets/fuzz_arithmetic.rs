@@ -7,19 +7,16 @@ fuzz_target!(|data: &[u8]| {
     if data.len() < 5 {
         return;
     }
-    
-    // Create decoder
+
+    // Initialize decoder and context state.
     let mut decoder = ArithmeticDecoder::new(data);
-    
-    // Create contexts of various sizes
+
     let context_size = (data[0] as usize % 512) + 1;
     let mut contexts = vec![0i8; context_size];
-    
-    // Try reading bits with different context indices
+
+    // Read bits with varying context indices.
     for i in 1..data.len().min(20) {
         let ctx_idx = (data[i] as usize) % context_size;
         let _ = decoder.read_bit(&mut contexts, ctx_idx);
     }
-    
-
 });

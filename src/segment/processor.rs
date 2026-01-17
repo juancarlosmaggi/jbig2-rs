@@ -1,4 +1,4 @@
-// Segment processing logic - dispatches segments to visitor callbacks
+// Dispatch parsed segments to visitor callbacks.
 
 use super::parser::{
     parse_halftone_region_params, parse_pattern_dictionary_params, parse_text_region_params,
@@ -9,6 +9,7 @@ use super::utils::*;
 use crate::error::Jbig2Error;
 use crate::visitor::SimpleSegmentVisitor;
 
+/// Group segments by page and dispatch them to the visitor in decode order.
 pub fn process_segments<'a>(
     segments: &[Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
@@ -22,13 +23,13 @@ pub fn process_segments<'a>(
         let is_extension = segment.header.segment_type == 62;
         let should_process = is_global
             || is_page_info
-            || is_extension // Process extension segments immediately
+            || is_extension
             || (page_association == current_page && current_page > 0)
             || (page_association == 1 && current_page == 0);
         if !should_process {
             continue;
         }
-        // Process extension segments immediately to extract page info
+        // Extension segments may carry page metadata, so process them immediately.
         if is_extension {
             process_segment(segment, visitor)?;
             continue;
@@ -46,6 +47,7 @@ pub fn process_segments<'a>(
     Ok(())
 }
 
+/// Dispatch segments for a single page, honoring retain ordering.
 fn process_page_segments<'a>(
     segments: &[&Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
@@ -68,6 +70,7 @@ fn process_page_segments<'a>(
     Ok(())
 }
 
+/// Parse a segment payload and call the appropriate visitor hook.
 pub fn process_segment<'a>(
     segment: &Segment<'a>,
     visitor: &mut SimpleSegmentVisitor,
@@ -97,7 +100,7 @@ pub fn process_segment<'a>(
         0 => {
             let dictionary_flags = read_u16(data, start);
 
-            // Parse all relevant flags
+            // Decode dictionary flags and optional AT parameters.
             let sdhuff = (dictionary_flags & 1) != 0;
             let sdrefagg = ((dictionary_flags >> 1) & 1) != 0;
             let sdtemplate = ((dictionary_flags >> 10) & 3) as usize;
@@ -105,22 +108,22 @@ pub fn process_segment<'a>(
 
             let mut offset = start + 2;
 
-            // AT pixels for direct coding (only if not Huffman)
+            // Skip over direct coding AT pixels when present.
             if !sdhuff {
                 let sdat_bytes = if sdtemplate == 0 { 8 } else { 2 };
                 offset += sdat_bytes;
             }
 
-            // Refinement AT pixels (Table 18 in JBIG2 spec)
+            // Skip over refinement AT pixels when present.
             if sdrefagg && !sdrtemplate {
                 offset += 4; // 4 bytes for refinement AT
             }
 
-            // NOW read symbol counts (BIG-ENDIAN!)
+            // Read symbol counts after the variable-size header fields.
             let number_of_exported_symbols = read_u32(data, offset);
             let number_of_new_symbols = read_u32(data, offset + 4);
 
-            // Sanity check to catch parsing errors early
+            // Guard against obviously malformed counts.
             if number_of_new_symbols > 1_000_000 {
                 return Err(Jbig2Error::new(&format!(
                     "Unreasonable symbol count: {} (likely parameter parsing error)",
@@ -143,7 +146,7 @@ pub fn process_segment<'a>(
             visitor.on_symbol_dictionary(&params)?;
         }
         6 | 7 => {
-            // ImmediateTextRegion / ImmediateLosslessTextRegion
+            // Dispatch immediate text region parameters and payload.
             let params = parse_text_region_params(data, start);
 
             visitor.on_immediate_text_region(
@@ -157,9 +160,7 @@ pub fn process_segment<'a>(
             )?;
         }
         48 => {
-            // PageInformation
-
-            // Per JBIG2 spec and reference implementation: ALL fields use BIG-ENDIAN
+            // Parse page information and initialize the page state.
             let mut width = read_u32(data, start);
             let mut height = read_u32(data, start + 4);
             let resolution_x = read_u32(data, start + 8);
@@ -192,7 +193,7 @@ pub fn process_segment<'a>(
             visitor.on_page_information(info);
         }
         16 => {
-            // PatternDictionary
+            // Dispatch pattern dictionary parameters and payload.
             let params = parse_pattern_dictionary_params(data, start);
             visitor.on_pattern_dictionary(
                 params.mmr,
@@ -207,7 +208,7 @@ pub fn process_segment<'a>(
             )?;
         }
         22 | 23 => {
-            // ImmediateHalftoneRegion / ImmediateLosslessHalftoneRegion
+            // Dispatch immediate halftone region parameters and payload.
             let params = parse_halftone_region_params(data, start);
             visitor.on_immediate_halftone_region(
                 &params.region_info,
@@ -229,13 +230,13 @@ pub fn process_segment<'a>(
             )?;
         }
         38 | 39 => {
-            // ImmediateGenericRegion (lossless)
+            // Dispatch immediate generic region payload.
             use super::parser::read_generic_region;
             let generic_region = read_generic_region(data, start)?;
             visitor.on_immediate_generic_region(&generic_region, data, start, end)?;
         }
         42 | 43 => {
-            // ImmediateGenericRefinementRegion / ImmediateLosslessGenericRefinementRegion
+            // Dispatch immediate generic refinement region payload.
             let region_info = read_region_segment_information(data, start);
             visitor.on_immediate_generic_refinement_region(
                 &region_info,
@@ -246,7 +247,7 @@ pub fn process_segment<'a>(
             )?;
         }
         4 => {
-            // IntermediateTextRegion
+            // Dispatch intermediate text region payload.
             let params = parse_text_region_params(data, start);
             visitor.on_intermediate_text_region(
                 &params.region_info,
@@ -260,7 +261,7 @@ pub fn process_segment<'a>(
             )?;
         }
         20 => {
-            // IntermediateHalftoneRegion
+            // Dispatch intermediate halftone region payload.
             let params = parse_halftone_region_params(data, start);
             visitor.on_intermediate_halftone_region(
                 &params.region_info,
@@ -283,7 +284,7 @@ pub fn process_segment<'a>(
             )?;
         }
         36 => {
-            // IntermediateGenericRegion
+            // Dispatch intermediate generic region payload.
             use super::parser::read_generic_region;
             let generic_region = read_generic_region(data, start)?;
             visitor.on_intermediate_generic_region(
@@ -296,7 +297,7 @@ pub fn process_segment<'a>(
             )?;
         }
         40 => {
-            // IntermediateGenericRefinementRegion
+            // Dispatch intermediate generic refinement region payload.
             let region_info = read_region_segment_information(data, start);
             visitor.on_intermediate_generic_refinement_region(
                 &region_info,
@@ -307,30 +308,28 @@ pub fn process_segment<'a>(
                 header.number,
             )?;
         }
-        49 => { // EndOfPage
-            // No action needed
+        49 => {
+            // End-of-page marker does not carry payload.
         }
         50 => {
-            // EndOfStripe
+            // End-of-stripe carries the stripe height.
             let height = read_u32(data, start) as usize;
             visitor.on_end_of_stripe(height);
         }
-        51 => { // EndOfFile
-            // No action needed
+        51 => {
+            // End-of-file marker does not carry payload.
         }
-        52 => { // Profiles
-            // Profile information - can be ignored for basic decoding
+        52 => {
+            // Profiles are optional metadata and not required for decoding.
         }
         53 => {
-            // Tables
+            // Dispatch custom Huffman tables.
             visitor.on_tables(header.number, data, start, end)?;
         }
         62 => {
-            // Extension segment (ITU T.88 section 7.4.14)
-            // Extension segments are used for vendor-specific features
-            // and can be safely ignored for standard decoding
+            // Extension segments are currently ignored.
         }
-        _ => {} // Unknown segment types
+        _ => {} // Unknown segment types are skipped.
     }
     Ok(())
 }
