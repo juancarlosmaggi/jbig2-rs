@@ -138,6 +138,88 @@ fn decode_bitmap_template0(
     Ok(bitmap)
 }
 
+/// Decode a generic region using template 0 with a skip bitmap.
+fn decode_bitmap_template0_with_skip(
+    width: usize,
+    height: usize,
+    skip: &Bitmap,
+    decoding_context: &mut DecodingContext<'_>,
+) -> Result<Bitmap, Jbig2Error> {
+    let mut decoder = decoding_context.get_decoder();
+    let mut contexts = decoding_context.get_contexts("GB");
+    let contexts = contexts.as_mut();
+    let mut bitmap = Bitmap::new(width, height);
+    if width == 0 || height == 0 {
+        return Ok(bitmap);
+    }
+    let rowstride = bitmap.stride;
+    debug_assert_eq!(skip.stride, rowstride);
+    let padded_width = (width + 7) & !7;
+    for y in 0..height {
+        let row_start = y * rowstride;
+        let (before, after) = bitmap.data.split_at_mut(row_start);
+        let (row, _) = after.split_at_mut(rowstride);
+        let line1 = if y >= 1 {
+            Some(&before[(y - 1) * rowstride..y * rowstride])
+        } else {
+            None
+        };
+        let line2 = if y >= 2 {
+            Some(&before[(y - 2) * rowstride..(y - 1) * rowstride])
+        } else {
+            None
+        };
+        let skip_row_start = y * skip.stride;
+        let skip_row = &skip.data[skip_row_start..skip_row_start + skip.stride];
+
+        let mut line_m1 = line1.map_or(0u32, |l| l[0] as u32);
+        let mut line_m2 = line2.map_or(0u32, |l| (l[0] as u32) << 6);
+        let mut context = (line_m1 & 0x7f0) | (line_m2 & 0xf800);
+
+        for x in (0..padded_width).step_by(8) {
+            let minor_width = if width - x > 8 { 8 } else { width - x };
+
+            if let Some(line1_row) = line1 {
+                let next = if x + 8 < width {
+                    line1_row[(x >> 3) + 1] as u32
+                } else {
+                    0
+                };
+                line_m1 = (line_m1 << 8) | next;
+            }
+
+            if let Some(line2_row) = line2 {
+                let next = if x + 8 < width {
+                    line2_row[(x >> 3) + 1] as u32
+                } else {
+                    0
+                };
+                line_m2 = (line_m2 << 8) | (next << 6);
+            }
+
+            let mut result = 0u8;
+            let mut skip_mask = 0x80u8;
+            let skip_byte = skip_row[x >> 3];
+            for x_minor in 0..minor_width {
+                let skip_set = (skip_byte & skip_mask) != 0;
+                let bit = if skip_set {
+                    0
+                } else {
+                    decoder.read_bit(contexts, context as usize)?
+                };
+                result |= (bit as u8) << (7 - x_minor);
+                let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                context =
+                    ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                skip_mask >>= 1;
+            }
+            row[x >> 3] = result;
+        }
+    }
+    Ok(bitmap)
+}
+
 /// Inputs required to decode a generic region bitmap.
 #[derive(Clone)]
 pub struct DecodeBitmapParams<'a> {
@@ -250,7 +332,6 @@ pub fn decode_bitmap(
 
     // Use an optimized path for the common template-0 case.
     if params.template_index == 0
-        && params.skip.is_none()
         && !params.prediction
         && params.at.len() == 4
         && params.at[0].0 == 3
@@ -262,6 +343,14 @@ pub fn decode_bitmap(
         && params.at[3].0 == -2
         && params.at[3].1 == -2
     {
+        if let Some(skip) = params.skip {
+            return decode_bitmap_template0_with_skip(
+                params.width,
+                params.height,
+                skip,
+                decoding_context,
+            );
+        }
         return decode_bitmap_template0(params.width, params.height, decoding_context);
     }
 

@@ -188,235 +188,686 @@ fn render_halftone_grid<const INSIDE: bool>(
     region_width: i64,
     region_height: i64,
 ) {
-    let plane_stride = if bits_per_value > 0 {
-        gray_scale_bit_planes[0].stride
-    } else {
-        0
-    };
-    let plane0 = if bits_per_value > 0 {
-        gray_scale_bit_planes[0].data.as_slice()
-    } else {
-        &[]
-    };
-    let plane1 = if bits_per_value > 1 {
-        gray_scale_bit_planes[1].data.as_slice()
-    } else {
-        &[]
-    };
-    let plane2 = if bits_per_value > 2 {
-        gray_scale_bit_planes[2].data.as_slice()
-    } else {
-        &[]
-    };
-    let plane3 = if bits_per_value > 3 {
-        gray_scale_bit_planes[3].data.as_slice()
-    } else {
-        &[]
-    };
     let total_bytes = (grid_width + 7) >> 3;
     let tail_bits = grid_width & 7;
+    let full_bytes = total_bytes.saturating_sub(usize::from(tail_bits != 0));
     let needs_clamp = patterns.len() != (1usize << bits_per_value);
     let max_pattern_index = patterns.len().saturating_sub(1);
 
+    match bits_per_value {
+        0 => render_halftone_grid_b0::<INSIDE>(
+            region_bitmap,
+            shifted_patterns,
+            patterns,
+            grid_width,
+            grid_height,
+            grid_vector_x,
+            grid_vector_y,
+            grid_offset_x,
+            grid_offset_y,
+            pattern_height_usize,
+            pattern_width,
+            pattern_height,
+            region_width,
+            region_height,
+            full_bytes,
+            tail_bits,
+        ),
+        1 => render_halftone_grid_b1::<INSIDE>(
+            region_bitmap,
+            shifted_patterns,
+            patterns,
+            &gray_scale_bit_planes[0].data,
+            gray_scale_bit_planes[0].stride,
+            grid_width,
+            grid_height,
+            grid_vector_x,
+            grid_vector_y,
+            grid_offset_x,
+            grid_offset_y,
+            pattern_height_usize,
+            pattern_width,
+            pattern_height,
+            region_width,
+            region_height,
+            full_bytes,
+            tail_bits,
+            needs_clamp,
+            max_pattern_index,
+        ),
+        2 => render_halftone_grid_b2::<INSIDE>(
+            region_bitmap,
+            shifted_patterns,
+            patterns,
+            &gray_scale_bit_planes[0].data,
+            &gray_scale_bit_planes[1].data,
+            gray_scale_bit_planes[0].stride,
+            grid_width,
+            grid_height,
+            grid_vector_x,
+            grid_vector_y,
+            grid_offset_x,
+            grid_offset_y,
+            pattern_height_usize,
+            pattern_width,
+            pattern_height,
+            region_width,
+            region_height,
+            full_bytes,
+            tail_bits,
+            needs_clamp,
+            max_pattern_index,
+        ),
+        3 => render_halftone_grid_b3::<INSIDE>(
+            region_bitmap,
+            shifted_patterns,
+            patterns,
+            &gray_scale_bit_planes[0].data,
+            &gray_scale_bit_planes[1].data,
+            &gray_scale_bit_planes[2].data,
+            gray_scale_bit_planes[0].stride,
+            grid_width,
+            grid_height,
+            grid_vector_x,
+            grid_vector_y,
+            grid_offset_x,
+            grid_offset_y,
+            pattern_height_usize,
+            pattern_width,
+            pattern_height,
+            region_width,
+            region_height,
+            full_bytes,
+            tail_bits,
+            needs_clamp,
+            max_pattern_index,
+        ),
+        4 => render_halftone_grid_b4::<INSIDE>(
+            region_bitmap,
+            shifted_patterns,
+            patterns,
+            &gray_scale_bit_planes[0].data,
+            &gray_scale_bit_planes[1].data,
+            &gray_scale_bit_planes[2].data,
+            &gray_scale_bit_planes[3].data,
+            gray_scale_bit_planes[0].stride,
+            grid_width,
+            grid_height,
+            grid_vector_x,
+            grid_vector_y,
+            grid_offset_x,
+            grid_offset_y,
+            pattern_height_usize,
+            pattern_width,
+            pattern_height,
+            region_width,
+            region_height,
+            full_bytes,
+            tail_bits,
+            needs_clamp,
+            max_pattern_index,
+        ),
+        _ => render_halftone_grid_bn::<INSIDE>(
+            region_bitmap,
+            shifted_patterns,
+            patterns,
+            gray_scale_bit_planes,
+            bits_per_value,
+            gray_scale_bit_planes
+                .get(0)
+                .map(|plane| plane.stride)
+                .unwrap_or(0),
+            grid_width,
+            grid_height,
+            grid_vector_x,
+            grid_vector_y,
+            grid_offset_x,
+            grid_offset_y,
+            pattern_height_usize,
+            pattern_width,
+            pattern_height,
+            region_width,
+            region_height,
+            full_bytes,
+            tail_bits,
+            needs_clamp,
+            max_pattern_index,
+        ),
+    }
+}
+
+#[inline(always)]
+fn render_halftone_grid_b0<const INSIDE: bool>(
+    region_bitmap: &mut Bitmap,
+    shifted_patterns: &[ShiftedPattern],
+    patterns: &[Bitmap],
+    _grid_width: usize,
+    grid_height: usize,
+    grid_vector_x: i64,
+    grid_vector_y: i64,
+    grid_offset_x: i64,
+    grid_offset_y: i64,
+    pattern_height_usize: usize,
+    pattern_width: i64,
+    pattern_height: i64,
+    region_width: i64,
+    region_height: i64,
+    full_bytes: usize,
+    tail_bits: usize,
+) {
+    for mg in 0..grid_height {
+        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+        let mut x = base_x;
+        let mut y = base_y;
+        for _ in 0..full_bytes {
+            for _ in 0..8 {
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    0,
+                    x,
+                    y,
+                );
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+        if tail_bits != 0 {
+            for _ in 0..tail_bits {
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    0,
+                    x,
+                    y,
+                );
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn render_halftone_grid_b1<const INSIDE: bool>(
+    region_bitmap: &mut Bitmap,
+    shifted_patterns: &[ShiftedPattern],
+    patterns: &[Bitmap],
+    plane0: &[u8],
+    plane_stride: usize,
+    _grid_width: usize,
+    grid_height: usize,
+    grid_vector_x: i64,
+    grid_vector_y: i64,
+    grid_offset_x: i64,
+    grid_offset_y: i64,
+    pattern_height_usize: usize,
+    pattern_width: i64,
+    pattern_height: i64,
+    region_width: i64,
+    region_height: i64,
+    full_bytes: usize,
+    tail_bits: usize,
+    needs_clamp: bool,
+    max_pattern_index: usize,
+) {
     for mg in 0..grid_height {
         let base_x = grid_offset_x + mg as i64 * grid_vector_y;
         let base_y = grid_offset_y + mg as i64 * grid_vector_x;
         let mut x = base_x;
         let mut y = base_y;
         let row_offset = mg * plane_stride;
-        let plane0_row = if bits_per_value > 0 {
-            &plane0[row_offset..]
-        } else {
-            &[]
-        };
-        let plane1_row = if bits_per_value > 1 {
-            &plane1[row_offset..]
-        } else {
-            &[]
-        };
-        let plane2_row = if bits_per_value > 2 {
-            &plane2[row_offset..]
-        } else {
-            &[]
-        };
-        let plane3_row = if bits_per_value > 3 {
-            &plane3[row_offset..]
-        } else {
-            &[]
-        };
-        for byte_index in 0..total_bytes {
-            let bits_in_byte = if tail_bits != 0 && byte_index + 1 == total_bytes {
-                tail_bits
-            } else {
-                8
-            };
-            match bits_per_value {
-                0 => {
-                    for _ in 0..bits_in_byte {
-                        place_halftone_pattern::<INSIDE>(
-                            region_bitmap,
-                            shifted_patterns,
-                            patterns,
-                            pattern_height_usize,
-                            pattern_width,
-                            pattern_height,
-                            region_width,
-                            region_height,
-                            0,
-                            x,
-                            y,
-                        );
-                        x += grid_vector_x;
-                        y -= grid_vector_y;
+        let plane0_row = &plane0[row_offset..];
+        for byte_index in 0..full_bytes {
+            let mut p0 = plane0_row[byte_index];
+            for _ in 0..8 {
+                let mut pattern_index = ((p0 & 0x80) != 0) as usize;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+        if tail_bits != 0 {
+            let mut p0 = plane0_row[full_bytes];
+            for _ in 0..tail_bits {
+                let mut pattern_index = ((p0 & 0x80) != 0) as usize;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn render_halftone_grid_b2<const INSIDE: bool>(
+    region_bitmap: &mut Bitmap,
+    shifted_patterns: &[ShiftedPattern],
+    patterns: &[Bitmap],
+    plane0: &[u8],
+    plane1: &[u8],
+    plane_stride: usize,
+    _grid_width: usize,
+    grid_height: usize,
+    grid_vector_x: i64,
+    grid_vector_y: i64,
+    grid_offset_x: i64,
+    grid_offset_y: i64,
+    pattern_height_usize: usize,
+    pattern_width: i64,
+    pattern_height: i64,
+    region_width: i64,
+    region_height: i64,
+    full_bytes: usize,
+    tail_bits: usize,
+    needs_clamp: bool,
+    max_pattern_index: usize,
+) {
+    for mg in 0..grid_height {
+        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+        let mut x = base_x;
+        let mut y = base_y;
+        let row_offset = mg * plane_stride;
+        let plane0_row = &plane0[row_offset..];
+        let plane1_row = &plane1[row_offset..];
+        for byte_index in 0..full_bytes {
+            let mut p0 = plane0_row[byte_index];
+            let mut p1 = plane1_row[byte_index];
+            for _ in 0..8 {
+                let mut pattern_index =
+                    ((p0 & 0x80) != 0) as usize | (((p1 & 0x80) != 0) as usize) << 1;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                p1 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+        if tail_bits != 0 {
+            let mut p0 = plane0_row[full_bytes];
+            let mut p1 = plane1_row[full_bytes];
+            for _ in 0..tail_bits {
+                let mut pattern_index =
+                    ((p0 & 0x80) != 0) as usize | (((p1 & 0x80) != 0) as usize) << 1;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                p1 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn render_halftone_grid_b3<const INSIDE: bool>(
+    region_bitmap: &mut Bitmap,
+    shifted_patterns: &[ShiftedPattern],
+    patterns: &[Bitmap],
+    plane0: &[u8],
+    plane1: &[u8],
+    plane2: &[u8],
+    plane_stride: usize,
+    _grid_width: usize,
+    grid_height: usize,
+    grid_vector_x: i64,
+    grid_vector_y: i64,
+    grid_offset_x: i64,
+    grid_offset_y: i64,
+    pattern_height_usize: usize,
+    pattern_width: i64,
+    pattern_height: i64,
+    region_width: i64,
+    region_height: i64,
+    full_bytes: usize,
+    tail_bits: usize,
+    needs_clamp: bool,
+    max_pattern_index: usize,
+) {
+    for mg in 0..grid_height {
+        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+        let mut x = base_x;
+        let mut y = base_y;
+        let row_offset = mg * plane_stride;
+        let plane0_row = &plane0[row_offset..];
+        let plane1_row = &plane1[row_offset..];
+        let plane2_row = &plane2[row_offset..];
+        for byte_index in 0..full_bytes {
+            let mut p0 = plane0_row[byte_index];
+            let mut p1 = plane1_row[byte_index];
+            let mut p2 = plane2_row[byte_index];
+            for _ in 0..8 {
+                let mut pattern_index = ((p0 & 0x80) != 0) as usize
+                    | (((p1 & 0x80) != 0) as usize) << 1
+                    | (((p2 & 0x80) != 0) as usize) << 2;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                p1 <<= 1;
+                p2 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+        if tail_bits != 0 {
+            let mut p0 = plane0_row[full_bytes];
+            let mut p1 = plane1_row[full_bytes];
+            let mut p2 = plane2_row[full_bytes];
+            for _ in 0..tail_bits {
+                let mut pattern_index = ((p0 & 0x80) != 0) as usize
+                    | (((p1 & 0x80) != 0) as usize) << 1
+                    | (((p2 & 0x80) != 0) as usize) << 2;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                p1 <<= 1;
+                p2 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn render_halftone_grid_b4<const INSIDE: bool>(
+    region_bitmap: &mut Bitmap,
+    shifted_patterns: &[ShiftedPattern],
+    patterns: &[Bitmap],
+    plane0: &[u8],
+    plane1: &[u8],
+    plane2: &[u8],
+    plane3: &[u8],
+    plane_stride: usize,
+    _grid_width: usize,
+    grid_height: usize,
+    grid_vector_x: i64,
+    grid_vector_y: i64,
+    grid_offset_x: i64,
+    grid_offset_y: i64,
+    pattern_height_usize: usize,
+    pattern_width: i64,
+    pattern_height: i64,
+    region_width: i64,
+    region_height: i64,
+    full_bytes: usize,
+    tail_bits: usize,
+    needs_clamp: bool,
+    max_pattern_index: usize,
+) {
+    for mg in 0..grid_height {
+        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+        let mut x = base_x;
+        let mut y = base_y;
+        let row_offset = mg * plane_stride;
+        let plane0_row = &plane0[row_offset..];
+        let plane1_row = &plane1[row_offset..];
+        let plane2_row = &plane2[row_offset..];
+        let plane3_row = &plane3[row_offset..];
+        for byte_index in 0..full_bytes {
+            let mut p0 = plane0_row[byte_index];
+            let mut p1 = plane1_row[byte_index];
+            let mut p2 = plane2_row[byte_index];
+            let mut p3 = plane3_row[byte_index];
+            for _ in 0..8 {
+                let mut pattern_index = ((p0 & 0x80) != 0) as usize
+                    | (((p1 & 0x80) != 0) as usize) << 1
+                    | (((p2 & 0x80) != 0) as usize) << 2
+                    | (((p3 & 0x80) != 0) as usize) << 3;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                p1 <<= 1;
+                p2 <<= 1;
+                p3 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+        if tail_bits != 0 {
+            let mut p0 = plane0_row[full_bytes];
+            let mut p1 = plane1_row[full_bytes];
+            let mut p2 = plane2_row[full_bytes];
+            let mut p3 = plane3_row[full_bytes];
+            for _ in 0..tail_bits {
+                let mut pattern_index = ((p0 & 0x80) != 0) as usize
+                    | (((p1 & 0x80) != 0) as usize) << 1
+                    | (((p2 & 0x80) != 0) as usize) << 2
+                    | (((p3 & 0x80) != 0) as usize) << 3;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                p0 <<= 1;
+                p1 <<= 1;
+                p2 <<= 1;
+                p3 <<= 1;
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn render_halftone_grid_bn<const INSIDE: bool>(
+    region_bitmap: &mut Bitmap,
+    shifted_patterns: &[ShiftedPattern],
+    patterns: &[Bitmap],
+    gray_scale_bit_planes: &[Bitmap],
+    bits_per_value: usize,
+    plane_stride: usize,
+    _grid_width: usize,
+    grid_height: usize,
+    grid_vector_x: i64,
+    grid_vector_y: i64,
+    grid_offset_x: i64,
+    grid_offset_y: i64,
+    pattern_height_usize: usize,
+    pattern_width: i64,
+    pattern_height: i64,
+    region_width: i64,
+    region_height: i64,
+    full_bytes: usize,
+    tail_bits: usize,
+    needs_clamp: bool,
+    max_pattern_index: usize,
+) {
+    for mg in 0..grid_height {
+        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
+        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+        let mut x = base_x;
+        let mut y = base_y;
+        let row_offset = mg * plane_stride;
+        for byte_index in 0..full_bytes {
+            for bit in 0..8 {
+                let bit_mask = BIT_MASKS[bit];
+                let mut pattern_index = 0usize;
+                for (j, plane) in gray_scale_bit_planes.iter().enumerate().take(bits_per_value) {
+                    if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
+                        pattern_index |= 1usize << j;
                     }
                 }
-                1 => {
-                    let mut p0 = plane0_row[byte_index];
-                    for _ in 0..bits_in_byte {
-                        let mut pattern_index = ((p0 & 0x80) != 0) as usize;
-                        if needs_clamp && pattern_index > max_pattern_index {
-                            pattern_index = max_pattern_index;
-                        }
-                        place_halftone_pattern::<INSIDE>(
-                            region_bitmap,
-                            shifted_patterns,
-                            patterns,
-                            pattern_height_usize,
-                            pattern_width,
-                            pattern_height,
-                            region_width,
-                            region_height,
-                            pattern_index,
-                            x,
-                            y,
-                        );
-                        p0 <<= 1;
-                        x += grid_vector_x;
-                        y -= grid_vector_y;
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
+                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                x += grid_vector_x;
+                y -= grid_vector_y;
+            }
+        }
+        if tail_bits != 0 {
+            let byte_index = full_bytes;
+            for bit in 0..tail_bits {
+                let bit_mask = BIT_MASKS[bit];
+                let mut pattern_index = 0usize;
+                for (j, plane) in gray_scale_bit_planes.iter().enumerate().take(bits_per_value) {
+                    if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
+                        pattern_index |= 1usize << j;
                     }
                 }
-                2 => {
-                    let mut p0 = plane0_row[byte_index];
-                    let mut p1 = plane1_row[byte_index];
-                    for _ in 0..bits_in_byte {
-                        let mut pattern_index = ((p0 & 0x80) != 0) as usize
-                            | (((p1 & 0x80) != 0) as usize) << 1;
-                        if needs_clamp && pattern_index > max_pattern_index {
-                            pattern_index = max_pattern_index;
-                        }
-                        place_halftone_pattern::<INSIDE>(
-                            region_bitmap,
-                            shifted_patterns,
-                            patterns,
-                            pattern_height_usize,
-                            pattern_width,
-                            pattern_height,
-                            region_width,
-                            region_height,
-                            pattern_index,
-                            x,
-                            y,
-                        );
-                        p0 <<= 1;
-                        p1 <<= 1;
-                        x += grid_vector_x;
-                        y -= grid_vector_y;
-                    }
+                if needs_clamp && pattern_index > max_pattern_index {
+                    pattern_index = max_pattern_index;
                 }
-                3 => {
-                    let mut p0 = plane0_row[byte_index];
-                    let mut p1 = plane1_row[byte_index];
-                    let mut p2 = plane2_row[byte_index];
-                    for _ in 0..bits_in_byte {
-                        let mut pattern_index = ((p0 & 0x80) != 0) as usize
-                            | (((p1 & 0x80) != 0) as usize) << 1
-                            | (((p2 & 0x80) != 0) as usize) << 2;
-                        if needs_clamp && pattern_index > max_pattern_index {
-                            pattern_index = max_pattern_index;
-                        }
-                        place_halftone_pattern::<INSIDE>(
-                            region_bitmap,
-                            shifted_patterns,
-                            patterns,
-                            pattern_height_usize,
-                            pattern_width,
-                            pattern_height,
-                            region_width,
-                            region_height,
-                            pattern_index,
-                            x,
-                            y,
-                        );
-                        p0 <<= 1;
-                        p1 <<= 1;
-                        p2 <<= 1;
-                        x += grid_vector_x;
-                        y -= grid_vector_y;
-                    }
-                }
-                4 => {
-                    let mut p0 = plane0_row[byte_index];
-                    let mut p1 = plane1_row[byte_index];
-                    let mut p2 = plane2_row[byte_index];
-                    let mut p3 = plane3_row[byte_index];
-                    for _ in 0..bits_in_byte {
-                        let mut pattern_index = ((p0 & 0x80) != 0) as usize
-                            | (((p1 & 0x80) != 0) as usize) << 1
-                            | (((p2 & 0x80) != 0) as usize) << 2
-                            | (((p3 & 0x80) != 0) as usize) << 3;
-                        if needs_clamp && pattern_index > max_pattern_index {
-                            pattern_index = max_pattern_index;
-                        }
-                        place_halftone_pattern::<INSIDE>(
-                            region_bitmap,
-                            shifted_patterns,
-                            patterns,
-                            pattern_height_usize,
-                            pattern_width,
-                            pattern_height,
-                            region_width,
-                            region_height,
-                            pattern_index,
-                            x,
-                            y,
-                        );
-                        p0 <<= 1;
-                        p1 <<= 1;
-                        p2 <<= 1;
-                        p3 <<= 1;
-                        x += grid_vector_x;
-                        y -= grid_vector_y;
-                    }
-                }
-                _ => {
-                    for bit in 0..bits_in_byte {
-                        let bit_mask = BIT_MASKS[bit];
-                        let mut pattern_index = 0usize;
-                        for (j, plane) in gray_scale_bit_planes.iter().enumerate() {
-                            if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
-                                pattern_index |= 1usize << j;
-                            }
-                        }
-                        if needs_clamp && pattern_index > max_pattern_index {
-                            pattern_index = max_pattern_index;
-                        }
-                        place_halftone_pattern::<INSIDE>(
-                            region_bitmap,
-                            shifted_patterns,
-                            patterns,
-                            pattern_height_usize,
-                            pattern_width,
-                            pattern_height,
-                            region_width,
-                            region_height,
-                            pattern_index,
-                            x,
-                            y,
-                        );
-                        x += grid_vector_x;
-                        y -= grid_vector_y;
-                    }
-                }
+                place_halftone_pattern::<INSIDE>(
+                    region_bitmap,
+                    shifted_patterns,
+                    patterns,
+                    pattern_height_usize,
+                    pattern_width,
+                    pattern_height,
+                    region_width,
+                    region_height,
+                    pattern_index,
+                    x,
+                    y,
+                );
+                x += grid_vector_x;
+                y -= grid_vector_y;
             }
         }
     }
