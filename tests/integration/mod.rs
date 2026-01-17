@@ -8,3 +8,4 @@ mod decode_refinement;
 mod decode_symbol;
 mod decode_text;
 mod end_to_end;
+mod jbig2dec_hashes;

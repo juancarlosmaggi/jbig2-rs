@@ -15,6 +15,7 @@ image = "0.24"
 rstest = "0.18"
 criterion = "0.5"
 proptest = "1.4"
+sha1 = "0.10"
 
 [[bench]]
 name = "bitmap_bench"

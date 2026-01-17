@@ -1,9 +1,9 @@
 # AGENTS.md
 
 ## Current Goal
-Validate `jbig2-rs` output against `jbig2dec` across all files in
-`tests/resources`, confirm the halftone fix, and decide whether to keep or
-trim debug dumps.
+Validate `jbig2-rs` output against `jbig2dec` using the full UBC fixture set
+in `tests/resources/ubc`, confirm the halftone fix, and decide whether to keep
+or trim debug dumps.
 
 ## Testing and Comparison Workflow
 - Decode reference output with `jbig2dec` to PBM.
@@ -204,9 +204,15 @@ for jb2 in sorted(tests.glob("*.jb2")):
   carrying context state across columns and by computing context even when
   skipping pixels.
 - After the generic decoder fix, `halftone_region.jb2` matches 1:1.
+- UBC fixtures from `power-jbig2-tests-main` are in `tests/resources/ubc` and
+  the hash table mirrors `/home/jmaggi/projects/jbig2dec/test_jbig2dec.py`.
+- Hash parity test currently fails for `ubc/042_3.jb2`
+  (expected `ebfdf6e2fc5ff3ee2271c2fa19de0e52712046e8`,
+  got `7dc4e56875291d3574243a3d3520179561c1afb5`).
 
 ## Current Plan
-1) Re-run full diff on all `tests/resources/*.jb2` files and record results.
-2) If new mismatches appear, use targeted debug dumps to isolate the decoder.
+1) Investigate the `ubc/042_3.jb2` hash mismatch with PBM vs raw comparisons
+   and decoder traces.
+2) Re-run hash parity across all `tests/resources/ubc/*.jb2` after fixes.
 3) Consider adding a regression test for generic decode with non-default AT.
 4) Clean up or gate verbose debug traces once the suite is green.
