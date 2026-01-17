@@ -8,54 +8,60 @@ Averaged over 5 run(s).
 
 | Rank | Label | Total ms | Calls | Avg ms |
 | --- | --- | --- | --- | --- |
-| 1 | immediate_halftone_region | 851.204 | 160 | 5.320 |
-| 2 | immediate_generic_region | 502.796 | 21 | 23.943 |
-| 3 | immediate_generic_refinement_region | 211.431 | 4 | 52.858 |
-| 4 | immediate_text_region | 119.134 | 10 | 11.913 |
-| 5 | symbol_dictionary | 64.123 | 18 | 3.562 |
-| 6 | finalize_current_page | 18.200 | 67 | 0.272 |
-| 7 | pattern_dictionary | 15.102 | 40 | 0.378 |
-| 8 | intermediate_text_region | 6.866 | 4 | 1.717 |
-| 9 | end_of_stripe | 3.079 | 145 | 0.021 |
-| 10 | page_information | 0.544 | 67 | 0.008 |
-| 11 | read_segments | 0.436 | 67 | 0.007 |
+| 1 | immediate_halftone_region | 762.445 | 160 | 4.765 |
+| 2 | immediate_generic_region | 498.433 | 21 | 23.735 |
+| 3 | immediate_generic_refinement_region | 200.997 | 4 | 50.249 |
+| 4 | immediate_text_region | 118.753 | 10 | 11.875 |
+| 5 | symbol_dictionary | 63.893 | 18 | 3.550 |
+| 6 | finalize_current_page | 19.634 | 67 | 0.293 |
+| 7 | pattern_dictionary | 15.140 | 40 | 0.379 |
+| 8 | intermediate_text_region | 7.075 | 4 | 1.769 |
+| 9 | end_of_stripe | 3.169 | 145 | 0.022 |
+| 10 | page_information | 0.562 | 67 | 0.008 |
+| 11 | read_segments | 0.457 | 67 | 0.007 |
 
 ## Slowest Files (Total Decode)
 
 | Rank | File | Total ms |
 | --- | --- | --- |
-| 1 | 600-lossless.jb2 | 410.907 |
-| 2 | 600-6-45.jb2 | 262.339 |
-| 3 | 200-3-45-stripe.jb2 | 152.766 |
-| 4 | 600-10-45.jb2 | 137.781 |
-| 5 | 042_23.jb2 | 122.331 |
-| 6 | 042_21.jb2 | 120.379 |
-| 7 | 042_7.jb2 | 118.093 |
-| 8 | 042_24.jb2 | 107.010 |
-| 9 | 600-6-0.jb2 | 104.729 |
-| 10 | 042_22.jb2 | 97.651 |
-| 11 | 200-4-45-stripe.jb2 | 97.646 |
-| 12 | 042_5.jb2 | 78.071 |
-| 13 | 600-10-0.jb2 | 69.249 |
-| 14 | 200-5-45-stripe.jb2 | 67.344 |
-| 15 | 600-20-45.jb2 | 66.990 |
+| 1 | 600-lossless.jb2 | 412.834 |
+| 2 | 600-6-45.jb2 | 221.803 |
+| 3 | 200-3-45-stripe.jb2 | 143.524 |
+| 4 | 042_7.jb2 | 119.859 |
+| 5 | 042_23.jb2 | 117.257 |
+| 6 | 600-10-45.jb2 | 116.151 |
+| 7 | 042_21.jb2 | 110.833 |
+| 8 | 042_24.jb2 | 105.124 |
+| 9 | 200-4-45-stripe.jb2 | 100.638 |
+| 10 | 042_22.jb2 | 94.136 |
+| 11 | 600-6-0.jb2 | 89.717 |
+| 12 | 200-6-45-stripe.jb2 | 76.595 |
+| 13 | 042_5.jb2 | 75.564 |
+| 14 | 200-5-45-stripe.jb2 | 67.113 |
+| 15 | 042_25.jb2 | 63.282 |
 
 ## Per-File Top Hotspot (Excludes total_decode)
 
 | Rank | File | Top Label | Total ms |
 | --- | --- | --- | --- |
-| 1 | 600-lossless.jb2 | immediate_generic_region | 204.173 |
-| 2 | 600-6-45.jb2 | immediate_halftone_region | 129.528 |
-| 3 | 200-3-45-stripe.jb2 | immediate_halftone_region | 75.973 |
-| 4 | 600-10-45.jb2 | immediate_halftone_region | 67.541 |
-| 5 | 042_7.jb2 | immediate_generic_region | 58.915 |
-| 6 | 042_23.jb2 | immediate_generic_refinement_region | 57.773 |
-| 7 | 042_21.jb2 | immediate_generic_refinement_region | 57.243 |
-| 8 | 600-6-0.jb2 | immediate_halftone_region | 51.044 |
-| 9 | 042_24.jb2 | immediate_generic_refinement_region | 50.466 |
-| 10 | 200-4-45-stripe.jb2 | immediate_halftone_region | 48.396 |
-| 11 | 042_22.jb2 | immediate_generic_refinement_region | 45.949 |
-| 12 | 042_5.jb2 | immediate_generic_region | 38.900 |
-| 13 | 600-10-0.jb2 | immediate_halftone_region | 33.273 |
-| 14 | 200-5-45-stripe.jb2 | immediate_halftone_region | 33.225 |
-| 15 | 200-6-45-stripe.jb2 | immediate_halftone_region | 32.517 |
+| 1 | 600-lossless.jb2 | immediate_generic_region | 205.009 |
+| 2 | 600-6-45.jb2 | immediate_halftone_region | 109.522 |
+| 3 | 200-3-45-stripe.jb2 | immediate_halftone_region | 71.352 |
+| 4 | 042_7.jb2 | immediate_generic_region | 59.787 |
+| 5 | 600-10-45.jb2 | immediate_halftone_region | 56.792 |
+| 6 | 042_23.jb2 | immediate_generic_refinement_region | 55.362 |
+| 7 | 042_21.jb2 | immediate_generic_refinement_region | 52.467 |
+| 8 | 200-4-45-stripe.jb2 | immediate_halftone_region | 49.723 |
+| 9 | 042_24.jb2 | immediate_generic_refinement_region | 49.273 |
+| 10 | 042_22.jb2 | immediate_generic_refinement_region | 43.894 |
+| 11 | 600-6-0.jb2 | immediate_halftone_region | 43.299 |
+| 12 | 200-6-45-stripe.jb2 | immediate_halftone_region | 37.699 |
+| 13 | 042_5.jb2 | immediate_generic_region | 37.589 |
+| 14 | 200-5-45-stripe.jb2 | immediate_halftone_region | 33.127 |
+| 15 | 042_4.jb2 | immediate_generic_region | 31.007 |
+
+## Notes
+
+- Compared to the previous sweep, `immediate_halftone_region` dropped from 851.204 ms to 762.445 ms (~-10.4%). `immediate_generic_region` and `immediate_generic_refinement_region` improved slightly (502.796 -> 498.433 ms, 211.431 -> 200.997 ms). `finalize_current_page` rose (18.200 -> 19.634 ms).
+- File-level improvements: `600-6-45.jb2` 262.339 -> 221.803 ms, `600-10-45.jb2` 137.781 -> 116.151 ms, `600-6-0.jb2` 104.729 -> 89.717 ms. `600-10-0.jb2` and `600-20-45.jb2` fell out of the top-15 list; `200-6-45-stripe.jb2` and `042_25.jb2` entered.
+- Per-file hotspots shifted: halftone hotspots improved on `600-6-45.jb2`, `600-10-45.jb2`, `600-6-0.jb2`; small regressions on `200-4-45-stripe.jb2` and `200-6-45-stripe.jb2`. `042_4.jb2` (generic) entered the top-15 hotspot list.

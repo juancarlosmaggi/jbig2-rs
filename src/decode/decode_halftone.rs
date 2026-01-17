@@ -84,28 +84,34 @@ fn build_shifted_rows(pattern: &Bitmap, shift: usize) -> ShiftedRows {
 
 fn build_shifted_pattern(pattern: &Bitmap) -> ShiftedPattern {
     let has_black = pattern.data.iter().any(|&b| b != 0);
+    if !has_black {
+        let shifts = std::array::from_fn(|_| ShiftedRows {
+            stride: 0,
+            data: Vec::new(),
+        });
+        return ShiftedPattern { shifts, has_black };
+    }
     let shifts = std::array::from_fn(|shift| build_shifted_rows(pattern, shift));
     ShiftedPattern { shifts, has_black }
 }
 
 #[inline(always)]
-fn or_row_bytes(dst: &mut [u8], src: &[u8]) {
-    debug_assert_eq!(dst.len(), src.len());
-    let len = dst.len();
+unsafe fn or_row_bytes_ptr(dst: *mut u8, src: *const u8, len: usize) {
     let mut idx = 0usize;
     unsafe {
         while idx + 8 <= len {
-            let dst_ptr = dst.as_mut_ptr().add(idx) as *mut u64;
-            let src_ptr = src.as_ptr().add(idx) as *const u64;
+            let dst_ptr = dst.add(idx) as *mut u64;
+            let src_ptr = src.add(idx) as *const u64;
             let dst_val = std::ptr::read_unaligned(dst_ptr);
             let src_val = std::ptr::read_unaligned(src_ptr);
             std::ptr::write_unaligned(dst_ptr, dst_val | src_val);
             idx += 8;
         }
-    }
-    while idx < len {
-        dst[idx] |= src[idx];
-        idx += 1;
+        while idx < len {
+            let dst_byte = dst.add(idx);
+            *dst_byte |= *src.add(idx);
+            idx += 1;
+        }
     }
 }
 
@@ -156,12 +162,14 @@ fn place_halftone_pattern<const INSIDE: bool>(
         let dst_data = &mut region_bitmap.data;
         let mut dst_row_start = region_y_u * dst_stride + dst_byte_offset;
         let mut src_row_start = 0usize;
-        for _ in 0..pattern_height_usize {
-            let dst_row = &mut dst_data[dst_row_start..dst_row_start + src_stride];
-            let src_row = &src_data[src_row_start..src_row_start + src_stride];
-            or_row_bytes(dst_row, src_row);
-            dst_row_start += dst_stride;
-            src_row_start += src_stride;
+        unsafe {
+            let dst_ptr = dst_data.as_mut_ptr();
+            let src_ptr = src_data.as_ptr();
+            for _ in 0..pattern_height_usize {
+                or_row_bytes_ptr(dst_ptr.add(dst_row_start), src_ptr.add(src_row_start), src_stride);
+                dst_row_start += dst_stride;
+                src_row_start += src_stride;
+            }
         }
     } else {
         let pattern_bitmap = &patterns[pattern_index];
@@ -355,9 +363,9 @@ fn render_halftone_grid_b0<const INSIDE: bool>(
     full_bytes: usize,
     tail_bits: usize,
 ) {
-    for mg in 0..grid_height {
-        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
-        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+    let mut base_x = grid_offset_x;
+    let mut base_y = grid_offset_y;
+    for _ in 0..grid_height {
         let mut x = base_x;
         let mut y = base_y;
         for _ in 0..full_bytes {
@@ -398,6 +406,8 @@ fn render_halftone_grid_b0<const INSIDE: bool>(
                 y -= grid_vector_y;
             }
         }
+        base_x += grid_vector_y;
+        base_y += grid_vector_x;
     }
 }
 
@@ -424,12 +434,12 @@ fn render_halftone_grid_b1<const INSIDE: bool>(
     needs_clamp: bool,
     max_pattern_index: usize,
 ) {
-    for mg in 0..grid_height {
-        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
-        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+    let mut base_x = grid_offset_x;
+    let mut base_y = grid_offset_y;
+    let mut row_offset = 0usize;
+    for _ in 0..grid_height {
         let mut x = base_x;
         let mut y = base_y;
-        let row_offset = mg * plane_stride;
         let plane0_row = &plane0[row_offset..];
         for byte_index in 0..full_bytes {
             let mut p0 = plane0_row[byte_index];
@@ -481,6 +491,9 @@ fn render_halftone_grid_b1<const INSIDE: bool>(
                 y -= grid_vector_y;
             }
         }
+        base_x += grid_vector_y;
+        base_y += grid_vector_x;
+        row_offset += plane_stride;
     }
 }
 
@@ -508,12 +521,12 @@ fn render_halftone_grid_b2<const INSIDE: bool>(
     needs_clamp: bool,
     max_pattern_index: usize,
 ) {
-    for mg in 0..grid_height {
-        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
-        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+    let mut base_x = grid_offset_x;
+    let mut base_y = grid_offset_y;
+    let mut row_offset = 0usize;
+    for _ in 0..grid_height {
         let mut x = base_x;
         let mut y = base_y;
-        let row_offset = mg * plane_stride;
         let plane0_row = &plane0[row_offset..];
         let plane1_row = &plane1[row_offset..];
         for byte_index in 0..full_bytes {
@@ -572,6 +585,9 @@ fn render_halftone_grid_b2<const INSIDE: bool>(
                 y -= grid_vector_y;
             }
         }
+        base_x += grid_vector_y;
+        base_y += grid_vector_x;
+        row_offset += plane_stride;
     }
 }
 
@@ -600,12 +616,12 @@ fn render_halftone_grid_b3<const INSIDE: bool>(
     needs_clamp: bool,
     max_pattern_index: usize,
 ) {
-    for mg in 0..grid_height {
-        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
-        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+    let mut base_x = grid_offset_x;
+    let mut base_y = grid_offset_y;
+    let mut row_offset = 0usize;
+    for _ in 0..grid_height {
         let mut x = base_x;
         let mut y = base_y;
-        let row_offset = mg * plane_stride;
         let plane0_row = &plane0[row_offset..];
         let plane1_row = &plane1[row_offset..];
         let plane2_row = &plane2[row_offset..];
@@ -671,6 +687,9 @@ fn render_halftone_grid_b3<const INSIDE: bool>(
                 y -= grid_vector_y;
             }
         }
+        base_x += grid_vector_y;
+        base_y += grid_vector_x;
+        row_offset += plane_stride;
     }
 }
 
@@ -700,12 +719,12 @@ fn render_halftone_grid_b4<const INSIDE: bool>(
     needs_clamp: bool,
     max_pattern_index: usize,
 ) {
-    for mg in 0..grid_height {
-        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
-        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+    let mut base_x = grid_offset_x;
+    let mut base_y = grid_offset_y;
+    let mut row_offset = 0usize;
+    for _ in 0..grid_height {
         let mut x = base_x;
         let mut y = base_y;
-        let row_offset = mg * plane_stride;
         let plane0_row = &plane0[row_offset..];
         let plane1_row = &plane1[row_offset..];
         let plane2_row = &plane2[row_offset..];
@@ -778,6 +797,9 @@ fn render_halftone_grid_b4<const INSIDE: bool>(
                 y -= grid_vector_y;
             }
         }
+        base_x += grid_vector_y;
+        base_y += grid_vector_x;
+        row_offset += plane_stride;
     }
 }
 
@@ -805,12 +827,12 @@ fn render_halftone_grid_bn<const INSIDE: bool>(
     needs_clamp: bool,
     max_pattern_index: usize,
 ) {
-    for mg in 0..grid_height {
-        let base_x = grid_offset_x + mg as i64 * grid_vector_y;
-        let base_y = grid_offset_y + mg as i64 * grid_vector_x;
+    let mut base_x = grid_offset_x;
+    let mut base_y = grid_offset_y;
+    let mut row_offset = 0usize;
+    for _ in 0..grid_height {
         let mut x = base_x;
         let mut y = base_y;
-        let row_offset = mg * plane_stride;
         for byte_index in 0..full_bytes {
             for bit in 0..8 {
                 let bit_mask = BIT_MASKS[bit];
@@ -870,6 +892,9 @@ fn render_halftone_grid_bn<const INSIDE: bool>(
                 y -= grid_vector_y;
             }
         }
+        base_x += grid_vector_y;
+        base_y += grid_vector_x;
+        row_offset += plane_stride;
     }
 }
 
