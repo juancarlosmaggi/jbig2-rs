@@ -30,15 +30,15 @@ mod tests {
         assert_eq!(template.reference.len(), 8);
 
         // Spot-check coding positions.
-        assert_eq!(template.coding[0], (0, -1));
+        assert_eq!(template.coding[0], (-1, 0));
         assert_eq!(template.coding[1], (1, -1));
-        assert_eq!(template.coding[2], (-1, 0));
+        assert_eq!(template.coding[2], (0, -1));
 
         // Spot-check reference positions.
-        assert_eq!(template.reference[0], (0, -1));
-        assert_eq!(template.reference[1], (1, -1));
-        assert_eq!(template.reference[2], (-1, 0));
-        assert_eq!(template.reference[3], (0, 0));
+        assert_eq!(template.reference[0], (1, 1));
+        assert_eq!(template.reference[1], (0, 1));
+        assert_eq!(template.reference[2], (-1, 1));
+        assert_eq!(template.reference[3], (1, 0));
     }
 
     #[test]
@@ -48,10 +48,10 @@ mod tests {
         assert_eq!(template.reference.len(), 6);
 
         // Spot-check coding positions.
-        assert_eq!(template.coding[0], (-1, -1));
-        assert_eq!(template.coding[1], (0, -1));
-        assert_eq!(template.coding[2], (1, -1));
-        assert_eq!(template.coding[3], (-1, 0));
+        assert_eq!(template.coding[0], (-1, 0));
+        assert_eq!(template.coding[1], (1, -1));
+        assert_eq!(template.coding[2], (0, -1));
+        assert_eq!(template.coding[3], (-1, -1));
     }
 
     #[test]
