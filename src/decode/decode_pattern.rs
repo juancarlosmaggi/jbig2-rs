@@ -18,7 +18,7 @@ pub fn decode_pattern_dictionary(
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     let at = if !params.mmr {
         let mut at_vec = vec![(-(params.pattern_width as i8), 0i8)];
-        if params.template == 0 {
+        if params.template <= 1 {
             at_vec.extend(vec![(-3i8, -1i8), (2i8, -2i8), (-2i8, -2i8)]);
         }
         at_vec

@@ -1,9 +1,9 @@
 # AGENTS.md
 
 ## Current Goal
-Diagnose and fix the pixel mismatch in the `text_region` test by comparing `jbig2-rs`
-output to `jbig2dec`. The mismatch is currently about 15.6% of pixels, with evidence
-that some symbol instances are placed at incorrect vertical positions.
+Validate `jbig2-rs` output against `jbig2dec` across all files in
+`tests/resources`, confirm the halftone fix, and decide whether to keep or
+trim debug dumps.
 
 ## Testing and Comparison Workflow
 - Decode reference output with `jbig2dec` to PBM.
@@ -17,6 +17,11 @@ that some symbol instances are placed at incorrect vertical positions.
       directly against the reference bitmap.
     - `JBIG2_RS_TRACE_SYMBOL=1` for symbol dictionary stats.
     - `JBIG2_RS_TRACE_MMR=1` for MMR decode issues (currently clean).
+    - `JBIG2_RS_TRACE_HALFTONE=1` for halftone grid/pattern parameters.
+    - `JBIG2_RS_DUMP_PATTERNS=/tmp/dir` to dump pattern dictionaries (P1 PBM).
+    - `JBIG2_RS_DUMP_HALFTONE_GRID=/tmp/file` to dump halftone grid indices.
+  - Use `JBIG2_RS_NAIVE_COMBINE=1` to sanity-check bitmap composition
+    if a mismatch appears.
 
 Example run:
 ```
@@ -122,20 +127,86 @@ for dy in range(-4, 5):
     print("dy", dy, "mismatch %", mism / count * 100)
 ```
 
+### 4) Batch compare all .jb2 files
+```
+import subprocess
+from pathlib import Path
+
+root = Path("/home/jmaggi/projects/jbig2-rs")
+dec = Path("/home/jmaggi/projects/jbig2dec/jbig2dec")
+tests = root / "tests" / "resources"
+out_ref = Path("/tmp/jbig2-compare/jbig2dec_all")
+out_rs = Path("/tmp/jbig2-compare/jbig2-rs_all")
+out_ref.mkdir(parents=True, exist_ok=True)
+out_rs.mkdir(parents=True, exist_ok=True)
+
+def compare(pbm_path, raw_path):
+    pbm = pbm_path.read_bytes()
+    idx = 2
+    def skip_ws(i):
+        while i < len(pbm) and pbm[i] in b" \t\r\n":
+            i += 1
+        return i
+    vals = []
+    while len(vals) < 2:
+        idx2 = skip_ws(idx)
+        if pbm[idx2:idx2 + 1] == b"#":
+            idx2 = pbm.find(b"\n", idx2) + 1
+            idx = idx2
+            continue
+        end = idx2
+        while end < len(pbm) and pbm[end] not in b" \t\r\n":
+            end += 1
+        vals.append(int(pbm[idx2:end]))
+        idx = end
+    idx = skip_ws(idx)
+    w, h = vals
+    stride = (w + 7) // 8
+    pbm_data = pbm[idx:]
+    raw = raw_path.read_bytes()
+    raw_bits = bytearray(len(raw))
+    for i, b in enumerate(raw):
+        raw_bits[i] = 1 if b else 0
+    mismatch = 0
+    for y in range(h):
+        base = y * stride
+        row_start = y * w
+        for x in range(w):
+            byte = pbm_data[base + (x >> 3)]
+            bit = (byte >> (7 - (x & 7))) & 1
+            if bit != raw_bits[row_start + x]:
+                mismatch += 1
+    return mismatch, w * h
+
+for jb2 in sorted(tests.glob("*.jb2")):
+    pbm = out_ref / (jb2.stem + ".pbm")
+    raw = out_rs / (jb2.stem + ".bin")
+    subprocess.run([str(dec), "-o", str(pbm), str(jb2)], check=True)
+    subprocess.run(
+        ["cargo", "run", "--example", "decode_file", "--quiet", "--", str(jb2), str(raw)],
+        cwd=root,
+        check=True,
+    )
+    mism, total = compare(pbm, raw)
+    pct = mism * 100 / total if total else 0
+    print(jb2.name, "mismatch", mism, "percent", pct)
+```
+
 ## Current Findings / Suspicions
-- MMR decoding errors were present before; after alignment fixes, `JBIG2_RS_TRACE_MMR`
-  shows no invalid modes/runs and mismatch persists.
-- The largest discrepancies are horizontal bands; two very wide symbols are decoded
-  correctly but placed too low. Using `JBIG2_RS_TRACE_TEXT_REF`, their best alignment
-  offsets are around `best_dy = -8` to `-9`.
-- This points to a text-region placement issue, likely in the strip T progression
-  (initial IADT or delta_t decoding/bit alignment) rather than bitmap content.
-- Symbol dictionary appears consistent: wide symbols match their expected patterns.
+- Text-region reference corner mapping was wrong. Correct mapping is
+  0=bottom-left, 1=top-left, 2=bottom-right, 3=top-right (per jbig2dec).
+- After correcting the ref-corner mapping, remaining mismatch was caused by the
+  optimized `Bitmap::combine` alignment. Replacing it with a 16-bit aligned
+  extraction fixed the mismatch; naive and optimized now agree.
+- `text_region.jb2`, `minimal_valid.jb2`, `symbol_dictionary.jb2` match 1:1.
+- Halftone mismatch (~19.36%) traced to generic decoder context reuse: the
+  fast-path context label reset each pixel, losing reused bits. Fixed by
+  carrying context state across columns and by computing context even when
+  skipping pixels.
+- After the generic decoder fix, `halftone_region.jb2` matches 1:1.
 
 ## Current Plan
-1) Identify where strip T drift starts by correlating mismatch bands with strip
-   indices; add per-strip comparison or a compact strip log for offline diff.
-2) Verify IADT/DT decoding and bit alignment after the symbol ID Huffman table
-   (byte-align is used, but placement suggests an off-by-N in T).
-3) If possible, instrument `jbig2dec` locally to log DT/STRIPT for direct comparison
-   against `jbig2-rs` (blocked by write permissions in that repo right now).
+1) Re-run full diff on all `tests/resources/*.jb2` files and record results.
+2) If new mismatches appear, use targeted debug dumps to isolate the decoder.
+3) Consider adding a regression test for generic decode with non-default AT.
+4) Clean up or gate verbose debug traces once the suite is green.

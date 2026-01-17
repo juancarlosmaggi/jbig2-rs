@@ -3,6 +3,7 @@ use crate::bitmap_utils;
 use crate::contexts::DecodingContext;
 use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
+use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct HalftoneRegionParams {
@@ -41,35 +42,48 @@ pub fn decode_halftone_region(
     }
     let pattern0 = &params.patterns[0];
     let _pattern_width = pattern0.width;
+    let pattern_width = pattern0.width;
     let pattern_height = pattern0.height;
     let bits_per_value = crate::core_utils::log2(number_of_patterns as u32) as usize;
     let at = if !params.mmr {
         let mut at_vec = vec![(if params.template <= 1 { 3i8 } else { 2i8 }, -1i8)];
-        if params.template == 0 {
+        if params.template <= 1 {
             at_vec.extend(vec![(-3i8, -1i8), (2i8, -2i8), (-2i8, -2i8)]);
         }
         at_vec
     } else {
         vec![]
     };
-    // Skip bitmap
+    // Skip bitmap (computed from geometry, not decoded)
     let skip_bitmap = if params.enable_skip {
-        let skip_params = DecodeBitmapParams {
-            mmr: params.mmr,
-            width: params.grid_width,
-            height: params.grid_height,
-            template_index: params.template,
-            prediction: false,
-            skip: None,
-            at: at.clone(),
-        };
-        Some(decode_bitmap(&skip_params, decoding_context)?)
+        let mut skip = Bitmap::new(params.grid_width, params.grid_height);
+        for mg in 0..params.grid_height {
+            for ng in 0..params.grid_width {
+                let x = (params.grid_offset_x as i64
+                    + mg as i64 * params.grid_vector_y as i64
+                    + ng as i64 * params.grid_vector_x as i64)
+                    >> 8;
+                let y = (params.grid_offset_y as i64
+                    + mg as i64 * params.grid_vector_x as i64
+                    - ng as i64 * params.grid_vector_y as i64)
+                    >> 8;
+                let outside = x + pattern_width as i64 <= 0
+                    || x >= params.region_width as i64
+                    || y + pattern_height as i64 <= 0
+                    || y >= params.region_height as i64;
+                if outside {
+                    skip.set_pixel(ng, mg, 1);
+                }
+            }
+        }
+        Some(skip)
     } else {
         None
     };
-    // Gray-scale bit planes
-    let mut gray_scale_bit_planes = Vec::new();
-    for _ in (0..bits_per_value).rev() {
+    // Gray-scale bit planes (decoded MSB -> LSB, then gray-decode via XOR)
+    let mut gray_scale_bit_planes =
+        vec![Bitmap::new(params.grid_width, params.grid_height); bits_per_value];
+    for j in (0..bits_per_value).rev() {
         let decode_params = DecodeBitmapParams {
             mmr: params.mmr,
             width: params.grid_width,
@@ -80,35 +94,57 @@ pub fn decode_halftone_region(
             at: at.clone(),
         };
         let bitmap = decode_bitmap(&decode_params, decoding_context)?;
-        gray_scale_bit_planes.push(bitmap);
+        gray_scale_bit_planes[j] = bitmap;
+        if j + 1 < bits_per_value {
+            for idx in 0..gray_scale_bit_planes[j].data.len() {
+                gray_scale_bit_planes[j].data[idx] ^= gray_scale_bit_planes[j + 1].data[idx];
+            }
+        }
+    }
+    let dump_grid = std::env::var_os("JBIG2_RS_DUMP_HALFTONE_GRID").map(PathBuf::from);
+    let mut pattern_indices = vec![0usize; params.grid_width * params.grid_height];
+    for mg in 0..params.grid_height {
+        for ng in 0..params.grid_width {
+            let mut pattern_index = 0usize;
+            for j in 0..bits_per_value {
+                let plane_bit = gray_scale_bit_planes[j].get_pixel(ng, mg);
+                pattern_index |= (plane_bit as usize) << j;
+            }
+            if pattern_index >= params.patterns.len() {
+                pattern_index = params.patterns.len().saturating_sub(1);
+            }
+            pattern_indices[mg * params.grid_width + ng] = pattern_index;
+        }
+    }
+    if let Some(path) = dump_grid {
+        let mut out = String::new();
+        out.push_str(&format!("{} {}\n", params.grid_width, params.grid_height));
+        for mg in 0..params.grid_height {
+            for ng in 0..params.grid_width {
+                let idx = pattern_indices[mg * params.grid_width + ng];
+                out.push_str(&idx.to_string());
+                if ng + 1 < params.grid_width {
+                    out.push(' ');
+                }
+            }
+            out.push('\n');
+        }
+        std::fs::write(&path, out)
+            .map_err(|e| Jbig2Error::new(&format!("halftone grid dump failed: {e}")))?;
     }
     // Render patterns
     for mg in 0..params.grid_height {
         for ng in 0..params.grid_width {
-            if skip_bitmap
-                .as_ref()
-                .is_some_and(|skip| skip.get_pixel(ng, mg) != 0)
-            {
-                continue;
-            }
-            let mut bit = 0u8;
-            let mut pattern_index = 0usize;
-            for j in (0..bits_per_value).rev() {
-                let plane_bit = gray_scale_bit_planes[j].get_pixel(ng, mg);
-                bit ^= plane_bit;
-                pattern_index |= (bit as usize) << j;
-            }
-            if pattern_index >= params.patterns.len() {
-                continue;
-            }
+            let pattern_index = pattern_indices[mg * params.grid_width + ng];
             let pattern_bitmap = &params.patterns[pattern_index];
-            let x = (params.grid_offset_x
-                + mg as i32 * params.grid_vector_y as i32
-                + ng as i32 * params.grid_vector_x as i32)
-                >> 8;
-            let y = (params.grid_offset_y + mg as i32 * params.grid_vector_x as i32
-                - ng as i32 * params.grid_vector_y as i32)
-                >> 8;
+            let x = ((params.grid_offset_x as i64
+                + mg as i64 * params.grid_vector_y as i64
+                + ng as i64 * params.grid_vector_x as i64)
+                >> 8) as i32;
+            let y = ((params.grid_offset_y as i64
+                + mg as i64 * params.grid_vector_x as i64
+                - ng as i64 * params.grid_vector_y as i64)
+                >> 8) as i32;
             // Draw pattern
             if x >= 0
                 && x + pattern_bitmap.width as i32 <= params.region_width as i32

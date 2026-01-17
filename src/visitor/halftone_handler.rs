@@ -31,6 +31,7 @@ pub(super) fn on_immediate_halftone_region(
     start: usize,
     end: usize,
 ) -> Result<(), Jbig2Error> {
+    let trace_halftone = std::env::var_os("JBIG2_RS_TRACE_HALFTONE").is_some();
     if region_info.width == 0 || region_info.height == 0 {
         return Ok(());
     }
@@ -72,6 +73,29 @@ pub(super) fn on_immediate_halftone_region(
     } else {
         return Ok(()); // Skip if not found
     };
+    if trace_halftone {
+        let (pat_w, pat_h) = patterns_vec
+            .get(0)
+            .map(|p| (p.width, p.height))
+            .unwrap_or((0, 0));
+        eprintln!(
+            "halftone_region: mmr={} template={} enable_skip={} comb_op={} def_pixel={} grid={}x{} offset=({}, {}) vector=({}, {}) patterns={} pat_size={}x{}",
+            mmr,
+            template,
+            enable_skip,
+            combination_operator,
+            default_pixel_value,
+            grid_width,
+            grid_height,
+            grid_offset_x,
+            grid_offset_y,
+            grid_vector_x,
+            grid_vector_y,
+            patterns_vec.len(),
+            pat_w,
+            pat_h
+        );
+    }
 
     let slice = &data[start..end];
     let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
