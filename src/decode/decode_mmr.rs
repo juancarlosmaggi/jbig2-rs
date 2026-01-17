@@ -13,10 +13,13 @@ struct CCITTFaxDecoder {
     end_of_block: bool,
     ref_line: Vec<u8>,
     curr_line: Vec<u8>,
+    trace: bool,
+    invalid_modes: u32,
+    invalid_runs: u32,
 }
 
 impl CCITTFaxDecoder {
-    fn new(reader: Reader, width: usize, height: usize, end_of_block: bool) -> Self {
+    fn new(reader: Reader, width: usize, height: usize, end_of_block: bool, trace: bool) -> Self {
         CCITTFaxDecoder {
             reader,
             width,
@@ -24,6 +27,9 @@ impl CCITTFaxDecoder {
             end_of_block,
             ref_line: vec![0; width],
             curr_line: vec![0; width],
+            trace,
+            invalid_modes: 0,
+            invalid_runs: 0,
         }
     }
 
@@ -47,18 +53,20 @@ impl CCITTFaxDecoder {
                 return Err(Jbig2Error::new("Infinite loop in MMR line decoding"));
             }
 
-            let start_pos = if a0 < 0 { 0 } else { (a0 + 1) as usize };
             let b1 = self.find_changing_element_of_color(
                 &self.ref_line,
-                start_pos,
+                a0,
                 self.width,
                 1 - current_color,
             );
-            let b2 = self.find_changing_element(&self.ref_line, b1 + 1, self.width);
+            let b2 = self.find_changing_element(&self.ref_line, b1 as i32, self.width);
 
             let mode = match self.read_mode_code() {
                 Ok(m) => m,
                 Err(_) => {
+                    if self.trace {
+                        self.invalid_modes = self.invalid_modes.saturating_add(1);
+                    }
                     // Invalid code or end-of-data → finish line with white (jbig2dec behavior)
                     break;
                 }
@@ -109,11 +117,21 @@ impl CCITTFaxDecoder {
                     let white_first = current_color == 0;
                     let r1 = match self.decode_run_length(white_first) {
                         Ok(r) => r as usize,
-                        Err(_) => break, // finish with white
+                        Err(_) => {
+                            if self.trace {
+                                self.invalid_runs = self.invalid_runs.saturating_add(1);
+                            }
+                            break; // finish with white
+                        }
                     };
                     let r2 = match self.decode_run_length(!white_first) {
                         Ok(r) => r as usize,
-                        Err(_) => break,
+                        Err(_) => {
+                            if self.trace {
+                                self.invalid_runs = self.invalid_runs.saturating_add(1);
+                            }
+                            break;
+                        }
                     };
 
                     for i in 0..r1 {
@@ -204,12 +222,31 @@ impl CCITTFaxDecoder {
         Err(Jbig2Error::new("no valid MMR mode code"))
     }
 
-    fn find_changing_element(&self, line: &[u8], mut pos: usize, width: usize) -> usize {
-        while pos < width {
-            if pos == 0 || line[pos] != line[pos - 1] {
-                return pos;
+    fn find_changing_element(&self, line: &[u8], pos: i32, width: usize) -> usize {
+        if width == 0 {
+            return 0;
+        }
+        if pos < 0 {
+            let mut x = 0usize;
+            while x < width {
+                if line[x] != 0 {
+                    return x;
+                }
+                x += 1;
             }
-            pos += 1;
+            return width;
+        }
+        let mut x = pos as usize;
+        if x >= width {
+            return width;
+        }
+        let color = line[x];
+        x = x.saturating_add(1);
+        while x < width {
+            if line[x] != color {
+                return x;
+            }
+            x += 1;
         }
         width
     }
@@ -217,17 +254,15 @@ impl CCITTFaxDecoder {
     fn find_changing_element_of_color(
         &self,
         line: &[u8],
-        mut pos: usize,
+        pos: i32,
         width: usize,
         color: u8,
     ) -> usize {
-        while pos < width {
-            if line[pos] == color && (pos == 0 || line[pos - 1] != color) {
-                return pos;
-            }
-            pos += 1;
+        let mut x = self.find_changing_element(line, pos, width);
+        if x < width && line[x] != color {
+            x = self.find_changing_element(line, x as i32, width);
         }
-        width
+        x
     }
 
     fn decode_run_length(&mut self, white: bool) -> Result<i32, Jbig2Error> {
@@ -313,13 +348,25 @@ pub fn decode_mmr_bitmap(
     let data_clone = input.get_data().to_vec();
     let pos = input.get_position();
     let end = input.get_end();
+    let trace = std::env::var_os("JBIG2_RS_TRACE_MMR").is_some();
 
     let reader = Reader::new(data_clone, pos, end);
-    let mut decoder = CCITTFaxDecoder::new(reader, width, height, end_of_block);
+    let mut decoder = CCITTFaxDecoder::new(reader, width, height, end_of_block, trace);
 
     let bitmap = decoder.decode()?;
 
     input.set_position(decoder.reader.get_position());
+    if decoder.trace && (decoder.invalid_modes > 0 || decoder.invalid_runs > 0) {
+        let bytes = end.saturating_sub(pos);
+        eprintln!(
+            "mmr: width={} height={} bytes={} invalid_modes={} invalid_runs={}",
+            width,
+            height,
+            bytes,
+            decoder.invalid_modes,
+            decoder.invalid_runs
+        );
+    }
 
     Ok(bitmap)
 }

@@ -79,6 +79,20 @@ pub fn process_segment<'a>(
     if start > end || end > data.len() {
         return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
     }
+    if std::env::var_os("JBIG2_RS_TRACE_SEGMENTS").is_some() {
+        eprintln!(
+            "segment: num={} type={}({}) page_assoc={} retain={} referred_to={:?} start={} end={} len={}",
+            header.number,
+            header.segment_type,
+            header.type_name,
+            header.page_association,
+            if header.deferred_non_retain { "non_retain" } else { "retain" },
+            header.referred_to,
+            start,
+            end,
+            header.length
+        );
+    }
     match header.segment_type {
         0 => {
             let dictionary_flags = read_u16(data, start);

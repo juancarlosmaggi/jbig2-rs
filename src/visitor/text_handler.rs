@@ -26,6 +26,7 @@ pub(super) fn on_immediate_text_region(
     start: usize,
     end: usize,
 ) -> Result<(), Jbig2Error> {
+    let trace_text = std::env::var_os("JBIG2_RS_TRACE_TEXT").is_some();
     if current_page_info.is_none() {
         *current_page_info = Some(PageInfo {
             width: region_info.width,
@@ -97,6 +98,65 @@ pub(super) fn on_immediate_text_region(
             pos += 2;
         }
     } // else default empty
+
+    let instances_from_data = if pos + 4 <= end {
+        Some(crate::segment::read_u32(data, pos))
+    } else {
+        None
+    };
+
+    if trace_text {
+        eprintln!(
+            "text_region: segment_flags=0x{:04x} huffman={} refinement={} log_strip_size={} strip_size={} ref_corner={} transposed={} comb_op={} default_pixel={} ds_offset={} refine_template={} region={}x{} at ({}, {}) instances(header)={} instances(data)={:?} input_symbols={} code_len={} start={} end={} pos={}",
+            text_region_segment_flags,
+            huffman,
+            refinement,
+            log_strip_size,
+            strip_size,
+            reference_corner,
+            transposed,
+            combination_operator,
+            default_pixel_value,
+            ds_offset,
+            refinement_template,
+            region_info.width,
+            region_info.height,
+            region_info.x,
+            region_info.y,
+            number_of_symbol_instances,
+            instances_from_data,
+            input_symbols.len(),
+            symbol_code_length,
+            start,
+            end,
+            pos
+        );
+        eprintln!(
+            "text_region: draw_offset current_y={} region_y={}",
+            current_y, region_info.y
+        );
+        if huffman {
+            eprintln!(
+                "text_region: huffman_flags=0x{:04x} fs={} ds={} dt={} rdw={} rdh={} rdx={} rdy={} size_sel={} ri={}",
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2),
+                huffman_fs,
+                huffman_ds,
+                huffman_dt,
+                huffman_refinement_dw,
+                huffman_refinement_dh,
+                huffman_refinement_dx,
+                huffman_refinement_dy,
+                huffman_refinement_size_selector as u8,
+                huffman_ri as u8
+            );
+        }
+        if refinement && refinement_template == 0 {
+            eprintln!(
+                "text_region: refinement_at={:?}",
+                refinement_at
+            );
+        }
+    }
 
     if pos + 4 > end {
         return Err(Jbig2Error::new("text region segment too short for instance count"));
@@ -185,6 +245,7 @@ pub(super) fn on_intermediate_text_region(
     end: usize,
     _segment_number: u32,
 ) -> Result<(), Jbig2Error> {
+    let trace_text = std::env::var_os("JBIG2_RS_TRACE_TEXT").is_some();
     // Basic validation: check that referred segments exist
     for &seg_id in referred_to {
         if !symbols.contains_key(&seg_id)
@@ -247,6 +308,61 @@ pub(super) fn on_intermediate_text_region(
             pos += 2;
         }
     } // else default empty
+
+    let instances_from_data = if pos + 4 <= end {
+        Some(crate::segment::read_u32(data, pos))
+    } else {
+        None
+    };
+
+    if trace_text {
+        eprintln!(
+            "text_region(intermediate): segment_flags=0x{:04x} huffman={} refinement={} log_strip_size={} strip_size={} ref_corner={} transposed={} comb_op={} default_pixel={} ds_offset={} refine_template={} region={}x{} at ({}, {}) instances(header)={} instances(data)={:?} input_symbols={} code_len={} start={} end={} pos={}",
+            text_region_segment_flags,
+            huffman,
+            refinement,
+            log_strip_size,
+            strip_size,
+            reference_corner,
+            transposed,
+            combination_operator,
+            default_pixel_value,
+            ds_offset,
+            refinement_template,
+            region_info.width,
+            region_info.height,
+            region_info.x,
+            region_info.y,
+            number_of_symbol_instances,
+            instances_from_data,
+            input_symbols.len(),
+            symbol_code_length,
+            start,
+            end,
+            pos
+        );
+        if huffman {
+            eprintln!(
+                "text_region(intermediate): huffman_flags=0x{:04x} fs={} ds={} dt={} rdw={} rdh={} rdx={} rdy={} size_sel={} ri={}",
+                read_u16(data, start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 2),
+                huffman_fs,
+                huffman_ds,
+                huffman_dt,
+                huffman_refinement_dw,
+                huffman_refinement_dh,
+                huffman_refinement_dx,
+                huffman_refinement_dy,
+                huffman_refinement_size_selector as u8,
+                huffman_ri as u8
+            );
+        }
+        if refinement && refinement_template == 0 {
+            eprintln!(
+                "text_region(intermediate): refinement_at={:?}",
+                refinement_at
+            );
+        }
+    }
 
     if pos + 4 > end {
         return Err(Jbig2Error::new("text region segment too short for instance count"));

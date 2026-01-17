@@ -165,7 +165,7 @@ pub fn decode_bitmap(
             decoding_context.start,
             decoding_context.end,
         );
-        return decode_mmr_bitmap(&mut reader, params.width, params.height, false);
+        return decode_mmr_bitmap(&mut reader, params.width, params.height, true);
     }
 
     // Use optimized version for the most common case

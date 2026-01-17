@@ -84,6 +84,9 @@ pub(super) fn on_page_information(
 
 /// Handle end of stripe
 pub(super) fn on_end_of_stripe(current_y: &mut usize, height: usize) {
+    if std::env::var_os("JBIG2_RS_TRACE_SEGMENTS").is_some() {
+        eprintln!("end_of_stripe: current_y={} height={}", *current_y, height);
+    }
     *current_y += height;
 }
 

@@ -105,6 +105,71 @@ impl Bitmap {
         }
     }
 
+    pub fn count_black_pixels(&self) -> u32 {
+        if self.width == 0 || self.height == 0 {
+            return 0;
+        }
+        let full_bytes = self.width / 8;
+        let rem_bits = self.width % 8;
+        let mask = if rem_bits == 0 {
+            0xFF
+        } else {
+            0xFFu8 << (8 - rem_bits)
+        };
+        let mut total = 0u32;
+        for y in 0..self.height {
+            let row_start = y * self.stride;
+            let row = &self.data[row_start..row_start + self.stride];
+            for &b in &row[..full_bytes] {
+                total += b.count_ones();
+            }
+            if rem_bits != 0 {
+                total += (row[full_bytes] & mask).count_ones();
+            }
+        }
+        total
+    }
+
+    pub fn row_black_stats(&self) -> (u32, u32, u32) {
+        if self.width == 0 || self.height == 0 {
+            return (0, 0, 0);
+        }
+        let full_bytes = self.width / 8;
+        let rem_bits = self.width % 8;
+        let mask = if rem_bits == 0 {
+            0xFF
+        } else {
+            0xFFu8 << (8 - rem_bits)
+        };
+        let mut min_row = u32::MAX;
+        let mut max_row = 0u32;
+        let mut full_rows = 0u32;
+        for y in 0..self.height {
+            let row_start = y * self.stride;
+            let row = &self.data[row_start..row_start + self.stride];
+            let mut row_count = 0u32;
+            for &b in &row[..full_bytes] {
+                row_count += b.count_ones();
+            }
+            if rem_bits != 0 {
+                row_count += (row[full_bytes] & mask).count_ones();
+            }
+            if row_count < min_row {
+                min_row = row_count;
+            }
+            if row_count > max_row {
+                max_row = row_count;
+            }
+            if row_count as usize == self.width {
+                full_rows = full_rows.saturating_add(1);
+            }
+        }
+        if min_row == u32::MAX {
+            min_row = 0;
+        }
+        (min_row, max_row, full_rows)
+    }
+
     /// Combines another bitmap into this one at the specified coordinates using the given operator.
     ///
     /// This method is optimized to use byte-level operations where possible.
@@ -116,6 +181,10 @@ impl Bitmap {
     /// * `y` - Y coordinate in this bitmap where the source should be placed
     /// * `operator` - Combination operator (0=OR, 1=AND, 2=XOR, 3=XNOR, 4=REPLACE)
     pub fn combine(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
+        if std::env::var_os("JBIG2_RS_NAIVE_COMBINE").is_some() {
+            self.combine_naive(other, x, y, operator);
+            return;
+        }
         // Clip to bounds
         let start_y = y.max(0) as usize;
         let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
@@ -230,6 +299,38 @@ impl Bitmap {
 
                 current_x += bits_to_process;
                 current_src_x += bits_to_process;
+            }
+        }
+    }
+
+    fn combine_naive(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
+        let start_y = y.max(0) as usize;
+        let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
+        if start_y >= end_y {
+            return;
+        }
+
+        let start_x = x.max(0) as usize;
+        let end_x = (x + other.width as isize).min(self.width as isize).max(0) as usize;
+        if start_x >= end_x {
+            return;
+        }
+
+        for dst_y in start_y..end_y {
+            let src_y = (dst_y as isize - y) as usize;
+            for dst_x in start_x..end_x {
+                let src_x = (dst_x as isize - x) as usize;
+                let src = other.get_pixel(src_x, src_y);
+                let dst = self.get_pixel(dst_x, dst_y);
+                let value = match operator {
+                    0 => dst | src,
+                    1 => dst & src,
+                    2 => dst ^ src,
+                    3 => (dst ^ src) ^ 1,
+                    4 => src,
+                    _ => dst | src,
+                };
+                self.set_pixel(dst_x, dst_y, value);
             }
         }
     }
