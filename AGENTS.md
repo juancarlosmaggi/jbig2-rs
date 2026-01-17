@@ -27,7 +27,6 @@ python3 scripts/profile_ubc.py
 
 ## Testing Requirements
 - Always keep `cargo test` passing.
-- Re-run `cargo test jbig2dec_hashes` after performance changes.
 - If touching decode logic, validate at least one large UBC fixture profile run.
 
 ## Reporting
