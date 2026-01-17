@@ -180,13 +180,13 @@ This repository includes a CLI tool that decodes a JBIG2 file into PNG pages.
 
 ```bash
 # Build the CLI binary
-cargo build --bin jbig2-decoder
+cargo build --release
 
 # Decode to PNG files in the current directory
-./target/debug/jbig2-decoder --input input.jb2
+./target/release/jbig2-rs --input input.jb2
 
 # Decode to PNG files in a specific directory with a custom prefix
-./target/debug/jbig2-decoder --input input.jb2 --output-dir out --prefix doc
+./target/release/jbig2-rs --input input.jb2 --output-dir out --prefix doc
 ```
 
 Flags:
@@ -214,6 +214,33 @@ cargo build
 
 ```bash
 cargo test
+```
+
+## Performance & Profiling
+
+### Batch Profiling
+To aggregate profiling data across the UBC test fixtures and generate `PROFILE_REPORT.md`:
+```bash
+python3 scripts/profile_ubc.py
+```
+
+### Regression Testing
+To compare current performance against a saved baseline (uses `criterion`):
+```bash
+# First establish a baseline
+cargo bench -- --save-baseline main
+
+# Then check for regressions
+./scripts/check_performance.sh main
+```
+
+## Fuzzing
+
+This project uses `cargo-fuzz` for robustness testing. Fuzz targets are located in the `fuzz/` directory.
+
+To start fuzzing (requires `cargo-fuzz`):
+```bash
+cargo fuzz run fuzz_reader
 ```
 
 ## License
