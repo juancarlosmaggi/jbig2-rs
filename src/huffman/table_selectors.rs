@@ -165,7 +165,6 @@ fn decode_symbol_id_huffman_table(
     reader: &mut Reader,
     number_of_symbols: usize,
 ) -> Result<HuffmanTable, Jbig2Error> {
-    let trace_huffman = std::env::var_os("JBIG2_RS_TRACE_HUFFMAN").is_some();
     // Read code lengths for the run-length codes.
     let mut codes = Vec::new();
     for i in 0..=34 {
@@ -216,34 +215,6 @@ fn decode_symbol_id_huffman_table(
             codes.push(HuffmanLine::new(vec![i as i32, code_length as i32, 0, 0]));
             i += 1;
         }
-    }
-    if trace_huffman {
-        let mut hist = [0u32; 33];
-        let mut min_len = u32::MAX;
-        let mut max_len = 0u32;
-        for line in &codes {
-            let len = line.prefix_length;
-            if (len as usize) < hist.len() {
-                hist[len as usize] = hist[len as usize].saturating_add(1);
-            }
-            min_len = min_len.min(len);
-            max_len = max_len.max(len);
-        }
-        let zero_len = hist[0];
-        eprintln!(
-            "symbol_id_table: symbols={} len_range=[{}, {}] zero_len={}",
-            number_of_symbols,
-            if min_len == u32::MAX { 0 } else { min_len },
-            max_len,
-            zero_len
-        );
-        let mut sample = Vec::new();
-        for (len, count) in hist.iter().enumerate() {
-            if *count > 0 {
-                sample.push(format!("{}:{}", len, count));
-            }
-        }
-        eprintln!("symbol_id_table: len_hist {{ {} }}", sample.join(", "));
     }
     reader.byte_align();
     Ok(HuffmanTable::new(codes, false))

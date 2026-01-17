@@ -12,13 +12,10 @@ struct CCITTFaxDecoder {
     end_of_block: bool,
     ref_line: Vec<u8>,
     curr_line: Vec<u8>,
-    trace: bool,
-    invalid_modes: u32,
-    invalid_runs: u32,
 }
 
 impl CCITTFaxDecoder {
-    fn new(reader: Reader, width: usize, height: usize, end_of_block: bool, trace: bool) -> Self {
+    fn new(reader: Reader, width: usize, height: usize, end_of_block: bool) -> Self {
         CCITTFaxDecoder {
             reader,
             width,
@@ -26,9 +23,6 @@ impl CCITTFaxDecoder {
             end_of_block,
             ref_line: vec![0; width],
             curr_line: vec![0; width],
-            trace,
-            invalid_modes: 0,
-            invalid_runs: 0,
         }
     }
 
@@ -63,9 +57,6 @@ impl CCITTFaxDecoder {
             let mode = match self.read_mode_code() {
                 Ok(m) => m,
                 Err(_) => {
-                    if self.trace {
-                        self.invalid_modes = self.invalid_modes.saturating_add(1);
-                    }
                     // Invalid code or end-of-data; finish the line with white.
                     break;
                 }
@@ -112,18 +103,12 @@ impl CCITTFaxDecoder {
                     let r1 = match self.decode_run_length(white_first) {
                         Ok(r) => r as usize,
                         Err(_) => {
-                            if self.trace {
-                                self.invalid_runs = self.invalid_runs.saturating_add(1);
-                            }
                             break; // finish with white
                         }
                     };
                     let r2 = match self.decode_run_length(!white_first) {
                         Ok(r) => r as usize,
                         Err(_) => {
-                            if self.trace {
-                                self.invalid_runs = self.invalid_runs.saturating_add(1);
-                            }
                             break;
                         }
                     };
@@ -318,8 +303,8 @@ impl CCITTFaxDecoder {
 
             y += 1;
         }
-        if self.end_of_block && self.consume_eofb_marker() && self.trace {
-            eprintln!("mmr: consumed eofb");
+        if self.end_of_block {
+            self.consume_eofb_marker();
         }
 
         Ok(bitmap)
@@ -340,25 +325,13 @@ pub fn decode_mmr_bitmap(
     let data_clone = input.get_data().to_vec();
     let pos = input.get_position();
     let end = input.get_end();
-    let trace = std::env::var_os("JBIG2_RS_TRACE_MMR").is_some();
 
     let reader = Reader::new(data_clone, pos, end);
-    let mut decoder = CCITTFaxDecoder::new(reader, width, height, end_of_block, trace);
+    let mut decoder = CCITTFaxDecoder::new(reader, width, height, end_of_block);
 
     let bitmap = decoder.decode()?;
 
     input.set_position(decoder.reader.get_position());
-    if decoder.trace && (decoder.invalid_modes > 0 || decoder.invalid_runs > 0) {
-        let bytes = end.saturating_sub(pos);
-        eprintln!(
-            "mmr: width={} height={} bytes={} invalid_modes={} invalid_runs={}",
-            width,
-            height,
-            bytes,
-            decoder.invalid_modes,
-            decoder.invalid_runs
-        );
-    }
 
     Ok(bitmap)
 }

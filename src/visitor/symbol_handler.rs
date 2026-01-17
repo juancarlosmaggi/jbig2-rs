@@ -28,7 +28,6 @@ pub(super) fn on_symbol_dictionary(
     custom_tables: &HashMap<u32, HuffmanTable>,
     params: &SymbolDictionaryParams,
 ) -> Result<(), Jbig2Error> {
-    let trace_symbol = std::env::var_os("JBIG2_RS_TRACE_SYMBOL").is_some();
     if params.start >= params.end {
         return Ok(());
     }
@@ -43,32 +42,8 @@ pub(super) fn on_symbol_dictionary(
     let template = ((params.dictionary_flags >> 10) & 3) as usize;
     let refinement_template = ((params.dictionary_flags >> 12) & 1) as usize;
 
-    if trace_symbol {
-        eprintln!(
-            "symbol_dict: seg={} flags=0x{:04x} huffman={} refinement={} template={} ref_template={} new_syms={} exported_syms={} referred_to={:?} start={} end={}",
-            params.current_segment,
-            params.dictionary_flags,
-            huffman,
-            refinement,
-            template,
-            refinement_template,
-            params.number_of_new_symbols,
-            params.number_of_exported_symbols,
-            params.referred_segments,
-            params.start,
-            params.end
-        );
-    }
-
     let at = params.at_pixels.clone();
     let refinement_at = params.refinement_at_pixels.clone();
-
-    if trace_symbol && (!at.is_empty() || !refinement_at.is_empty()) {
-        eprintln!(
-            "symbol_dict: at={:?} refinement_at={:?}",
-            at, refinement_at
-        );
-    }
 
     let slice = &params.data[params.start..params.end];
     let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());

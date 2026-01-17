@@ -173,10 +173,6 @@ impl Bitmap {
     /// * `y` - Y coordinate in this bitmap where the source should be placed
     /// * `operator` - Combination operator (0=OR, 1=AND, 2=XOR, 3=XNOR, 4=REPLACE)
     pub fn combine(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
-        if std::env::var_os("JBIG2_RS_NAIVE_COMBINE").is_some() {
-            self.combine_naive(other, x, y, operator);
-            return;
-        }
         // Clip to destination bounds before iterating.
         let start_y = y.max(0) as usize;
         let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
@@ -266,17 +262,21 @@ impl Bitmap {
             }
         }
     }
+}
 
-    /// Combine bit-by-bit, used for debugging or validation.
-    fn combine_naive(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn combine_naive(dst: &mut Bitmap, other: &Bitmap, x: isize, y: isize, operator: u8) {
         let start_y = y.max(0) as usize;
-        let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
+        let end_y = (y + other.height as isize).min(dst.height as isize).max(0) as usize;
         if start_y >= end_y {
             return;
         }
 
         let start_x = x.max(0) as usize;
-        let end_x = (x + other.width as isize).min(self.width as isize).max(0) as usize;
+        let end_x = (x + other.width as isize).min(dst.width as isize).max(0) as usize;
         if start_x >= end_x {
             return;
         }
@@ -286,24 +286,19 @@ impl Bitmap {
             for dst_x in start_x..end_x {
                 let src_x = (dst_x as isize - x) as usize;
                 let src = other.get_pixel(src_x, src_y);
-                let dst = self.get_pixel(dst_x, dst_y);
+                let dst_val = dst.get_pixel(dst_x, dst_y);
                 let value = match operator {
-                    0 => dst | src,
-                    1 => dst & src,
-                    2 => dst ^ src,
-                    3 => (dst ^ src) ^ 1,
+                    0 => dst_val | src,
+                    1 => dst_val & src,
+                    2 => dst_val ^ src,
+                    3 => (dst_val ^ src) ^ 1,
                     4 => src,
-                    _ => dst | src,
+                    _ => dst_val | src,
                 };
-                self.set_pixel(dst_x, dst_y, value);
+                dst.set_pixel(dst_x, dst_y, value);
             }
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     #[test]
     fn test_bitmap_creation() {
@@ -411,13 +406,13 @@ mod tests {
         }
 
         dst_opt.combine(&src, 3, 2, 0);
-        dst_naive.combine_naive(&src, 3, 2, 0);
+        combine_naive(&mut dst_naive, &src, 3, 2, 0);
         assert_eq!(dst_opt.data, dst_naive.data);
 
         let mut dst_opt = Bitmap::new(19, 9);
         let mut dst_naive = dst_opt.clone();
         dst_opt.combine(&src, -2, 1, 2);
-        dst_naive.combine_naive(&src, -2, 1, 2);
+        combine_naive(&mut dst_naive, &src, -2, 1, 2);
         assert_eq!(dst_opt.data, dst_naive.data);
     }
 

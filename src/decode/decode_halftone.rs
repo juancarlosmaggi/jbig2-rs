@@ -3,7 +3,6 @@ use crate::bitmap_utils;
 use crate::contexts::DecodingContext;
 use crate::decode::decode_generic::{DecodeBitmapParams, decode_bitmap};
 use crate::error::Jbig2Error;
-use std::path::PathBuf;
 
 /// Inputs needed to decode a halftone region.
 #[derive(Clone)]
@@ -47,7 +46,6 @@ pub fn decode_halftone_region(
     let pattern_width = pattern0.width;
     let pattern_height = pattern0.height;
     let bits_per_value = crate::core_utils::log2(number_of_patterns as u32) as usize;
-    let trace_bytes = std::env::var_os("JBIG2_RS_TRACE_HALFTONE_BYTES").is_some();
     let at = if !params.mmr {
         let mut at_vec = vec![(if params.template <= 1 { 3i8 } else { 2i8 }, -1i8)];
         if params.template <= 1 {
@@ -98,20 +96,12 @@ pub fn decode_halftone_region(
         };
         let bitmap = decode_bitmap(&decode_params, decoding_context)?;
         gray_scale_bit_planes[j] = bitmap;
-        if trace_bytes && params.mmr {
-            eprintln!(
-                "halftone_bitplane: plane={} consumed_bytes={}",
-                j,
-                decoding_context.start
-            );
-        }
         if j + 1 < bits_per_value {
             for idx in 0..gray_scale_bit_planes[j].data.len() {
                 gray_scale_bit_planes[j].data[idx] ^= gray_scale_bit_planes[j + 1].data[idx];
             }
         }
     }
-    let dump_grid = std::env::var_os("JBIG2_RS_DUMP_HALFTONE_GRID").map(PathBuf::from);
     let mut pattern_indices = vec![0usize; params.grid_width * params.grid_height];
     for mg in 0..params.grid_height {
         for ng in 0..params.grid_width {
@@ -125,22 +115,6 @@ pub fn decode_halftone_region(
             }
             pattern_indices[mg * params.grid_width + ng] = pattern_index;
         }
-    }
-    if let Some(path) = dump_grid {
-        let mut out = String::new();
-        out.push_str(&format!("{} {}\n", params.grid_width, params.grid_height));
-        for mg in 0..params.grid_height {
-            for ng in 0..params.grid_width {
-                let idx = pattern_indices[mg * params.grid_width + ng];
-                out.push_str(&idx.to_string());
-                if ng + 1 < params.grid_width {
-                    out.push(' ');
-                }
-            }
-            out.push('\n');
-        }
-        std::fs::write(&path, out)
-            .map_err(|e| Jbig2Error::new(&format!("halftone grid dump failed: {e}")))?;
     }
     // Render patterns into the output bitmap using the grid geometry.
     for mg in 0..params.grid_height {

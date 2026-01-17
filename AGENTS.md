@@ -2,8 +2,7 @@
 
 ## Current Goal
 Validate `jbig2-rs` output against `jbig2dec` using the full UBC fixture set
-in `tests/resources/ubc`, confirm the halftone fix, and decide whether to keep
-or trim debug dumps.
+in `tests/resources/ubc` and confirm the halftone fix.
 
 ## Testing and Comparison Workflow
 - Decode reference output with `jbig2dec` to PBM.
@@ -11,24 +10,11 @@ or trim debug dumps.
 - Compare:
   - Bit-level mismatch vs PBM (expanded to 0/1 pixels).
   - Row/column mismatch distribution to spot alignment patterns.
-  - Debug traces in `jbig2-rs`:
-    - `JBIG2_RS_TRACE_TEXT=1` for text region internals.
-    - `JBIG2_RS_TRACE_TEXT_REF=/path/to/ref.pbm` to compare placements
-      directly against the reference bitmap.
-    - `JBIG2_RS_TRACE_SYMBOL=1` for symbol dictionary stats.
-    - `JBIG2_RS_TRACE_MMR=1` for MMR decode issues (currently clean).
-    - `JBIG2_RS_TRACE_HALFTONE=1` for halftone grid/pattern parameters.
-    - `JBIG2_RS_DUMP_PATTERNS=/tmp/dir` to dump pattern dictionaries (P1 PBM).
-    - `JBIG2_RS_DUMP_HALFTONE_GRID=/tmp/file` to dump halftone grid indices.
-  - Use `JBIG2_RS_NAIVE_COMBINE=1` to sanity-check bitmap composition
-    if a mismatch appears.
 
 Example run:
 ```
 jbig2dec -o /tmp/jbig2-compare/jbig2dec/text_region.pbm tests/resources/text_region.jb2
-JBIG2_RS_TRACE_TEXT=1 \
-JBIG2_RS_TRACE_TEXT_REF=/tmp/jbig2-compare/jbig2dec/text_region.pbm \
-  cargo run --example decode_file --quiet -- \
+cargo run --example decode_file --quiet -- \
   tests/resources/text_region.jb2 /tmp/jbig2-compare/jbig2-rs/text_region.bin \
   2> /tmp/jbig2-compare/jbig2-rs/text_region.trace
 ```
@@ -207,19 +193,7 @@ for jb2 in sorted(tests.glob("*.jb2")):
 - MMR decoder no longer treats EOFB as a mode code; it now consumes EOFB after
   completing rows. Halftone MMR plane consumption matches jbig2dec.
 - `cargo test jbig2dec_hashes` now passes across UBC fixtures.
-- New debug/env knobs:
-  - `JBIG2_RS_TRACE_INT` (symbol dict IADH/IADW), `JBIG2_RS_TRACE_REFINE`
-    (refinement IDs), `JBIG2_RS_TRACE_CLASS` (per-class symbol offsets),
-    `JBIG2_RS_TRACE_EXPORT_OFFSET`, `JBIG2_RS_TRACE_SYMDICT_OFFSET`,
-    `JBIG2_RS_TRACE_HALFTONE_BYTES`.
-  - `JBIG2_RS_TRACE_ERRORS` to log lenient decode stops; `JBIG2_RS_STRICT=1`
-    to revert to hard errors.
-  - `JBIG2_RS_DISABLE_TEMPLATE0_FAST=1` to disable generic template-0 fast path.
-- jbig2dec instrumentation added for export/agg/int traces, symbol dict AT,
-  refinement IDs, halftone plane bytes, and arithmetic byte offsets.
 
 ## Current Plan
-1) Decide whether to keep or trim the new debug gates and jbig2dec
-   instrumentation now that parity is green.
-2) Optionally add regression tests for TPGRON refinement and halftone MMR plane
+1) Optionally add regression tests for TPGRON refinement and halftone MMR plane
    consumption.

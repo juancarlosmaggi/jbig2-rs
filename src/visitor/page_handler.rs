@@ -106,9 +106,6 @@ pub(super) fn on_end_of_stripe(
     current_y: &mut usize,
     end_row: usize,
 ) {
-    if std::env::var_os("JBIG2_RS_TRACE_SEGMENTS").is_some() {
-        eprintln!("end_of_stripe: current_y={} end_row={}", *current_y, end_row);
-    }
     let next_row = end_row.saturating_add(1);
     *current_y = next_row;
     if let (Some(page_info), Some(bitmap)) =

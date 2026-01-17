@@ -173,11 +173,8 @@ pub fn decode_bitmap(
         return Ok(bitmap);
     }
 
-    let disable_fast = std::env::var_os("JBIG2_RS_DISABLE_TEMPLATE0_FAST").is_some();
-
     // Use an optimized path for the common template-0 case.
-    if !disable_fast
-        && params.template_index == 0
+    if params.template_index == 0
         && params.skip.is_none()
         && !params.prediction
         && params.at.len() == 4

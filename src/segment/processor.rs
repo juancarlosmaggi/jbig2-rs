@@ -14,8 +14,7 @@ pub fn process_segments<'a>(
     segments: &[Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
 ) -> Result<(), Jbig2Error> {
-    let strict = std::env::var_os("JBIG2_RS_STRICT").is_some();
-    let trace_errors = std::env::var_os("JBIG2_RS_TRACE_ERRORS").is_some();
+    let strict = false;
     let mut current_page = 0u32;
     let mut page_segments = Vec::new();
     for segment in segments {
@@ -37,9 +36,6 @@ pub fn process_segments<'a>(
                 if strict || visitor.current_page_info.is_none() {
                     return Err(err);
                 }
-                if trace_errors {
-                    eprintln!("segment: decode error {}, stopping early", err);
-                }
                 return Ok(());
             }
             continue;
@@ -49,9 +45,6 @@ pub fn process_segments<'a>(
             if let Err(err) = process_page_segments(&page_segments, visitor) {
                 if strict || visitor.current_page_info.is_none() {
                     return Err(err);
-                }
-                if trace_errors {
-                    eprintln!("segment: decode error {}, stopping early", err);
                 }
                 return Ok(());
             }
@@ -63,9 +56,6 @@ pub fn process_segments<'a>(
         if let Err(err) = process_page_segments(&page_segments, visitor) {
             if strict || visitor.current_page_info.is_none() {
                 return Err(err);
-            }
-            if trace_errors {
-                eprintln!("segment: decode error {}, stopping early", err);
             }
             return Ok(());
         }
@@ -107,20 +97,6 @@ pub fn process_segment<'a>(
     let end = segment.end;
     if start > end || end > data.len() {
         return Err(Jbig2Error::new(ERR_INVALID_SEGMENT));
-    }
-    if std::env::var_os("JBIG2_RS_TRACE_SEGMENTS").is_some() {
-        eprintln!(
-            "segment: num={} type={}({}) page_assoc={} retain={} referred_to={:?} start={} end={} len={}",
-            header.number,
-            header.segment_type,
-            header.type_name,
-            header.page_association,
-            if header.deferred_non_retain { "non_retain" } else { "retain" },
-            header.referred_to,
-            start,
-            end,
-            header.length
-        );
     }
     match header.segment_type {
         0 => {
