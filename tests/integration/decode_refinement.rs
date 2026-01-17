@@ -59,6 +59,7 @@ mod tests {
         let data = vec![0u8; 100];
         let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let reference = Bitmap::new(16, 16);
+        let at = [(0, 0), (0, 0)];
 
         let params = RefinementParams {
             width: 0,
@@ -68,7 +69,7 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![(0, 0)],
+            at: &at[..1],
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -80,6 +81,7 @@ mod tests {
         let data = vec![0u8; 100];
         let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let reference = Bitmap::new(16, 16);
+        let at = [(0, 0), (0, 0)];
 
         let params = RefinementParams {
             width: 16,
@@ -89,7 +91,7 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![(0, 0), (0, 0)],
+            at: &at,
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -101,6 +103,7 @@ mod tests {
         let data = vec![0u8; 1000];
         let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let reference = Bitmap::new(32, 32);
+        let at = [(0, 0), (0, 0)];
 
         let params = RefinementParams {
             width: 16,
@@ -110,7 +113,7 @@ mod tests {
             offset_x: 8,
             offset_y: 8,
             prediction: false,
-            at: vec![(0, 0)],
+            at: &at[..1],
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -122,6 +125,7 @@ mod tests {
         let data = vec![0u8; 1000];
         let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let reference = Bitmap::new(16, 16);
+        let at = [(0, 0), (0, 0)];
 
         let params = RefinementParams {
             width: 16,
@@ -131,7 +135,7 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: true,
-            at: vec![(0, 0), (0, 0)],
+            at: &at,
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -146,12 +150,9 @@ mod tests {
             let data = vec![0u8; 1000];
             let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
             let reference = Bitmap::new(16, 16);
+            let at = [(0, 0), (0, 0)];
 
-            let at = if template_index == 0 {
-                vec![(0, 0)]
-            } else {
-                vec![]
-            };
+            let at = if template_index == 0 { &at[..1] } else { &at[..0] };
 
             let params = RefinementParams {
                 width: 8,
@@ -174,6 +175,7 @@ mod tests {
         let data = vec![0u8; 1000];
         let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let reference = Bitmap::new(16, 16);
+        let at = [(1, -1), (2, -1)];
 
         let params = RefinementParams {
             width: 8,
@@ -183,7 +185,7 @@ mod tests {
             offset_x: 0,
             offset_y: 0,
             prediction: false,
-            at: vec![(1, -1), (2, -1)],
+            at: &at,
         };
 
         let result = decode_refinement(&params, &mut context);
@@ -198,6 +200,7 @@ mod tests {
             let data = vec![0u8; 1000];
             let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
             let reference = Bitmap::new(width * 2, height * 2);
+            let at = [(0, 0), (0, 0)];
 
             let params = RefinementParams {
                 width,
@@ -207,7 +210,7 @@ mod tests {
                 offset_x: 0,
                 offset_y: 0,
                 prediction: false,
-            at: vec![(0, 0)],
+                at: &at[..1],
             };
 
             let result = decode_refinement(&params, &mut context);

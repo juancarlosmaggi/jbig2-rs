@@ -48,6 +48,7 @@ impl<'a> ArithmeticDecoder<'a> {
         decoder
     }
 
+    #[inline(always)]
     fn get_next_word(&self, offset: usize) -> (u32, usize) {
         if offset >= self.data.len() {
             return (0, 0);
@@ -77,6 +78,7 @@ impl<'a> ArithmeticDecoder<'a> {
     }
 
     /// Pull the next byte into the C register with marker/stuffing handling.
+    #[inline(always)]
     fn byte_in(&mut self) {
         let b = ((self.next_word >> 24) & 0xFF) as u8;
 

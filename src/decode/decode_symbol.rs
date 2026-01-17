@@ -244,7 +244,7 @@ pub fn decode_symbol_dictionary(
                                 offset_x: rdx,
                                 offset_y: rdy,
                                 prediction: false,
-                                at: params.refinement_at.clone(),
+                                at: params.refinement_at.as_slice(),
                             },
                             &mut temp_context,
                         )?
@@ -258,7 +258,7 @@ pub fn decode_symbol_dictionary(
                                 offset_x: rdx,
                                 offset_y: rdy,
                                 prediction: false,
-                                at: params.refinement_at.clone(),
+                                at: params.refinement_at.as_slice(),
                             },
                             decoding_context,
                         )?

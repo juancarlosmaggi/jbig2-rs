@@ -186,7 +186,7 @@ pub(super) fn on_immediate_generic_refinement_region(
             offset_x: 0,
             offset_y: 0,
             prediction,
-            at,
+            at: at.as_slice(),
         },
         &mut decoding_context,
     )?;
@@ -303,7 +303,7 @@ pub(super) fn on_intermediate_generic_refinement_region(
             offset_x: 0,
             offset_y: 0,
             prediction,
-            at,
+            at: at.as_slice(),
         },
         &mut decoding_context,
     )?;
