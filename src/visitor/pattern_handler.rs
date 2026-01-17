@@ -18,7 +18,7 @@ pub(super) fn on_pattern_dictionary(
     end: usize,
 ) -> Result<(), Jbig2Error> {
     let slice = &data[start..end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     let params = crate::decode::decode_pattern::PatternDictionaryParams {
         mmr,

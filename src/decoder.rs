@@ -7,7 +7,7 @@ use crate::error::Jbig2Error;
 pub fn decode_integer(
     context_cache: &mut ContextCache,
     procedure: &str,
-    decoder: &mut ArithmeticDecoder,
+    decoder: &mut ArithmeticDecoder<'_>,
 ) -> Result<Option<i32>, Jbig2Error> {
     let contexts = context_cache.get_contexts(procedure);
     let mut prev = 1;
@@ -15,7 +15,7 @@ pub fn decode_integer(
     let read_bits = |length: u32,
                      contexts: &mut Vec<i8>,
                      prev: &mut usize,
-                     decoder: &mut ArithmeticDecoder|
+                     decoder: &mut ArithmeticDecoder<'_>|
      -> Result<u32, Jbig2Error> {
         let mut v = 0;
         for _ in 0..length {
@@ -77,7 +77,7 @@ pub fn decode_integer(
 /// Decode an IAID value using arithmetic coding contexts.
 pub fn decode_iaid(
     context_cache: &mut ContextCache,
-    decoder: &mut ArithmeticDecoder,
+    decoder: &mut ArithmeticDecoder<'_>,
     code_length: usize,
 ) -> Result<u32, Jbig2Error> {
     let contexts = context_cache.get_contexts("IAID");
@@ -95,7 +95,7 @@ pub fn decode_iaid(
 
 /// Decode a signed integer from a shared decoding context.
 pub fn decode_integer_context(
-    decoding_context: &mut DecodingContext,
+    decoding_context: &mut DecodingContext<'_>,
     procedure: &str,
 ) -> Result<Option<i32>, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
@@ -106,7 +106,7 @@ pub fn decode_integer_context(
 
 /// Decode an IAID value from a shared decoding context.
 pub fn decode_iaid_context(
-    decoding_context: &mut DecodingContext,
+    decoding_context: &mut DecodingContext<'_>,
     code_length: usize,
 ) -> Result<u32, Jbig2Error> {
     let mut context_cache = decoding_context.context_cache.borrow_mut();
@@ -120,7 +120,7 @@ pub fn decode_i32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
     arith_proc: &str,
-    decoding_context: &mut DecodingContext,
+    decoding_context: &mut DecodingContext<'_>,
 ) -> Result<i32, Jbig2Error>
 where
     F: FnOnce() -> Result<i32, Jbig2Error>,
@@ -137,7 +137,7 @@ pub fn decode_option_i32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
     arith_proc: &str,
-    decoding_context: &mut DecodingContext,
+    decoding_context: &mut DecodingContext<'_>,
 ) -> Result<Option<i32>, Jbig2Error>
 where
     F: FnOnce() -> Result<i32, Jbig2Error>,
@@ -154,7 +154,7 @@ pub fn decode_u32_huffman_or_arith<F>(
     huffman: bool,
     huffman_decode: F,
     arith_code_length: usize,
-    decoding_context: &mut DecodingContext,
+    decoding_context: &mut DecodingContext<'_>,
 ) -> Result<u32, Jbig2Error>
 where
     F: FnOnce() -> Result<i32, Jbig2Error>,

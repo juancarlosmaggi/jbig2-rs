@@ -8,7 +8,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_no_symbols() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = TextRegionParams {
             huffman: false,
@@ -38,7 +38,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_transposed() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol = Bitmap::new(8, 8);
 
@@ -70,7 +70,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_invalid_reference_corner() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let symbol = Bitmap::new(8, 8);
 
         let params = TextRegionParams {
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_invalid_combination_operator() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let symbol = Bitmap::new(8, 8);
 
         let params = TextRegionParams {
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_refinement_with_huffman() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         let symbol = Bitmap::new(8, 8);
 
         let params = TextRegionParams {
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_with_huffman_no_tables() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol = Bitmap::new(8, 8);
 
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_valid_minimal() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol = Bitmap::new(8, 8);
 
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn test_decode_text_region_with_multiple_symbols() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
         *context.decoder.borrow_mut() = Some(ArithmeticDecoder::new(&data));
         let symbol1 = Bitmap::new(8, 8);
         let symbol2 = Bitmap::new(8, 8);

@@ -1,18 +1,23 @@
+use std::borrow::Cow;
+
 /// Bit/byte reader with a movable window over a data buffer.
 #[derive(Clone)]
-pub struct Reader {
-    data: Vec<u8>,
+pub struct Reader<'a> {
+    data: Cow<'a, [u8]>,
     end: usize,
     position: usize,
     shift: i32,
     current_byte: u8,
 }
 
-impl Reader {
+impl<'a> Reader<'a> {
     /// Create a reader over `data[start..end]`.
-    pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
+    pub fn new<D>(data: D, start: usize, end: usize) -> Self
+    where
+        D: Into<Cow<'a, [u8]>>,
+    {
         Reader {
-            data,
+            data: data.into(),
             end,
             position: start,
             shift: -1,
@@ -53,7 +58,7 @@ impl Reader {
 
     /// Return the underlying buffer.
     pub fn get_data(&self) -> &[u8] {
-        &self.data
+        self.data.as_ref()
     }
 
     /// Return the current byte position.

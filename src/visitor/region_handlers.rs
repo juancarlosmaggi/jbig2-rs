@@ -89,7 +89,7 @@ pub(super) fn on_immediate_generic_region(
     }
 
     let slice = &data[decoding_start..end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     let params = DecodeBitmapParams {
         mmr: region.mmr,
@@ -98,7 +98,7 @@ pub(super) fn on_immediate_generic_region(
         template_index: region.template,
         prediction: region.prediction,
         skip: None,
-        at: region.at.clone(),
+        at: region.at.as_slice(),
     };
 
     let bitmap = decode_bitmap(&params, &mut decoding_context)?;
@@ -175,7 +175,7 @@ pub(super) fn on_immediate_generic_refinement_region(
     };
 
     let slice = &data[pos..end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     let bitmap = crate::decode::decode_refinement::decode_refinement(
         &crate::decode::decode_refinement::RefinementParams {
@@ -235,7 +235,7 @@ pub(super) fn on_intermediate_generic_region(
     }
 
     let slice = &data[decoding_start..end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     let params = DecodeBitmapParams {
         mmr: region.mmr,
@@ -244,7 +244,7 @@ pub(super) fn on_intermediate_generic_region(
         template_index: region.template,
         prediction: region.prediction,
         skip: None,
-        at: region.at.clone(),
+        at: region.at.as_slice(),
     };
 
     let bitmap = decode_bitmap(&params, &mut decoding_context)?;
@@ -292,7 +292,7 @@ pub(super) fn on_intermediate_generic_refinement_region(
     };
 
     let slice = &data[pos..end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     let bitmap = crate::decode::decode_refinement::decode_refinement(
         &crate::decode::decode_refinement::RefinementParams {

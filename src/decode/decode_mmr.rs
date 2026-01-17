@@ -5,8 +5,8 @@ use crate::reader::Reader;
 
 // CCITT Group 4 (MMR) decoder implementation with robustness checks.
 #[derive(Clone)]
-struct CCITTFaxDecoder {
-    reader: Reader,
+struct CCITTFaxDecoder<'a> {
+    reader: Reader<'a>,
     width: usize,
     height: usize,
     end_of_block: bool,
@@ -14,8 +14,8 @@ struct CCITTFaxDecoder {
     curr_line: Vec<u8>,
 }
 
-impl CCITTFaxDecoder {
-    fn new(reader: Reader, width: usize, height: usize, end_of_block: bool) -> Self {
+impl<'a> CCITTFaxDecoder<'a> {
+    fn new(reader: Reader<'a>, width: usize, height: usize, end_of_block: bool) -> Self {
         CCITTFaxDecoder {
             reader,
             width,
@@ -313,7 +313,7 @@ impl CCITTFaxDecoder {
 
 /// Decode an MMR-encoded bitmap from the reader.
 pub fn decode_mmr_bitmap(
-    input: &mut Reader,
+    input: &mut Reader<'_>,
     width: usize,
     height: usize,
     end_of_block: bool,
@@ -322,16 +322,19 @@ pub fn decode_mmr_bitmap(
         return Ok(Bitmap::new(width, height));
     }
 
-    let data_clone = input.get_data().to_vec();
     let pos = input.get_position();
     let end = input.get_end();
+    let data = input.get_data();
 
-    let reader = Reader::new(data_clone, pos, end);
-    let mut decoder = CCITTFaxDecoder::new(reader, width, height, end_of_block);
+    let (bitmap, new_pos) = {
+        let reader = Reader::new(data, pos, end);
+        let mut decoder = CCITTFaxDecoder::new(reader, width, height, end_of_block);
+        let bitmap = decoder.decode()?;
+        let new_pos = decoder.reader.get_position();
+        (bitmap, new_pos)
+    };
 
-    let bitmap = decoder.decode()?;
-
-    input.set_position(decoder.reader.get_position());
+    input.set_position(new_pos);
 
     Ok(bitmap)
 }

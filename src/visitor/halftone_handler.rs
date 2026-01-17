@@ -69,13 +69,13 @@ pub(super) fn on_immediate_halftone_region(
     }
     let pattern_segment = referred_to[0];
     let patterns_vec = if let Some(p) = patterns.get(&pattern_segment) {
-        p.clone()
+        p.as_slice()
     } else {
         return Ok(());
     };
 
     let slice = &data[start..end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     let params = crate::decode::decode_halftone::HalftoneRegionParams {
         mmr,
@@ -135,13 +135,13 @@ pub(super) fn on_intermediate_halftone_region(
     }
     let pattern_segment = referred_to[0];
     let patterns_vec = if let Some(p) = patterns.get(&pattern_segment) {
-        p.clone()
+        p.as_slice()
     } else {
         return Ok(());
     };
 
     let slice = &data[start..end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     let params = crate::decode::decode_halftone::HalftoneRegionParams {
         mmr,

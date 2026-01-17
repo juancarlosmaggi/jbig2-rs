@@ -29,8 +29,8 @@ pub struct SymbolDictionaryParams {
 /// Decode a symbol dictionary and return the exported symbols.
 pub fn decode_symbol_dictionary(
     params: &SymbolDictionaryParams,
-    decoding_context: &mut DecodingContext,
-    mut huffman_input: Option<&mut Reader>,
+    decoding_context: &mut DecodingContext<'_>,
+    mut huffman_input: Option<&mut Reader<'_>>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     if params.number_of_new_symbols == 0 {
         // return Err(Jbig2Error::new("number of new symbols must be positive"));
@@ -234,8 +234,7 @@ pub fn decode_symbol_dictionary(
                             .ok_or_else(|| Jbig2Error::new("missing Huffman input"))?;
                         let current_pos = reader.get_position();
                         let data = reader.get_data();
-                        let mut temp_context =
-                            DecodingContext::new(data.to_vec(), current_pos, data.len());
+                        let mut temp_context = DecodingContext::new(data, current_pos, data.len());
                         crate::decode::decode_refinement::decode_refinement(
                             &crate::decode::decode_refinement::RefinementParams {
                                 width,
@@ -308,7 +307,7 @@ pub fn decode_symbol_dictionary(
                         template_index: params.template_index,
                         prediction: false,
                         skip: None,
-                        at: params.at.clone(),
+                        at: params.at.as_slice(),
                     },
                     decoding_context,
                 )?;

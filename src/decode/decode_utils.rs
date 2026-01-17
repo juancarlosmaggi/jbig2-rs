@@ -4,7 +4,7 @@ use crate::reader::Reader;
 
 /// Read a raw 1bpp bitmap from the bitstream, row by row.
 pub fn read_uncompressed_bitmap(
-    reader: &mut Reader,
+    reader: &mut Reader<'_>,
     width: usize,
     height: usize,
 ) -> Result<Bitmap, Jbig2Error> {

@@ -108,11 +108,11 @@ pub(super) fn on_immediate_text_region(
 
     let slice = &data[pos.min(end)..end];
 
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     // Build Huffman tables and readers when Huffman coding is enabled.
     let mut huffman_reader = if huffman {
-        Some(Reader::new(slice.to_vec(), 0, slice.len()))
+        Some(Reader::new(slice, 0, slice.len()))
     } else {
         None
     };
@@ -260,11 +260,11 @@ pub(super) fn on_intermediate_text_region(
 
     let slice = &data[pos.min(end)..end];
 
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     // Build Huffman tables and readers when Huffman coding is enabled.
     let mut huffman_reader = if huffman {
-        Some(Reader::new(slice.to_vec(), 0, slice.len()))
+        Some(Reader::new(slice, 0, slice.len()))
     } else {
         None
     };

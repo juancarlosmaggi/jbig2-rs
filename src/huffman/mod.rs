@@ -121,7 +121,7 @@ impl HuffmanTreeNode {
     }
 
     /// Decode a value by walking the tree with incoming bits.
-    pub fn decode_node(&self, reader: &mut Reader) -> Result<(i32, bool), Jbig2Error> {
+    pub fn decode_node(&self, reader: &mut Reader<'_>) -> Result<(i32, bool), Jbig2Error> {
         if self.is_leaf {
             if self.is_oob {
                 return Ok((0, true));
@@ -167,12 +167,12 @@ impl HuffmanTable {
     }
 
     /// Decode a value from the input stream.
-    pub fn decode(&self, reader: &mut Reader) -> Result<i32, Jbig2Error> {
+    pub fn decode(&self, reader: &mut Reader<'_>) -> Result<i32, Jbig2Error> {
         self.root_node.decode_node(reader).map(|(val, _)| val)
     }
 
     /// Decode a value and return whether it was an OOB marker.
-    pub fn decode_entry(&self, reader: &mut Reader) -> Result<(i32, bool), Jbig2Error> {
+    pub fn decode_entry(&self, reader: &mut Reader<'_>) -> Result<(i32, bool), Jbig2Error> {
         self.root_node.decode_node(reader)
     }
 

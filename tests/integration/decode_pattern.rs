@@ -6,7 +6,7 @@ mod tests {
     #[test]
     fn test_decode_pattern_dictionary_zero_patterns() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = PatternDictionaryParams {
             mmr: false,
@@ -23,7 +23,7 @@ mod tests {
     #[test]
     fn test_decode_pattern_dictionary_invalid_template() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = PatternDictionaryParams {
             mmr: false,
@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn test_decode_pattern_dictionary_mmr_mode() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = PatternDictionaryParams {
             mmr: true,
@@ -60,7 +60,7 @@ mod tests {
 
         for template in templates {
             let data = vec![0u8; 1000];
-            let mut context = DecodingContext::new(data.clone(), 0, data.len());
+            let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
             let params = PatternDictionaryParams {
                 mmr: false,
@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn test_decode_pattern_dictionary_multiple_patterns() {
         let data = vec![0u8; 2000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = PatternDictionaryParams {
             mmr: false,
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn test_decode_pattern_dictionary_large_patterns() {
         let data = vec![0u8; 10000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = PatternDictionaryParams {
             mmr: false,
@@ -115,7 +115,7 @@ mod tests {
 
         for (width, height) in sizes {
             let data = vec![0u8; 1000];
-            let mut context = DecodingContext::new(data.clone(), 0, data.len());
+            let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
             let params = PatternDictionaryParams {
                 mmr: false,
@@ -136,7 +136,7 @@ mod tests {
 
         for max_index in max_indices {
             let data = vec![0u8; 10000];
-            let mut context = DecodingContext::new(data.clone(), 0, data.len());
+            let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
             let params = PatternDictionaryParams {
                 mmr: false,

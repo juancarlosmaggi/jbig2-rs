@@ -52,7 +52,7 @@ pub fn assert_pixel_range(
 }
 
 /// Create a Reader over the full test buffer.
-pub fn create_test_reader(data: Vec<u8>) -> Reader {
+pub fn create_test_reader(data: Vec<u8>) -> Reader<'static> {
     let len = data.len();
     Reader::new(data, 0, len)
 }

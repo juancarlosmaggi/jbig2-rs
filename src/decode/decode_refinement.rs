@@ -52,7 +52,7 @@ pub struct RefinementParams<'a> {
 /// Decode a refinement bitmap using the reference bitmap and context templates.
 pub fn decode_refinement<'a>(
     params: &RefinementParams<'a>,
-    decoding_context: &mut DecodingContext,
+    decoding_context: &mut DecodingContext<'_>,
 ) -> Result<Bitmap, Jbig2Error> {
     // Validate template index.
     if params.template_index > 1 {

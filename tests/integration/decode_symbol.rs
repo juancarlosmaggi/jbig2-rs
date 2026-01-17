@@ -6,7 +6,7 @@ mod tests {
     #[test]
     fn test_decode_symbol_dictionary_zero_new_symbols() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = SymbolDictionaryParams {
             huffman: false,
@@ -28,7 +28,7 @@ mod tests {
     #[test]
     fn test_decode_symbol_dictionary_invalid_template_index() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = SymbolDictionaryParams {
             huffman: false,
@@ -50,7 +50,7 @@ mod tests {
     #[test]
     fn test_decode_symbol_dictionary_too_many_symbols() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = SymbolDictionaryParams {
             huffman: false,
@@ -72,7 +72,7 @@ mod tests {
     #[test]
     fn test_decode_symbol_dictionary_with_huffman_no_tables() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = SymbolDictionaryParams {
             huffman: true,

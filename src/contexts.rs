@@ -68,17 +68,17 @@ impl ContextCache {
 }
 
 /// Holds shared decoding state, including the arithmetic decoder and contexts.
-pub struct DecodingContext {
-    pub data: Vec<u8>,
+pub struct DecodingContext<'a> {
+    pub data: &'a [u8],
     pub start: usize,
     pub end: usize,
     pub context_cache: RefCell<ContextCache>,
-    pub decoder: RefCell<Option<crate::arithmetic::ArithmeticDecoder>>,
+    pub decoder: RefCell<Option<crate::arithmetic::ArithmeticDecoder<'a>>>,
 }
 
-impl DecodingContext {
+impl<'a> DecodingContext<'a> {
     /// Build a decoding context over the provided data slice bounds.
-    pub fn new(data: Vec<u8>, start: usize, end: usize) -> Self {
+    pub fn new(data: &'a [u8], start: usize, end: usize) -> Self {
         DecodingContext {
             data,
             start,
@@ -88,7 +88,9 @@ impl DecodingContext {
         }
     }
 
-    pub fn get_decoder(&self) -> std::cell::RefMut<'_, crate::arithmetic::ArithmeticDecoder> {
+    pub fn get_decoder(
+        &self,
+    ) -> std::cell::RefMut<'_, crate::arithmetic::ArithmeticDecoder<'a>> {
         let mut opt = self.decoder.borrow_mut();
         if opt.is_none() {
             // Initialize on demand so callers can reuse the same stateful decoder.

@@ -21,7 +21,7 @@ pub fn decode_tables_segment(
         | ((data[start + 6] as u32) << 16)
         | ((data[start + 7] as u32) << 8)
         | (data[start + 8] as u32);
-    let mut reader = Reader::new(data.to_vec(), start + 9, end);
+    let mut reader = Reader::new(data, start + 9, end);
 
     let prefix_size_bits = (((flags >> 1) & 7) + 1) as u32;
     let range_size_bits = (((flags >> 4) & 7) + 1) as u32;
@@ -162,7 +162,7 @@ pub struct TextRegionHuffmanTables {
 
 /// Decode the symbol ID Huffman table from the bitstream.
 fn decode_symbol_id_huffman_table(
-    reader: &mut Reader,
+    reader: &mut Reader<'_>,
     number_of_symbols: usize,
 ) -> Result<HuffmanTable, Jbig2Error> {
     // Read code lengths for the run-length codes.
@@ -226,7 +226,7 @@ pub fn get_text_region_huffman_tables(
     referred_to: &[u32],
     custom_tables: &HashMap<u32, HuffmanTable>,
     number_of_symbols: usize,
-    reader: &mut Reader,
+    reader: &mut Reader<'_>,
 ) -> Result<TextRegionHuffmanTables, Jbig2Error> {
     let symbol_id_table = decode_symbol_id_huffman_table(reader, number_of_symbols)?;
 
@@ -351,7 +351,7 @@ pub fn get_text_region_huffman_tables(
 
 /// Return Huffman tables for aggregate symbol refinement decoding.
 pub fn get_aggregate_symbol_huffman_tables(
-    reader: &mut Reader,
+    reader: &mut Reader<'_>,
     number_of_symbols: usize,
 ) -> Result<TextRegionHuffmanTables, Jbig2Error> {
     let symbol_id_table = decode_symbol_id_huffman_table(reader, number_of_symbols)?;

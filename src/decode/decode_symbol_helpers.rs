@@ -77,8 +77,8 @@ pub fn decode_aggregate_symbol(
     params: &AggregateSymbolParams,
     existing_symbols: &[Bitmap],
     new_symbols: &[Bitmap],
-    decoding_context: &mut DecodingContext,
-    mut huffman_input: Option<&mut Reader>,
+    decoding_context: &mut DecodingContext<'_>,
+    mut huffman_input: Option<&mut Reader<'_>>,
 ) -> Result<Bitmap, Jbig2Error> {
     let mut input_symbols = existing_symbols.to_vec();
     input_symbols.extend(new_symbols.iter().cloned());

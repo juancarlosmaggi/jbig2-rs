@@ -16,7 +16,7 @@ pub struct PatternDictionaryParams {
 /// Decode a pattern dictionary into individual pattern bitmaps.
 pub fn decode_pattern_dictionary(
     params: &PatternDictionaryParams,
-    decoding_context: &mut DecodingContext,
+    decoding_context: &mut DecodingContext<'_>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     let at = if !params.mmr {
         let mut at_vec = vec![(-(params.pattern_width as i8), 0i8)];
@@ -36,7 +36,7 @@ pub fn decode_pattern_dictionary(
         template_index: params.template,
         prediction: false,
         skip: None,
-        at,
+        at: at.as_slice(),
     };
     let collective_bitmap = decode_bitmap(&decode_params, decoding_context)?;
 

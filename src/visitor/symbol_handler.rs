@@ -46,7 +46,7 @@ pub(super) fn on_symbol_dictionary(
     let refinement_at = params.refinement_at_pixels.clone();
 
     let slice = &params.data[params.start..params.end];
-    let mut decoding_context = DecodingContext::new(slice.to_vec(), 0, slice.len());
+    let mut decoding_context = DecodingContext::new(slice, 0, slice.len());
 
     // Build Huffman tables when Huffman coding is enabled.
     let huffman_tables = if huffman {
@@ -76,7 +76,7 @@ pub(super) fn on_symbol_dictionary(
     };
 
     let mut huffman_input = if huffman {
-        Some(Reader::new(slice.to_vec(), 0, slice.len()))
+        Some(Reader::new(slice, 0, slice.len()))
     } else {
         None
     };

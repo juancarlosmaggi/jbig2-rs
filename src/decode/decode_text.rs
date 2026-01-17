@@ -37,8 +37,8 @@ pub struct TextRegionParams {
 /// Decode a text region and return the composed bitmap.
 pub fn decode_text_region(
     params: &TextRegionParams,
-    decoding_context: &mut DecodingContext,
-    mut huffman_input: Option<&mut Reader>,
+    decoding_context: &mut DecodingContext<'_>,
+    mut huffman_input: Option<&mut Reader<'_>>,
 ) -> Result<Bitmap, Jbig2Error> {
     // Validate parameters before decoding.
     validation::validate_text_decode_params(
@@ -234,8 +234,7 @@ pub fn decode_text_region(
                     let bitmap = if params.huffman {
                         let current_pos = huffman_input.as_ref().unwrap().get_position();
                         let data = huffman_input.as_ref().unwrap().get_data();
-                        let mut temp_context =
-                            DecodingContext::new(data.to_vec(), current_pos, data.len());
+                        let mut temp_context = DecodingContext::new(data, current_pos, data.len());
                         decode_refinement(
                             &RefinementParams {
                                 width: refined_width,

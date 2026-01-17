@@ -4,8 +4,8 @@ use crate::arithmetic_tables::QE_TABLE;
 use crate::error::Jbig2Error;
 
 /// MQ arithmetic decoder with internal interval and bit counter state.
-pub struct ArithmeticDecoder {
-    data: Vec<u8>,
+pub struct ArithmeticDecoder<'a> {
+    data: &'a [u8],
     offset: usize,
     next_word: u32,
     next_word_bytes: usize,
@@ -14,11 +14,11 @@ pub struct ArithmeticDecoder {
     a: u32,
 }
 
-impl ArithmeticDecoder {
+impl<'a> ArithmeticDecoder<'a> {
     /// Create a new decoder initialized from the provided byte stream.
-    pub fn new(data: &[u8]) -> Self {
+    pub fn new(data: &'a [u8]) -> Self {
         let mut decoder = ArithmeticDecoder {
-            data: data.to_vec(),
+            data,
             offset: 0,
             next_word: 0,
             next_word_bytes: 0,
@@ -154,17 +154,10 @@ impl ArithmeticDecoder {
         contexts: &mut [i8],
         pos: usize,
     ) -> Result<u8, Jbig2Error> {
-        if pos >= contexts.len() {
-            return Err(Jbig2Error::new("invalid context position"));
-        }
-
+        debug_assert!(pos < contexts.len());
         let ctx_val = unsafe { *contexts.get_unchecked(pos) };
         let cx_index = (ctx_val >> 1) as usize;
-
-        if cx_index >= QE_TABLE.len() {
-            return Err(Jbig2Error::new("invalid context index"));
-        }
-
+        debug_assert!(cx_index < QE_TABLE.len());
         let qe_entry = unsafe { QE_TABLE.get_unchecked(cx_index) };
         let qe = qe_entry.qe as u32;
         let mut mps = (ctx_val & 1) as u8;

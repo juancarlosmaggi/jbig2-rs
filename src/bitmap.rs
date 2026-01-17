@@ -219,6 +219,35 @@ impl Bitmap {
         let src_start_x = (start_x as isize - x) as usize;
         let _width = end_x - start_x;
 
+        if operator == 0 && (start_x & 7) == 0 && (src_start_x & 7) == 0 {
+            let width = end_x - start_x;
+            let full_bytes = width >> 3;
+            let rem_bits = width & 7;
+            let row_bytes = full_bytes + usize::from(rem_bits != 0);
+            let src_byte_offset = src_start_x >> 3;
+            let dst_byte_offset = start_x >> 3;
+
+            for i in 0..(end_y - start_y) {
+                let dst_y = start_y + i;
+                let src_y = src_start_y + i;
+
+                let dst_row_start = dst_y * self.stride + dst_byte_offset;
+                let src_row_start = src_y * other.stride + src_byte_offset;
+
+                let dst_row = &mut self.data[dst_row_start..dst_row_start + row_bytes];
+                let src_row = &other.data[src_row_start..src_row_start + row_bytes];
+
+                for idx in 0..full_bytes {
+                    dst_row[idx] |= src_row[idx];
+                }
+                if rem_bits != 0 {
+                    let mask = 0xFFu8 << (8 - rem_bits);
+                    dst_row[full_bytes] |= src_row[full_bytes] & mask;
+                }
+            }
+            return;
+        }
+
         // Process the row in chunks to minimize per-pixel work.
         for i in 0..(end_y - start_y) {
             let dst_y = start_y + i;
@@ -285,6 +314,136 @@ impl Bitmap {
 
                 current_x += bits_to_process;
                 current_src_x += bits_to_process;
+            }
+        }
+    }
+
+    pub(crate) fn combine_or(&mut self, other: &Bitmap, x: isize, y: isize) {
+        // Clip to destination bounds before iterating.
+        let start_y = y.max(0) as usize;
+        let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
+
+        if start_y >= end_y {
+            return;
+        }
+
+        let start_x = x.max(0) as usize;
+        let end_x = (x + other.width as isize).min(self.width as isize).max(0) as usize;
+
+        if start_x >= end_x {
+            return;
+        }
+
+        // Track corresponding source offsets for each clipped row.
+        let src_start_y = (start_y as isize - y) as usize;
+        let src_start_x = (start_x as isize - x) as usize;
+        let width = end_x - start_x;
+
+        if (start_x & 7) == 0 && (src_start_x & 7) == 0 {
+            let full_bytes = width >> 3;
+            let rem_bits = width & 7;
+            let row_bytes = full_bytes + usize::from(rem_bits != 0);
+            let src_byte_offset = src_start_x >> 3;
+            let dst_byte_offset = start_x >> 3;
+
+            for i in 0..(end_y - start_y) {
+                let dst_y = start_y + i;
+                let src_y = src_start_y + i;
+
+                let dst_row_start = dst_y * self.stride + dst_byte_offset;
+                let src_row_start = src_y * other.stride + src_byte_offset;
+
+                let dst_row = &mut self.data[dst_row_start..dst_row_start + row_bytes];
+                let src_row = &other.data[src_row_start..src_row_start + row_bytes];
+
+                for idx in 0..full_bytes {
+                    dst_row[idx] |= src_row[idx];
+                }
+                if rem_bits != 0 {
+                    let mask = 0xFFu8 << (8 - rem_bits);
+                    dst_row[full_bytes] |= src_row[full_bytes] & mask;
+                }
+            }
+            return;
+        }
+
+        let dst_bit_offset = start_x & 7;
+        for i in 0..(end_y - start_y) {
+            let dst_y = start_y + i;
+            let src_y = src_start_y + i;
+
+            let dst_row_start = dst_y * self.stride;
+            let src_row_start = src_y * other.stride;
+            let src_row_end = src_row_start + other.stride;
+
+            let mut dst_x = start_x;
+            let mut src_x = src_start_x;
+            let mut remaining = width;
+
+            if dst_bit_offset != 0 {
+                let bits = remaining.min(8 - dst_bit_offset);
+                let dst_byte_idx = dst_row_start + (dst_x >> 3);
+                let src_byte_idx = src_row_start + (src_x >> 3);
+                let src_byte = other.data[src_byte_idx];
+                let next_byte = if src_byte_idx + 1 < src_row_end {
+                    other.data[src_byte_idx + 1]
+                } else {
+                    0
+                };
+                let src_word = ((src_byte as u16) << 8) | next_byte as u16;
+                let mut src_aligned = ((src_word << (src_x & 7)) >> 8) as u8;
+                src_aligned >>= dst_bit_offset;
+                let mask_high = 0xFFu8 >> dst_bit_offset;
+                let shift_low = dst_bit_offset + bits;
+                let mask_low = if shift_low >= 8 {
+                    0xFF
+                } else {
+                    !(0xFFu8 >> shift_low)
+                };
+                let mask = mask_high & mask_low;
+                self.data[dst_byte_idx] |= src_aligned & mask;
+                dst_x += bits;
+                src_x += bits;
+                remaining -= bits;
+            }
+
+            if remaining >= 8 {
+                let full_bytes = remaining >> 3;
+                let dst_byte_idx = dst_row_start + (dst_x >> 3);
+                let src_byte_idx = src_row_start + (src_x >> 3);
+                let src_bit_offset = src_x & 7;
+                for j in 0..full_bytes {
+                    let src_idx = src_byte_idx + j;
+                    let src_byte = other.data[src_idx];
+                    let next_byte = if src_idx + 1 < src_row_end {
+                        other.data[src_idx + 1]
+                    } else {
+                        0
+                    };
+                    let src_word = ((src_byte as u16) << 8) | next_byte as u16;
+                    let src_aligned = ((src_word << src_bit_offset) >> 8) as u8;
+                    self.data[dst_byte_idx + j] |= src_aligned;
+                }
+                let bits = full_bytes << 3;
+                dst_x += bits;
+                src_x += bits;
+                remaining -= bits;
+            }
+
+            if remaining > 0 {
+                let dst_byte_idx = dst_row_start + (dst_x >> 3);
+                let src_byte_idx = src_row_start + (src_x >> 3);
+                let src_bit_offset = src_x & 7;
+                let src_byte = other.data[src_byte_idx];
+                let next_byte = if src_byte_idx + 1 < src_row_end {
+                    other.data[src_byte_idx + 1]
+                } else {
+                    0
+                };
+                let src_word = ((src_byte as u16) << 8) | next_byte as u16;
+                let src_aligned = ((src_word << src_bit_offset) >> 8) as u8;
+                let mask = 0xFFu8 << (8 - remaining);
+                self.data[dst_byte_idx] |= src_aligned & mask;
             }
         }
     }

@@ -7,11 +7,11 @@ mod tests {
     #[test]
     fn test_decode_halftone_region_invalid_combination_operator() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = HalftoneRegionParams {
             mmr: false,
-            patterns: vec![],
+            patterns: &[],
             template: 0,
             region_width: 100,
             region_height: 100,
@@ -33,11 +33,11 @@ mod tests {
     #[test]
     fn test_decode_halftone_region_no_patterns() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = HalftoneRegionParams {
             mmr: false,
-            patterns: vec![],
+            patterns: &[],
             template: 0,
             region_width: 64,
             region_height: 64,
@@ -62,11 +62,11 @@ mod tests {
     #[test]
     fn test_decode_halftone_region_zero_dimensions() {
         let data = vec![0u8; 100];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let params = HalftoneRegionParams {
             mmr: false,
-            patterns: vec![],
+            patterns: &[],
             template: 0,
             region_width: 0,
             region_height: 100,
@@ -91,13 +91,13 @@ mod tests {
     #[test]
     fn test_decode_halftone_region_with_patterns() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let patterns = vec![Bitmap::new(8, 8), Bitmap::new(8, 8)];
 
         let params = HalftoneRegionParams {
             mmr: false,
-            patterns,
+            patterns: patterns.as_slice(),
             template: 0,
             region_width: 32,
             region_height: 32,
@@ -122,13 +122,13 @@ mod tests {
 
         for template in templates {
             let data = vec![0u8; 1000];
-            let mut context = DecodingContext::new(data.clone(), 0, data.len());
+            let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
             let patterns = vec![Bitmap::new(4, 4)];
 
             let params = HalftoneRegionParams {
                 mmr: false,
-                patterns: patterns.clone(),
+                patterns: patterns.as_slice(),
                 template,
                 region_width: 16,
                 region_height: 16,
@@ -151,13 +151,13 @@ mod tests {
     #[test]
     fn test_decode_halftone_region_with_skip() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let patterns = vec![Bitmap::new(8, 8)];
 
         let params = HalftoneRegionParams {
             mmr: false,
-            patterns,
+            patterns: patterns.as_slice(),
             template: 0,
             region_width: 32,
             region_height: 32,
@@ -179,13 +179,13 @@ mod tests {
     #[test]
     fn test_decode_halftone_region_mmr_mode() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let patterns = vec![Bitmap::new(8, 8)];
 
         let params = HalftoneRegionParams {
             mmr: true,
-            patterns,
+            patterns: patterns.as_slice(),
             template: 0,
             region_width: 32,
             region_height: 32,
@@ -207,13 +207,13 @@ mod tests {
     #[test]
     fn test_decode_halftone_region_grid_parameters() {
         let data = vec![0u8; 1000];
-        let mut context = DecodingContext::new(data.clone(), 0, data.len());
+        let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
         let patterns = vec![Bitmap::new(4, 4)];
 
         let params = HalftoneRegionParams {
             mmr: false,
-            patterns,
+            patterns: patterns.as_slice(),
             template: 0,
             region_width: 20,
             region_height: 20,
@@ -238,11 +238,11 @@ mod tests {
 
         for default_pixel in default_values {
             let data = vec![0u8; 1000];
-            let mut context = DecodingContext::new(data.clone(), 0, data.len());
+            let mut context = DecodingContext::new(data.as_slice(), 0, data.len());
 
             let params = HalftoneRegionParams {
                 mmr: false,
-                patterns: vec![],
+                patterns: &[],
                 template: 0,
                 region_width: 16,
                 region_height: 16,
