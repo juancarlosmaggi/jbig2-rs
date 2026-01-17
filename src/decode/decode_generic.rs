@@ -173,8 +173,11 @@ pub fn decode_bitmap(
         return Ok(bitmap);
     }
 
+    let disable_fast = std::env::var_os("JBIG2_RS_DISABLE_TEMPLATE0_FAST").is_some();
+
     // Use an optimized path for the common template-0 case.
-    if params.template_index == 0
+    if !disable_fast
+        && params.template_index == 0
         && params.skip.is_none()
         && !params.prediction
         && params.at.len() == 4
@@ -241,16 +244,20 @@ pub fn decode_bitmap(
     let mut contexts = decoding_context.get_contexts("GB");
     let mut ltp = 0i32;
     for i in 0..params.height {
-        if params.prediction && i > 0 {
+        if params.prediction {
             let sltp = decoder.read_bit(contexts.as_mut(), pseudo_pixel_context as usize)? as i32;
             ltp ^= sltp;
             if ltp != 0 {
-                let src_start = (i - 1) * bitmap.stride;
                 let dst_start = i * bitmap.stride;
-                let (before, after) = bitmap.data.split_at_mut(dst_start);
-                let src_row = &before[src_start..src_start + bitmap.stride];
-                let dst_row = &mut after[0..bitmap.stride];
-                dst_row.copy_from_slice(src_row);
+                if i == 0 {
+                    bitmap.data[dst_start..dst_start + bitmap.stride].fill(0);
+                } else {
+                    let src_start = (i - 1) * bitmap.stride;
+                    let (before, after) = bitmap.data.split_at_mut(dst_start);
+                    let src_row = &before[src_start..src_start + bitmap.stride];
+                    let dst_row = &mut after[0..bitmap.stride];
+                    dst_row.copy_from_slice(src_row);
+                }
                 continue;
             }
         }

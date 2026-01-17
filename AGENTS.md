@@ -192,27 +192,34 @@ for jb2 in sorted(tests.glob("*.jb2")):
     print(jb2.name, "mismatch", mism, "percent", pct)
 ```
 
-## Current Findings / Suspicions
-- Text-region reference corner mapping was wrong. Correct mapping is
-  0=bottom-left, 1=top-left, 2=bottom-right, 3=top-right (per jbig2dec).
-- After correcting the ref-corner mapping, remaining mismatch was caused by the
-  optimized `Bitmap::combine` alignment. Replacing it with a 16-bit aligned
-  extraction fixed the mismatch; naive and optimized now agree.
-- `text_region.jb2`, `minimal_valid.jb2`, `symbol_dictionary.jb2` match 1:1.
-- Halftone mismatch (~19.36%) traced to generic decoder context reuse: the
-  fast-path context label reset each pixel, losing reused bits. Fixed by
-  carrying context state across columns and by computing context even when
-  skipping pixels.
-- After the generic decoder fix, `halftone_region.jb2` matches 1:1.
-- UBC fixtures from `power-jbig2-tests-main` are in `tests/resources/ubc` and
-  the hash table mirrors `/home/jmaggi/projects/jbig2dec/test_jbig2dec.py`.
-- Hash parity test currently fails for `ubc/042_3.jb2`
-  (expected `ebfdf6e2fc5ff3ee2271c2fa19de0e52712046e8`,
-  got `7dc4e56875291d3574243a3d3520179561c1afb5`).
+## Current Findings / Status
+- Symbol dictionary parsing now captures SDAT/SDRAT AT pixels; `decode_symbol`
+  uses them directly (no backward parsing).
+- Export run-length alignment fixed by consuming the OOB IADW after the final
+  symbol in a height class; IAEX now matches jbig2dec.
+- Refinement OOB handling now mirrors jbig2dec: arithmetic OOB in IARDW/H/DX/DY
+  is treated as an error.
+- Intermediate text regions are stored in `bitmaps` for later refinement
+  reference (fixes `ubc/042_21`/`042_22`/`042_24` blank output).
+- Generic refinement region flags parsing fixed (template bit, TPGRON), and
+  refinement decoding now implements TPGRON implicit-value logic with correct
+  context ordering and start context values (0x100/0x40).
+- MMR decoder no longer treats EOFB as a mode code; it now consumes EOFB after
+  completing rows. Halftone MMR plane consumption matches jbig2dec.
+- `cargo test jbig2dec_hashes` now passes across UBC fixtures.
+- New debug/env knobs:
+  - `JBIG2_RS_TRACE_INT` (symbol dict IADH/IADW), `JBIG2_RS_TRACE_REFINE`
+    (refinement IDs), `JBIG2_RS_TRACE_CLASS` (per-class symbol offsets),
+    `JBIG2_RS_TRACE_EXPORT_OFFSET`, `JBIG2_RS_TRACE_SYMDICT_OFFSET`,
+    `JBIG2_RS_TRACE_HALFTONE_BYTES`.
+  - `JBIG2_RS_TRACE_ERRORS` to log lenient decode stops; `JBIG2_RS_STRICT=1`
+    to revert to hard errors.
+  - `JBIG2_RS_DISABLE_TEMPLATE0_FAST=1` to disable generic template-0 fast path.
+- jbig2dec instrumentation added for export/agg/int traces, symbol dict AT,
+  refinement IDs, halftone plane bytes, and arithmetic byte offsets.
 
 ## Current Plan
-1) Investigate the `ubc/042_3.jb2` hash mismatch with PBM vs raw comparisons
-   and decoder traces.
-2) Re-run hash parity across all `tests/resources/ubc/*.jb2` after fixes.
-3) Consider adding a regression test for generic decode with non-default AT.
-4) Clean up or gate verbose debug traces once the suite is green.
+1) Decide whether to keep or trim the new debug gates and jbig2dec
+   instrumentation now that parity is green.
+2) Optionally add regression tests for TPGRON refinement and halftone MMR plane
+   consumption.

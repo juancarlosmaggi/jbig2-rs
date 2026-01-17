@@ -33,7 +33,20 @@ pub fn decode_symbol_dictionary(
     mut huffman_input: Option<&mut Reader>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     let trace_symbol = std::env::var_os("JBIG2_RS_TRACE_SYMBOL").is_some();
+    let trace_class = std::env::var("JBIG2_RS_TRACE_CLASS")
+        .ok()
+        .and_then(|v| v.parse::<i32>().ok());
     let mut trace_height_classes = 0u32;
+    let mut trace_int_count = 0usize;
+    let trace_int_limit = std::env::var("JBIG2_RS_TRACE_INT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    let mut trace_refine_count = 0usize;
+    let trace_refine_limit = std::env::var("JBIG2_RS_TRACE_REFINE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
     let mut min_delta_height = i32::MAX;
     let mut max_delta_height = i32::MIN;
     let mut neg_delta_height = 0u32;
@@ -117,6 +130,15 @@ pub fn decode_symbol_dictionary(
         current_height = current_height
             .checked_add(delta_height)
             .ok_or_else(|| Jbig2Error::new("height class overflow"))?;
+        if trace_symbol && trace_int_limit > 0 && trace_int_count < trace_int_limit {
+            eprintln!(
+                "symbol_dict: IADH={} HCHEIGHT={} decoded_syms={}",
+                delta_height,
+                current_height,
+                new_symbols.len()
+            );
+            trace_int_count += 1;
+        }
         if trace_symbol {
             min_delta_height = min_delta_height.min(delta_height);
             max_delta_height = max_delta_height.max(delta_height);
@@ -154,9 +176,29 @@ pub fn decode_symbol_dictionary(
                 }
             };
 
+            if new_symbols.len() >= params.number_of_new_symbols {
+                if trace_symbol {
+                    eprintln!(
+                        "symbol_dict: missing OOB for height_class={} decoded_syms={}",
+                        current_height,
+                        new_symbols.len()
+                    );
+                }
+                break;
+            }
+
             current_width = current_width
                 .checked_add(dw)
                 .ok_or_else(|| Jbig2Error::new("symbol width overflow"))?;
+            if trace_symbol && trace_int_limit > 0 && trace_int_count < trace_int_limit {
+                eprintln!(
+                    "symbol_dict: IADW={} SYMWIDTH={} decoded_syms={}",
+                    dw,
+                    current_width,
+                    new_symbols.len()
+                );
+                trace_int_count += 1;
+            }
             if trace_symbol {
                 min_delta_width = min_delta_width.min(dw);
                 max_delta_width = max_delta_width.max(dw);
@@ -188,14 +230,27 @@ pub fn decode_symbol_dictionary(
                         .table_aggregate_instances
                         .decode_entry(huffman_input.as_mut().unwrap())?;
                     if oob {
-                        break; // treat OOB as end of height class (remaining exported later)
+                        return Err(Jbig2Error::new(
+                            "OOB when decoding aggregate instance count",
+                        ));
                     }
-                    val as usize + 1
+                    val
                 } else {
-                    decode_integer_context(decoding_context, "IAAI")?
-                        .map(|v| v + 1)
-                        .unwrap_or(1) as usize
+                    match decode_integer_context(decoding_context, "IAAI")? {
+                        Some(v) => v,
+                        None => {
+                            return Err(Jbig2Error::new(
+                                "OOB when decoding aggregate instance count",
+                            ))
+                        }
+                    }
                 };
+                if instances <= 0 {
+                    return Err(Jbig2Error::new(
+                        "invalid number of symbols in aggregate glyph",
+                    ));
+                }
+                let instances = instances as usize;
 
                 if instances == 1 {
                     let (symbol_id, rdx, rdy, bmsize) = if huffman {
@@ -216,12 +271,29 @@ pub fn decode_symbol_dictionary(
                     } else {
                         let symbol_id =
                             decode_iaid_context(decoding_context, symbol_code_length)? as usize;
-                        let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
-                        let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
+                        let rdx = decode_integer_context(decoding_context, "IARDX")?
+                            .ok_or_else(|| {
+                                Jbig2Error::new("OOB when decoding refinement x offset")
+                            })?;
+                        let rdy = decode_integer_context(decoding_context, "IARDY")?
+                            .ok_or_else(|| {
+                                Jbig2Error::new("OOB when decoding refinement y offset")
+                            })?;
                         (symbol_id, rdx, rdy, None)
                     };
 
                     let total_symbols = params.symbols.len() + new_symbols.len();
+                    if trace_refine_limit > 0 && trace_refine_count < trace_refine_limit {
+                        eprintln!(
+                            "symbol_dict: refine symbol_id={} total_symbols={} rdx={} rdy={} bmsize={:?}",
+                            symbol_id,
+                            total_symbols,
+                            rdx,
+                            rdy,
+                            bmsize
+                        );
+                        trace_refine_count += 1;
+                    }
                     if symbol_id >= total_symbols {
                         return Err(Jbig2Error::new("invalid refinement symbol id"));
                     }
@@ -275,6 +347,16 @@ pub fn decode_symbol_dictionary(
                     };
 
                     new_symbols.push(bitmap);
+                    if let Some(class) = trace_class {
+                        if current_height == class {
+                            eprintln!(
+                                "symbol_dict: class={} sym={} offset={}",
+                                class,
+                                new_symbols.len(),
+                                decoding_context.get_bytes_read()
+                            );
+                        }
+                    }
 
                     if let Some(mut bmsize) = bmsize {
                         if bmsize == 0 {
@@ -290,6 +372,7 @@ pub fn decode_symbol_dictionary(
                         current_height,
                         number_of_instances: instances as i32,
                         symbol_code_length,
+                        total_symbols,
                         refinement: true,
                         refinement_template_index: params.refinement_template_index,
                         refinement_at: params.refinement_at.clone(),
@@ -303,6 +386,16 @@ pub fn decode_symbol_dictionary(
                         huffman_input.as_mut().map(|reader| &mut **reader),
                     )?;
                     new_symbols.push(bitmap);
+                    if let Some(class) = trace_class {
+                        if current_height == class {
+                            eprintln!(
+                                "symbol_dict: class={} sym={} offset={}",
+                                class,
+                                new_symbols.len(),
+                                decoding_context.get_bytes_read()
+                            );
+                        }
+                    }
                 }
             } else if huffman {
                 symbol_widths.push(current_width_usize);
@@ -321,16 +414,34 @@ pub fn decode_symbol_dictionary(
                     decoding_context,
                 )?;
                 new_symbols.push(bitmap);
+                if let Some(class) = trace_class {
+                    if current_height == class {
+                        eprintln!(
+                            "symbol_dict: class={} sym={} offset={}",
+                            class,
+                            new_symbols.len(),
+                            decoding_context.get_bytes_read()
+                        );
+                    }
+                }
             }
 
-            if new_symbols.len() >= params.number_of_new_symbols {
-                break;
-            }
         }
 
-        // Decode a collective bitmap for Huffman direct-mode symbols.
-        if huffman
-            && !refinement
+        if trace_symbol
+            && std::env::var_os("JBIG2_RS_TRACE_SYMDICT_OFFSET").is_some()
+        {
+            eprintln!(
+                "symbol_dict: offset HCHEIGHT={} decoded_syms={} offset={}",
+                current_height,
+                new_symbols.len(),
+                decoding_context.get_bytes_read()
+            );
+        }
+
+    // Decode a collective bitmap for Huffman direct-mode symbols.
+    if huffman
+        && !refinement
             && !symbol_widths.is_empty()
             && total_width > 0
             && current_height > 0
@@ -492,8 +603,17 @@ pub fn decode_symbol_dictionary(
     }
 
     // Build the export list based on run-length flags.
+    if trace_symbol && std::env::var_os("JBIG2_RS_TRACE_EXPORT_OFFSET").is_some() {
+        eprintln!(
+            "symbol_dict: export offset={}",
+            decoding_context.get_bytes_read()
+        );
+    }
     let total_symbols = params.symbols.len() + new_symbols.len();
     let mut flags = Vec::with_capacity(total_symbols);
+
+    let mut trace_export_count = 0usize;
+    let trace_export_limit = 20usize;
 
     if huffman {
         let export_table = huff_export_run.as_ref().unwrap();
@@ -509,8 +629,20 @@ pub fn decode_symbol_dictionary(
                 ));
             }
 
-            let mut run_len = run;
-            if run_len <= 0 {
+            let run_len_u32 = run as u32;
+            if trace_symbol && trace_export_count < trace_export_limit {
+                eprintln!(
+                    "symbol_dict: export raw={} exflag={} i={} j={} limit={} emptyruns={}",
+                    run_len_u32,
+                    export as u8,
+                    i,
+                    exported_count,
+                    total_symbols,
+                    empty_runs
+                );
+                trace_export_count += 1;
+            }
+            if run_len_u32 == 0 {
                 empty_runs += 1;
                 if empty_runs == 1000 {
                     return Err(Jbig2Error::new(
@@ -520,10 +652,7 @@ pub fn decode_symbol_dictionary(
             } else {
                 empty_runs = 0;
             }
-            if run_len < 0 {
-                run_len = 0;
-            }
-            let mut run_len = run_len as usize;
+            let mut run_len = run_len_u32 as usize;
 
             if run_len > total_symbols - i {
                 run_len = total_symbols - i;
@@ -556,8 +685,20 @@ pub fn decode_symbol_dictionary(
                     ))
                 }
             };
-            let mut run_len = run;
-            if run_len <= 0 {
+            let run_len_u32 = run as u32;
+            if trace_symbol && trace_export_count < trace_export_limit {
+                eprintln!(
+                    "symbol_dict: export raw={} exflag={} i={} j={} limit={} emptyruns={}",
+                    run_len_u32,
+                    export as u8,
+                    i,
+                    exported_count,
+                    total_symbols,
+                    empty_runs
+                );
+                trace_export_count += 1;
+            }
+            if run_len_u32 == 0 {
                 empty_runs += 1;
                 if empty_runs == 1000 {
                     return Err(Jbig2Error::new(
@@ -567,10 +708,7 @@ pub fn decode_symbol_dictionary(
             } else {
                 empty_runs = 0;
             }
-            if run_len < 0 {
-                run_len = 0;
-            }
-            let mut run_len = run_len as usize;
+            let mut run_len = run_len_u32 as usize;
             if run_len > total_symbols - i {
                 run_len = total_symbols - i;
             }
@@ -603,6 +741,11 @@ pub fn decode_symbol_dictionary(
         }
     }
 
+    if params.number_of_exported_symbols > total_symbols {
+        return Err(Jbig2Error::new(
+            "exported symbol count exceeds available symbols",
+        ));
+    }
     if exported_symbols.len() != params.number_of_exported_symbols {
         if trace_symbol {
             eprintln!(
@@ -611,20 +754,11 @@ pub fn decode_symbol_dictionary(
                 params.number_of_exported_symbols
             );
         }
-        if params.number_of_exported_symbols <= total_symbols {
-            exported_symbols.clear();
-            for i in 0..params.number_of_exported_symbols {
-                let sym = if i < params.symbols.len() {
-                    &params.symbols[i]
-                } else {
-                    &new_symbols[i - params.symbols.len()]
-                };
-                exported_symbols.push(sym.clone());
-            }
+        if exported_symbols.len() < params.number_of_exported_symbols {
+            let missing = params.number_of_exported_symbols - exported_symbols.len();
+            exported_symbols.extend((0..missing).map(|_| Bitmap::new(0, 0)));
         } else {
-            return Err(Jbig2Error::new(
-                "exported symbol count exceeds available symbols",
-            ));
+            exported_symbols.truncate(params.number_of_exported_symbols);
         }
     }
 

@@ -112,6 +112,9 @@ pub struct PageInfo {
     pub combination_operator: u8,
     pub requires_buffer: bool,
     pub combination_operator_override: bool,
+    pub striped: bool,
+    pub stripe_size: u16,
+    pub height_unknown: bool,
 }
 
 /// Region geometry and composition parameters.

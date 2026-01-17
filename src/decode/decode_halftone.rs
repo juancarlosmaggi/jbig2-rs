@@ -47,6 +47,7 @@ pub fn decode_halftone_region(
     let pattern_width = pattern0.width;
     let pattern_height = pattern0.height;
     let bits_per_value = crate::core_utils::log2(number_of_patterns as u32) as usize;
+    let trace_bytes = std::env::var_os("JBIG2_RS_TRACE_HALFTONE_BYTES").is_some();
     let at = if !params.mmr {
         let mut at_vec = vec![(if params.template <= 1 { 3i8 } else { 2i8 }, -1i8)];
         if params.template <= 1 {
@@ -97,6 +98,13 @@ pub fn decode_halftone_region(
         };
         let bitmap = decode_bitmap(&decode_params, decoding_context)?;
         gray_scale_bit_planes[j] = bitmap;
+        if trace_bytes && params.mmr {
+            eprintln!(
+                "halftone_bitplane: plane={} consumed_bytes={}",
+                j,
+                decoding_context.start
+            );
+        }
         if j + 1 < bits_per_value {
             for idx in 0..gray_scale_bit_planes[j].data.len() {
                 gray_scale_bit_planes[j].data[idx] ^= gray_scale_bit_planes[j + 1].data[idx];

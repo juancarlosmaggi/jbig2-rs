@@ -16,6 +16,22 @@ pub fn create_initialized_bitmap(width: usize, height: usize, default_value: u8)
     }
 }
 
+/// Resize a bitmap's height, filling new rows with the default pixel value.
+pub fn resize_bitmap_height(bitmap: &mut Bitmap, new_height: usize, default_value: u8) {
+    if new_height == bitmap.height {
+        return;
+    }
+    let stride = bitmap.stride;
+    let new_len = stride.saturating_mul(new_height);
+    if new_height > bitmap.height {
+        let fill = if default_value != 0 { 0xff } else { 0 };
+        bitmap.data.resize(new_len, fill);
+    } else {
+        bitmap.data.truncate(new_len);
+    }
+    bitmap.height = new_height;
+}
+
 /// Apply a composition operator to a single destination/source pixel pair.
 pub fn apply_combination_operator(dst_pixel: u8, src_pixel: u8, operator: u8) -> u8 {
     match operator {

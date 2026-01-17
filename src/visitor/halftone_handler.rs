@@ -53,6 +53,9 @@ pub(super) fn on_immediate_halftone_region(
             combination_operator: 0, // OR
             requires_buffer: false,
             combination_operator_override: false,
+            striped: false,
+            stripe_size: 0,
+            height_unknown: false,
         });
         let width = region_info.width.max(1) as usize;
         let height = region_info.height.max(1) as usize;

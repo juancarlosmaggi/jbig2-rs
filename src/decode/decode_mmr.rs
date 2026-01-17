@@ -36,7 +36,7 @@ impl CCITTFaxDecoder {
         self.reader.read_bit()
     }
 
-    fn decode_2d_line(&mut self, eofb: &mut bool) -> Result<(), Jbig2Error> {
+    fn decode_2d_line(&mut self, _eofb: &mut bool) -> Result<(), Jbig2Error> {
         if self.width == 0 {
             return Ok(());
         }
@@ -70,11 +70,6 @@ impl CCITTFaxDecoder {
                     break;
                 }
             };
-
-            if mode == 9 {
-                *eofb = true;
-                break;
-            }
 
             match mode {
                 0 => {
@@ -184,41 +179,35 @@ impl CCITTFaxDecoder {
             }
         }
 
-        // If end_of_block, look for the EOFB marker without consuming bits unless matched.
-        if self.end_of_block {
-            // Save full reader state.
-            let saved_pos = self.reader.get_position();
-            let saved_shift = self.reader.get_shift();
-            let saved_current_byte = self.reader.get_current_byte();
+        Err(Jbig2Error::new("no valid MMR mode code"))
+    }
 
-            let mut full_code = code;
-            let mut full_len = length;
-            let mut matched = false;
+    fn consume_eofb_marker(&mut self) -> bool {
+        let saved_pos = self.reader.get_position();
+        let saved_shift = self.reader.get_shift();
+        let saved_current_byte = self.reader.get_current_byte();
 
-            for _ in length..24 {
-                match self.read_bit() {
-                    Ok(bit) => {
-                        full_code = (full_code << 1) | (bit as u32);
-                        full_len += 1;
-                        if full_len == 24 && full_code == 0x001001 {
-                            matched = true;
-                            break;
-                        }
-                    }
-                    Err(_) => break,
+        let mut code = 0u32;
+        for _ in 0..24 {
+            match self.read_bit() {
+                Ok(bit) => {
+                    code = (code << 1) | (bit as u32);
+                }
+                Err(_) => {
+                    code = 0;
+                    break;
                 }
             }
-
-            if matched {
-                return Ok(9);
-            } else {
-                // Restore state if the marker was not matched.
-                self.reader.set_position(saved_pos);
-                self.reader.set_shift(saved_shift);
-                self.reader.set_current_byte(saved_current_byte);
-            }
         }
-        Err(Jbig2Error::new("no valid MMR mode code"))
+
+        if code == 0x001001 {
+            true
+        } else {
+            self.reader.set_position(saved_pos);
+            self.reader.set_shift(saved_shift);
+            self.reader.set_current_byte(saved_current_byte);
+            false
+        }
     }
 
     fn find_changing_element(&self, line: &[u8], pos: i32, width: usize) -> usize {
@@ -328,6 +317,9 @@ impl CCITTFaxDecoder {
             self.curr_line.fill(0);
 
             y += 1;
+        }
+        if self.end_of_block && self.consume_eofb_marker() && self.trace {
+            eprintln!("mmr: consumed eofb");
         }
 
         Ok(bitmap)

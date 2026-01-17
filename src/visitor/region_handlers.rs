@@ -12,7 +12,7 @@ pub(super) const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;
 pub(super) fn draw_bitmap(
     current_page_info: &Option<PageInfo>,
     current_bitmap: &mut Option<Bitmap>,
-    current_y: usize,
+    _current_y: usize,
     region_info: &RegionInfo,
     src_bitmap: &Bitmap,
 ) -> Result<(), Jbig2Error> {
@@ -31,7 +31,7 @@ pub(super) fn draw_bitmap(
         .ok_or(Jbig2Error::new("no current bitmap"))?;
 
     let reg_x = region_info.x as usize;
-    let reg_y = region_info.y as usize + current_y;
+    let reg_y = region_info.y as usize;
 
     // Skip if the region lies entirely outside the page.
     if reg_x >= page_width || reg_y >= page_height {
@@ -73,6 +73,9 @@ pub(super) fn on_immediate_generic_region(
             combination_operator: 0, // OR
             requires_buffer: false,
             combination_operator_override: false,
+            striped: false,
+            stripe_size: 0,
+            height_unknown: false,
         });
         let width = region_info.width.max(1) as usize;
         let height = region_info.height.max(1) as usize;
@@ -134,6 +137,9 @@ pub(super) fn on_immediate_generic_refinement_region(
             combination_operator: 0, // OR
             requires_buffer: false,
             combination_operator_override: false,
+            striped: false,
+            stripe_size: 0,
+            height_unknown: false,
         });
         let width = region_info.width as usize;
         let height = region_info.height as usize;
@@ -144,7 +150,8 @@ pub(super) fn on_immediate_generic_refinement_region(
     let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
     let generic_region_segment_flags = data[pos];
     pos += 1;
-    let template = ((generic_region_segment_flags >> 1) & 3) as usize;
+    let template = (generic_region_segment_flags & 1) as usize;
+    let prediction = (generic_region_segment_flags & 2) != 0;
     let at_length = if template == 0 { 2 } else { 0 };
     let at = if at_length > 0 {
         parse_at_parameters(data, pos, at_length)?
@@ -178,7 +185,7 @@ pub(super) fn on_immediate_generic_refinement_region(
             reference_bitmap,
             offset_x: 0,
             offset_y: 0,
-            prediction: false,
+            prediction,
             at,
         },
         &mut decoding_context,
@@ -260,7 +267,8 @@ pub(super) fn on_intermediate_generic_refinement_region(
     let mut pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH;
     let generic_region_segment_flags = data[pos];
     pos += 1;
-    let template = ((generic_region_segment_flags >> 1) & 3) as usize;
+    let template = (generic_region_segment_flags & 1) as usize;
+    let prediction = (generic_region_segment_flags & 2) != 0;
     let at_length = if template == 0 { 2 } else { 0 };
     let at = if at_length > 0 && pos + at_length * 2 <= end {
         parse_at_parameters(data, pos, at_length)?
@@ -294,7 +302,7 @@ pub(super) fn on_intermediate_generic_refinement_region(
             reference_bitmap,
             offset_x: 0,
             offset_y: 0,
-            prediction: false,
+            prediction,
             at,
         },
         &mut decoding_context,

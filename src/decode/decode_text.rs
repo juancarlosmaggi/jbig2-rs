@@ -23,6 +23,7 @@ pub struct TextRegionParams {
     pub strip_size: usize,
     pub input_symbols: Vec<Bitmap>,
     pub symbol_code_length: usize,
+    pub symbol_id_limit: usize,
     pub transposed: bool,
     pub ds_offset: i32,
     pub reference_corner: usize,
@@ -335,18 +336,37 @@ pub fn decode_text_region(
                 params.symbol_code_length,
                 decoding_context,
             )? as usize;
-            if symbol_id >= params.input_symbols.len() {
+            if symbol_id >= params.symbol_id_limit {
                 return Err(Jbig2Error::new(&format!(
                     "invalid symbol id {} (max {}) at instance {} of {}",
                     symbol_id,
-                    params.input_symbols.len().saturating_sub(1),
+                    params.symbol_id_limit.saturating_sub(1),
                     i + 1,
                     params.number_of_symbol_instances
                 )));
             }
-            let symbol_bitmap = &params.input_symbols[symbol_id];
-            let symbol_width = symbol_bitmap.width;
-            let symbol_height = symbol_bitmap.height;
+            let symbol_bitmap = params.input_symbols.get(symbol_id);
+            let symbol_present = symbol_bitmap
+                .map(|bm| bm.width > 0 && bm.height > 0)
+                .unwrap_or(false);
+            if !symbol_present && trace_text {
+                let detail = if symbol_id < params.input_symbols.len() {
+                    "empty symbol"
+                } else {
+                    "missing symbol"
+                };
+                eprintln!(
+                    "text_region: {} id {} (available {}) at instance {} of {}",
+                    detail,
+                    symbol_id,
+                    params.input_symbols.len(),
+                    i + 1,
+                    params.number_of_symbol_instances
+                );
+            }
+            let symbol_bitmap = if symbol_present { symbol_bitmap } else { None };
+            let symbol_width = symbol_bitmap.map(|bm| bm.width).unwrap_or(0);
+            let symbol_height = symbol_bitmap.map(|bm| bm.height).unwrap_or(0);
             let apply_refinement = if params.refinement {
                 if params.huffman {
                     huffman_input.as_mut().unwrap().read_bits(1)? != 0
@@ -357,118 +377,165 @@ pub fn decode_text_region(
                 false
             };
             let mut refine_info = None;
-            let (final_symbol_width, final_symbol_height, final_symbol_bitmap) = if apply_refinement
-            {
-                let (rdw, rdh, rdx, rdy, refined_bitmap) = if params.huffman {
+            let mut rdw = 0i32;
+            let mut rdh = 0i32;
+            let mut rdx = 0i32;
+            let mut rdy = 0i32;
+            let mut bmsize: Option<i32> = None;
+            if apply_refinement {
+                if params.huffman {
                     // Mixed Huffman/Arithmetic coding for refinement
-                    // 1. Decode refinement parameters using Huffman
                     let tables = huffman_tables.unwrap();
-                    let rdw = tables
+                    rdw = tables
                         .table_refinement_dw
                         .as_ref()
                         .unwrap()
                         .decode(huffman_input.as_mut().unwrap())?;
-                    let rdh = tables
+                    rdh = tables
                         .table_refinement_dh
                         .as_ref()
                         .unwrap()
                         .decode(huffman_input.as_mut().unwrap())?;
-                    let rdx = tables
+                    rdx = tables
                         .table_refinement_dx
                         .as_ref()
                         .unwrap()
                         .decode(huffman_input.as_mut().unwrap())?;
-                    let rdy = tables
+                    rdy = tables
                         .table_refinement_dy
                         .as_ref()
                         .unwrap()
                         .decode(huffman_input.as_mut().unwrap())?;
-                    let bmsize = tables
+                    let size = tables
                         .table_refinement_size
                         .as_ref()
                         .unwrap()
                         .decode(huffman_input.as_mut().unwrap())?;
-                    if bmsize < 0 {
+                    if size < 0 {
                         return Err(Jbig2Error::new("invalid refinement bitmap size"));
                     }
-
-                    // 2. Switch to Arithmetic for the bitmap
+                    bmsize = Some(size);
                     huffman_input.as_mut().unwrap().byte_align();
-                    let current_pos = huffman_input.as_ref().unwrap().get_position();
-                    let data = huffman_input.as_ref().unwrap().get_data();
-
-                    // Create a temporary decoding context for the arithmetic part
-                    // We use the remaining data from the current position
-                    let mut temp_context =
-                        DecodingContext::new(data.to_vec(), current_pos, data.len());
-
-                    let refined_width = (symbol_width as i32 + rdw) as usize;
-                    let refined_height = (symbol_height as i32 + rdh) as usize;
-
-                    let bitmap = decode_refinement(
-                        &RefinementParams {
-                            width: refined_width,
-                            height: refined_height,
-                            template_index: params.refinement_template_index,
-                            reference_bitmap: symbol_bitmap,
-                            offset_x: (rdw >> 1) + rdx,
-                            offset_y: (rdh >> 1) + rdy,
-                            prediction: false,
-                            at: params.refinement_at.clone(),
-                        },
-                        &mut temp_context,
-                    )?;
-
-                    // 3. Advance Huffman reader by the refinement bitmap size
-                    huffman_input
-                        .as_mut()
-                        .unwrap()
-                        .skip(bmsize as usize);
-
-                    (rdw, rdh, rdx, rdy, bitmap)
                 } else {
                     // Pure Arithmetic coding
-                    let rdw = decode_integer_context(decoding_context, "IARDW")?.unwrap_or(0);
-                    let rdh = decode_integer_context(decoding_context, "IARDH")?.unwrap_or(0);
-                    let rdx = decode_integer_context(decoding_context, "IARDX")?.unwrap_or(0);
-                    let rdy = decode_integer_context(decoding_context, "IARDY")?.unwrap_or(0);
-
-                    let refined_width = (symbol_width as i32 + rdw) as usize;
-                    let refined_height = (symbol_height as i32 + rdh) as usize;
-
-                    let bitmap = decode_refinement(
-                        &RefinementParams {
-                            width: refined_width,
-                            height: refined_height,
-                            template_index: params.refinement_template_index,
-                            reference_bitmap: symbol_bitmap,
-                            offset_x: (rdw >> 1) + rdx,
-                            offset_y: (rdh >> 1) + rdy,
-                            prediction: false,
-                            at: params.refinement_at.clone(),
-                        },
-                        decoding_context,
-                    )?;
-                    (rdw, rdh, rdx, rdy, bitmap)
-                };
-
-                let refined_width = (symbol_width as i32 + rdw) as usize;
-                let refined_height = (symbol_height as i32 + rdh) as usize;
-                refine_info = Some((rdw, rdh, rdx, rdy));
-                (refined_width, refined_height, refined_bitmap)
+                    rdw = decode_integer_context(decoding_context, "IARDW")?
+                        .ok_or_else(|| Jbig2Error::new("OOB when decoding refinement width delta"))?;
+                    rdh = decode_integer_context(decoding_context, "IARDH")?
+                        .ok_or_else(|| Jbig2Error::new("OOB when decoding refinement height delta"))?;
+                    rdx = decode_integer_context(decoding_context, "IARDX")?
+                        .ok_or_else(|| Jbig2Error::new("OOB when decoding refinement x offset"))?;
+                    rdy = decode_integer_context(decoding_context, "IARDY")?
+                        .ok_or_else(|| Jbig2Error::new("OOB when decoding refinement y offset"))?;
+                }
+            }
+            let (final_symbol_width, final_symbol_height, final_symbol_bitmap) = if symbol_present {
+                let symbol_bitmap = symbol_bitmap.unwrap();
+                if apply_refinement {
+                    let base_width = i32::try_from(symbol_width)
+                        .map_err(|_| Jbig2Error::new("symbol width overflow"))?;
+                    let base_height = i32::try_from(symbol_height)
+                        .map_err(|_| Jbig2Error::new("symbol height overflow"))?;
+                    let refined_width_i32 = base_width
+                        .checked_add(rdw)
+                        .ok_or_else(|| Jbig2Error::new("refinement width overflow"))?;
+                    let refined_height_i32 = base_height
+                        .checked_add(rdh)
+                        .ok_or_else(|| Jbig2Error::new("refinement height overflow"))?;
+                    if refined_width_i32 < 0 || refined_height_i32 < 0 {
+                        return Err(Jbig2Error::new(&format!(
+                            "invalid refinement dimensions base={}x{} rdw={} rdh={} sym={} inst={}",
+                            base_width,
+                            base_height,
+                            rdw,
+                            rdh,
+                            symbol_id,
+                            i + 1
+                        )));
+                    }
+                    let refined_width = refined_width_i32 as usize;
+                    let refined_height = refined_height_i32 as usize;
+                    if trace_text_verbose {
+                        eprintln!(
+                            "text_region: refine sym={} base={}x{} rdw={} rdh={} rdx={} rdy={} refined={}x{}",
+                            symbol_id,
+                            base_width,
+                            base_height,
+                            rdw,
+                            rdh,
+                            rdx,
+                            rdy,
+                            refined_width,
+                            refined_height
+                        );
+                    }
+                    let bitmap = if params.huffman {
+                        let current_pos = huffman_input.as_ref().unwrap().get_position();
+                        let data = huffman_input.as_ref().unwrap().get_data();
+                        let mut temp_context =
+                            DecodingContext::new(data.to_vec(), current_pos, data.len());
+                        decode_refinement(
+                            &RefinementParams {
+                                width: refined_width,
+                                height: refined_height,
+                                template_index: params.refinement_template_index,
+                                reference_bitmap: symbol_bitmap,
+                                offset_x: (rdw >> 1) + rdx,
+                                offset_y: (rdh >> 1) + rdy,
+                                prediction: false,
+                                at: params.refinement_at.clone(),
+                            },
+                            &mut temp_context,
+                        )?
+                    } else {
+                        decode_refinement(
+                            &RefinementParams {
+                                width: refined_width,
+                                height: refined_height,
+                                template_index: params.refinement_template_index,
+                                reference_bitmap: symbol_bitmap,
+                                offset_x: (rdw >> 1) + rdx,
+                                offset_y: (rdh >> 1) + rdy,
+                                prediction: false,
+                                at: params.refinement_at.clone(),
+                            },
+                            decoding_context,
+                        )?
+                    };
+                    if let Some(size) = bmsize {
+                        huffman_input.as_mut().unwrap().skip(size as usize);
+                    }
+                    refine_info = Some((rdw, rdh, rdx, rdy));
+                    (refined_width, refined_height, Some(bitmap))
+                } else {
+                    (symbol_width, symbol_height, Some(symbol_bitmap.clone()))
+                }
             } else {
-                (symbol_width, symbol_height, symbol_bitmap.clone())
+                if apply_refinement {
+                    if let Some(size) = bmsize {
+                        huffman_input.as_mut().unwrap().skip(size as usize);
+                    } else if trace_text {
+                        eprintln!(
+                            "text_region: missing symbol refinement skipped id={} inst={}/{}",
+                            symbol_id,
+                            i + 1,
+                            params.number_of_symbol_instances
+                        );
+                    }
+                }
+                (0, 0, None)
             };
-            let symbol_width = i32::try_from(final_symbol_width)
-                .map_err(|_| Jbig2Error::new("symbol width overflow"))?;
-            let symbol_height = i32::try_from(final_symbol_height)
-                .map_err(|_| Jbig2Error::new("symbol height overflow"))?;
-            let width_adjust = symbol_width
-                .checked_sub(1)
-                .ok_or_else(|| Jbig2Error::new("symbol width invalid"))?;
-            let height_adjust = symbol_height
-                .checked_sub(1)
-                .ok_or_else(|| Jbig2Error::new("symbol height invalid"))?;
+            let (symbol_width, symbol_height, width_adjust, height_adjust) =
+                if final_symbol_bitmap.is_some() {
+                    let symbol_width = i32::try_from(final_symbol_width)
+                        .map_err(|_| Jbig2Error::new("symbol width overflow"))?;
+                    let symbol_height = i32::try_from(final_symbol_height)
+                        .map_err(|_| Jbig2Error::new("symbol height overflow"))?;
+                    let width_adjust = symbol_width - 1;
+                    let height_adjust = symbol_height - 1;
+                    (symbol_width, symbol_height, width_adjust, height_adjust)
+                } else {
+                    (0, 0, 0, 0)
+                };
 
             let mut s = current_s;
             let base_s = s;
@@ -480,25 +547,41 @@ pub fn decode_text_region(
                 s = s.wrapping_add(height_adjust);
             }
 
-            let (x, y) = if !params.transposed {
+            let (x, y) = if final_symbol_bitmap.is_some() {
+                if !params.transposed {
+                    match params.reference_corner {
+                        0 => (s, t.wrapping_sub(height_adjust)), // bottom-left
+                        1 => (s, t),                             // top-left
+                        2 => (
+                            s.wrapping_sub(width_adjust),
+                            t.wrapping_sub(height_adjust),
+                        ), // bottom-right
+                        _ => (s.wrapping_sub(width_adjust), t), // top-right
+                    }
+                } else {
+                    match params.reference_corner {
+                        0 => (t, s.wrapping_sub(height_adjust)), // bottom-left
+                        1 => (t, s),                             // top-left
+                        2 => (
+                            t.wrapping_sub(width_adjust),
+                            s.wrapping_sub(height_adjust),
+                        ), // bottom-right
+                        _ => (t.wrapping_sub(width_adjust), s), // top-right
+                    }
+                }
+            } else if !params.transposed {
                 match params.reference_corner {
-                    0 => (s, t.wrapping_sub(height_adjust)), // bottom-left
-                    1 => (s, t),                             // top-left
-                    2 => (
-                        s.wrapping_sub(width_adjust),
-                        t.wrapping_sub(height_adjust),
-                    ), // bottom-right
-                    _ => (s.wrapping_sub(width_adjust), t), // top-right
+                    0 => (s, t.wrapping_add(1)), // bottom-left
+                    1 => (s, t),                 // top-left
+                    2 => (s.wrapping_add(1), t.wrapping_add(1)), // bottom-right
+                    _ => (s.wrapping_add(1), t), // top-right
                 }
             } else {
                 match params.reference_corner {
-                    0 => (t, s.wrapping_sub(height_adjust)), // bottom-left
-                    1 => (t, s),                             // top-left
-                    2 => (
-                        t.wrapping_sub(width_adjust),
-                        s.wrapping_sub(height_adjust),
-                    ), // bottom-right
-                    _ => (t.wrapping_sub(width_adjust), s), // top-right
+                    0 => (t, s.wrapping_add(1)), // bottom-left
+                    1 => (t, s),                 // top-left
+                    2 => (t.wrapping_add(1), s.wrapping_add(1)), // bottom-right
+                    _ => (t.wrapping_add(1), s), // top-right
                 }
             };
 
@@ -530,12 +613,14 @@ pub fn decode_text_region(
                 if apply_refinement {
                     refined_instances = refined_instances.saturating_add(1);
                 }
-                if let Some(counts) = symbol_use_counts.as_mut() {
-                    counts[symbol_id] = counts[symbol_id].saturating_add(1);
+                if symbol_present {
+                    if let Some(counts) = symbol_use_counts.as_mut() {
+                        counts[symbol_id] = counts[symbol_id].saturating_add(1);
+                    }
                 }
             }
 
-            if trace_text {
+            if trace_text && final_symbol_bitmap.is_some() {
                 let x_i64 = x as i64;
                 let y_i64 = y as i64;
                 let w_i64 = symbol_width as i64;
@@ -551,8 +636,12 @@ pub fn decode_text_region(
                 }
             }
 
-            if trace_text && (final_symbol_width >= 500 || final_symbol_height >= 10) {
+            if trace_text
+                && final_symbol_bitmap.is_some()
+                && (final_symbol_width >= 500 || final_symbol_height >= 10)
+            {
                 large_instances = large_instances.saturating_add(1);
+                let final_symbol_bitmap = final_symbol_bitmap.as_ref().unwrap();
                 if final_symbol_width >= 500 {
                     let black = symbol_black_counts
                         .as_ref()
@@ -670,7 +759,8 @@ pub fn decode_text_region(
                 }
             }
 
-            if trace_symbol_miss {
+            if trace_symbol_miss && final_symbol_bitmap.is_some() {
+                let final_symbol_bitmap = final_symbol_bitmap.as_ref().unwrap();
                 if let (
                     Some(ref ref_bm),
                     Some(ref mut extra),
@@ -768,14 +858,16 @@ pub fn decode_text_region(
                 }
             }
 
-            bitmap.combine(
-                &final_symbol_bitmap,
-                x as isize,
-                y as isize,
-                params.combination_operator as u8,
-            );
-            if trace_strip_match {
-                strip_match_instances.push((x, y, final_symbol_bitmap));
+            if let Some(final_symbol_bitmap) = final_symbol_bitmap.as_ref() {
+                bitmap.combine(
+                    final_symbol_bitmap,
+                    x as isize,
+                    y as isize,
+                    params.combination_operator as u8,
+                );
+                if trace_strip_match {
+                    strip_match_instances.push((x, y, final_symbol_bitmap.clone()));
+                }
             }
 
             if !params.transposed {

@@ -13,6 +13,7 @@ pub struct AggregateSymbolParams {
     pub current_height: i32,
     pub number_of_instances: i32,
     pub symbol_code_length: usize,
+    pub total_symbols: usize,
     pub refinement: bool,
     pub refinement_template_index: usize,
     pub refinement_at: Vec<(i8, i8)>,
@@ -59,6 +60,7 @@ pub fn create_aggregate_text_params(
         strip_size: 1, // aggregate symbol text regions use a single strip
         input_symbols,
         symbol_code_length: params.symbol_code_length,
+        symbol_id_limit: params.total_symbols,
         transposed: false,
         ds_offset: 0,
         reference_corner: 1, // top-left reference point for aggregate symbols
@@ -87,7 +89,7 @@ pub fn decode_aggregate_symbol(
             .ok_or_else(|| Jbig2Error::new("missing Huffman input"))?;
         Some(get_aggregate_symbol_huffman_tables(
             reader,
-            input_symbols.len(),
+            params.total_symbols,
         )?)
     } else {
         None

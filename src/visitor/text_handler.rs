@@ -39,6 +39,9 @@ pub(super) fn on_immediate_text_region(
             combination_operator: 0, // OR
             requires_buffer: false,
             combination_operator_override: false,
+            striped: false,
+            stripe_size: 0,
+            height_unknown: false,
         });
         let width = region_info.width as usize;
         let height = region_info.height as usize;
@@ -197,6 +200,7 @@ pub(super) fn on_immediate_text_region(
         None
     };
 
+    let symbol_id_limit = input_symbols.len();
     let params = crate::decode::decode_text::TextRegionParams {
         huffman,
         refinement,
@@ -207,6 +211,7 @@ pub(super) fn on_immediate_text_region(
         strip_size,
         input_symbols,
         symbol_code_length: symbol_code_length as usize,
+        symbol_id_limit,
         transposed,
         ds_offset,
         reference_corner,
@@ -235,7 +240,7 @@ pub(super) fn on_intermediate_text_region(
     symbols: &HashMap<u32, Vec<Bitmap>>,
     patterns: &HashMap<u32, Vec<Bitmap>>,
     custom_tables: &HashMap<u32, HuffmanTable>,
-    bitmaps: &HashMap<u32, Bitmap>,
+    bitmaps: &mut HashMap<u32, Bitmap>,
     region_info: &RegionInfo,
     text_region_segment_flags: u16,
     number_of_symbol_instances: u32,
@@ -243,7 +248,7 @@ pub(super) fn on_intermediate_text_region(
     data: &[u8],
     start: usize,
     end: usize,
-    _segment_number: u32,
+    segment_number: u32,
 ) -> Result<(), Jbig2Error> {
     let trace_text = std::env::var_os("JBIG2_RS_TRACE_TEXT").is_some();
     // Validate that referenced segments are already available.
@@ -403,6 +408,7 @@ pub(super) fn on_intermediate_text_region(
         None
     };
 
+    let symbol_id_limit = input_symbols.len();
     let params = crate::decode::decode_text::TextRegionParams {
         huffman,
         refinement,
@@ -413,6 +419,7 @@ pub(super) fn on_intermediate_text_region(
         strip_size,
         input_symbols,
         symbol_code_length: symbol_code_length as usize,
+        symbol_id_limit,
         transposed,
         ds_offset,
         reference_corner,
@@ -423,8 +430,8 @@ pub(super) fn on_intermediate_text_region(
         refinement_at,
     };
 
-    let _bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
+    let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
+    bitmaps.insert(segment_number, bitmap);
 
-    // Intermediate text regions currently return a decoded bitmap but do not store it.
     Ok(())
 }

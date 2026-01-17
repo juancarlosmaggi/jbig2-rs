@@ -38,8 +38,13 @@ impl SimpleSegmentVisitor {
     }
 
     /// Advance the current stripe offset.
-    pub fn on_end_of_stripe(&mut self, height: usize) {
-        super::page_handler::on_end_of_stripe(&mut self.current_y, height);
+    pub fn on_end_of_stripe(&mut self, end_row: usize) {
+        super::page_handler::on_end_of_stripe(
+            &mut self.current_page_info,
+            &mut self.current_bitmap,
+            &mut self.current_y,
+            end_row,
+        );
     }
 
     /// Composite a bitmap onto the current page.
@@ -273,13 +278,13 @@ impl SimpleSegmentVisitor {
         data: &[u8],
         start: usize,
         end: usize,
-        _segment_number: u32,
+        segment_number: u32,
     ) -> Result<(), Jbig2Error> {
         super::text_handler::on_intermediate_text_region(
             &self.symbols,
             &self.patterns,
             &self.custom_tables,
-            &self.bitmaps,
+            &mut self.bitmaps,
             region_info,
             text_region_segment_flags,
             number_of_symbol_instances,
@@ -287,7 +292,7 @@ impl SimpleSegmentVisitor {
             data,
             start,
             end,
-            _segment_number,
+            segment_number,
         )
     }
 
@@ -341,6 +346,7 @@ impl SimpleSegmentVisitor {
         super::page_handler::finalize_current_page(
             &mut self.current_page_info,
             &mut self.current_bitmap,
+            self.current_y,
             &mut self.pages,
         );
     }

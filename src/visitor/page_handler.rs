@@ -52,6 +52,19 @@ impl Jbig2Page {
     }
 }
 
+fn finalize_page(page_info: &mut PageInfo, bitmap: &mut Bitmap, current_y: usize) {
+    if page_info.height_unknown {
+        let final_height = if current_y > 0 {
+            current_y
+        } else {
+            bitmap.height
+        };
+        let final_height = final_height.max(1);
+        bitmap_utils::resize_bitmap_height(bitmap, final_height, page_info.default_pixel_value);
+        page_info.height = final_height as u32;
+    }
+}
+
 /// Initialize a new page, finalizing any existing page state.
 pub(super) fn on_page_information(
     current_page_info: &mut Option<PageInfo>,
@@ -66,7 +79,10 @@ pub(super) fn on_page_information(
     }
 
     // Finalize the previous page, if any.
-    if let (Some(page_info), Some(bitmap)) = (current_page_info.take(), current_bitmap.take()) {
+    if let (Some(mut page_info), Some(mut bitmap)) =
+        (current_page_info.take(), current_bitmap.take())
+    {
+        finalize_page(&mut page_info, &mut bitmap, *current_y);
         let bit_packed_data = bitmap_to_bit_packed(&bitmap);
         pages.push(Jbig2Page {
             page_info,
@@ -84,20 +100,43 @@ pub(super) fn on_page_information(
 }
 
 /// Advance the current vertical stripe offset.
-pub(super) fn on_end_of_stripe(current_y: &mut usize, height: usize) {
+pub(super) fn on_end_of_stripe(
+    current_page_info: &mut Option<PageInfo>,
+    current_bitmap: &mut Option<Bitmap>,
+    current_y: &mut usize,
+    end_row: usize,
+) {
     if std::env::var_os("JBIG2_RS_TRACE_SEGMENTS").is_some() {
-        eprintln!("end_of_stripe: current_y={} height={}", *current_y, height);
+        eprintln!("end_of_stripe: current_y={} end_row={}", *current_y, end_row);
     }
-    *current_y += height;
+    let next_row = end_row.saturating_add(1);
+    *current_y = next_row;
+    if let (Some(page_info), Some(bitmap)) =
+        (current_page_info.as_mut(), current_bitmap.as_mut())
+    {
+        if page_info.height_unknown {
+            let stripe = page_info.stripe_size as usize;
+            let mut next_height = next_row.max(1);
+            if stripe > 0 {
+                next_height = next_height.saturating_add(stripe);
+            }
+            bitmap_utils::resize_bitmap_height(bitmap, next_height, page_info.default_pixel_value);
+            page_info.height = bitmap.height as u32;
+        }
+    }
 }
 
 /// Finalize the current page and store it in the page list.
 pub(super) fn finalize_current_page(
     current_page_info: &mut Option<PageInfo>,
     current_bitmap: &mut Option<Bitmap>,
+    current_y: usize,
     pages: &mut Vec<Jbig2Page>,
 ) {
-    if let (Some(page_info), Some(bitmap)) = (current_page_info.take(), current_bitmap.take()) {
+    if let (Some(mut page_info), Some(mut bitmap)) =
+        (current_page_info.take(), current_bitmap.take())
+    {
+        finalize_page(&mut page_info, &mut bitmap, current_y);
         let bit_packed_data = bitmap_to_bit_packed(&bitmap);
         pages.push(Jbig2Page {
             page_info,

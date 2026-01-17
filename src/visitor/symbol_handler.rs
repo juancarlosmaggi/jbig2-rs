@@ -60,46 +60,8 @@ pub(super) fn on_symbol_dictionary(
         );
     }
 
-    // Parse AT parameters by walking backward from the decode payload.
-    let mut at = Vec::new();
-    let mut refinement_at = Vec::new();
-
-    if !huffman {
-        // AT pixels live directly after the 2-byte dictionary flags.
-        let at_length = if template == 0 { 4 } else { 1 };
-
-        // params.start points to the payload; walk backward to the AT bytes.
-        let segment_data_start = params.start - 8; // Back past counts (8 bytes)
-        let at_bytes_count = if template == 0 { 8 } else { 2 };
-        let at_data_start = segment_data_start - at_bytes_count;
-
-        if at_data_start + at_bytes_count <= params.data.len() {
-            for i in 0..at_length {
-                let x = params.data[at_data_start + i * 2] as i8;
-                let y = params.data[at_data_start + i * 2 + 1] as i8;
-                at.push((x, y));
-            }
-        }
-    }
-
-    if refinement && refinement_template == 0 {
-        // Refinement AT bytes follow the direct coding AT (if any).
-        let segment_data_start = params.start - 8;
-        let at_bytes_count = if !huffman {
-            if template == 0 { 8 } else { 2 }
-        } else {
-            0
-        };
-        let refinement_at_start = segment_data_start - 4; // 4 bytes for refinement AT
-
-        if refinement_at_start >= at_bytes_count && refinement_at_start + 4 <= params.data.len() {
-            for i in 0..2 {
-                let x = params.data[refinement_at_start + i * 2] as i8;
-                let y = params.data[refinement_at_start + i * 2 + 1] as i8;
-                refinement_at.push((x, y));
-            }
-        }
-    }
+    let at = params.at_pixels.clone();
+    let refinement_at = params.refinement_at_pixels.clone();
 
     if trace_symbol && (!at.is_empty() || !refinement_at.is_empty()) {
         eprintln!(

@@ -14,6 +14,8 @@ pub fn process_segments<'a>(
     segments: &[Segment<'a>],
     visitor: &mut SimpleSegmentVisitor,
 ) -> Result<(), Jbig2Error> {
+    let strict = std::env::var_os("JBIG2_RS_STRICT").is_some();
+    let trace_errors = std::env::var_os("JBIG2_RS_TRACE_ERRORS").is_some();
     let mut current_page = 0u32;
     let mut page_segments = Vec::new();
     for segment in segments {
@@ -31,18 +33,42 @@ pub fn process_segments<'a>(
         }
         // Extension segments may carry page metadata, so process them immediately.
         if is_extension {
-            process_segment(segment, visitor)?;
+            if let Err(err) = process_segment(segment, visitor) {
+                if strict || visitor.current_page_info.is_none() {
+                    return Err(err);
+                }
+                if trace_errors {
+                    eprintln!("segment: decode error {}, stopping early", err);
+                }
+                return Ok(());
+            }
             continue;
         }
         page_segments.push(segment);
         if segment.header.segment_type == 48 {
-            process_page_segments(&page_segments, visitor)?;
+            if let Err(err) = process_page_segments(&page_segments, visitor) {
+                if strict || visitor.current_page_info.is_none() {
+                    return Err(err);
+                }
+                if trace_errors {
+                    eprintln!("segment: decode error {}, stopping early", err);
+                }
+                return Ok(());
+            }
             page_segments.clear();
             current_page += 1;
         }
     }
     if !page_segments.is_empty() {
-        process_page_segments(&page_segments, visitor)?;
+        if let Err(err) = process_page_segments(&page_segments, visitor) {
+            if strict || visitor.current_page_info.is_none() {
+                return Err(err);
+            }
+            if trace_errors {
+                eprintln!("segment: decode error {}, stopping early", err);
+            }
+            return Ok(());
+        }
     }
     Ok(())
 }
@@ -107,15 +133,19 @@ pub fn process_segment<'a>(
             let sdrtemplate = ((dictionary_flags >> 12) & 1) != 0;
 
             let mut offset = start + 2;
+            let mut at_pixels = Vec::new();
+            let mut refinement_at_pixels = Vec::new();
 
-            // Skip over direct coding AT pixels when present.
+            // Parse direct coding AT pixels when present.
             if !sdhuff {
-                let sdat_bytes = if sdtemplate == 0 { 8 } else { 2 };
-                offset += sdat_bytes;
+                let at_length = if sdtemplate == 0 { 4 } else { 1 };
+                at_pixels = parse_at_parameters(data, offset, at_length)?;
+                offset += at_length * 2;
             }
 
-            // Skip over refinement AT pixels when present.
+            // Parse refinement AT pixels when present.
             if sdrefagg && !sdrtemplate {
+                refinement_at_pixels = parse_at_parameters(data, offset, 2)?;
                 offset += 4; // 4 bytes for refinement AT
             }
 
@@ -140,8 +170,8 @@ pub fn process_segment<'a>(
                 data,
                 start: offset + 8, // Data starts after both counts
                 end,
-                at_pixels: Vec::new(),
-                refinement_at_pixels: Vec::new(),
+                at_pixels,
+                refinement_at_pixels,
             };
             visitor.on_symbol_dictionary(&params)?;
         }
@@ -166,6 +196,10 @@ pub fn process_segment<'a>(
             let resolution_x = read_u32(data, start + 8);
             let resolution_y = read_u32(data, start + 12);
             let page_segment_flags = data[start + 16];
+            let striping = read_u16(data, start + 17);
+            let mut striped = (striping & 0x8000) != 0;
+            let mut stripe_size = (striping & 0x7fff) as u16;
+            let height_unknown = height == 0xffffffff;
 
             if width == 0 || height == 0 {
                 width = 1;
@@ -177,6 +211,14 @@ pub fn process_segment<'a>(
             let combination_operator = (page_segment_flags >> 3) & 3;
             let requires_buffer = (page_segment_flags & 32) != 0;
             let combination_operator_override = (page_segment_flags & 64) != 0;
+            if height_unknown && !striped {
+                striped = true;
+                stripe_size = 0x7fff;
+            }
+            if height_unknown {
+                let initial_height = if stripe_size == 0 { 1 } else { stripe_size as u32 };
+                height = initial_height;
+            }
             let info = PageInfo {
                 width,
                 height,
@@ -188,6 +230,9 @@ pub fn process_segment<'a>(
                 combination_operator,
                 requires_buffer,
                 combination_operator_override,
+                striped,
+                stripe_size,
+                height_unknown,
             };
 
             visitor.on_page_information(info);
