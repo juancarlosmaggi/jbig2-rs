@@ -1,4 +1,4 @@
-pub mod bitmap;
+pub mod core;
 pub mod utils;
 
-pub use bitmap::Bitmap;
+pub use core::Bitmap;

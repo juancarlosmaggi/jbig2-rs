@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 use crate::bitmap::Bitmap;
 use crate::bitmap::utils as bitmap_utils;
 use crate::arithmetic::contexts::DecodingContext;
@@ -138,6 +139,21 @@ fn get_shifted_patterns(patterns: &[Bitmap]) -> Arc<Vec<ShiftedPattern>> {
     })
 }
 
+#[derive(Clone, Copy)]
+struct HalftoneLayout {
+    grid_width: usize,
+    grid_height: usize,
+    grid_vector_x: i64,
+    grid_vector_y: i64,
+    grid_offset_x: i64,
+    grid_offset_y: i64,
+    pattern_height_usize: usize,
+    pattern_width: i64,
+    pattern_height: i64,
+    region_width: i64,
+    region_height: i64,
+}
+
 #[inline(always)]
 unsafe fn or_row_bytes_ptr(dst: *mut u8, src: *const u8, len: usize) {
     let mut idx = 0usize;
@@ -163,11 +179,7 @@ fn place_halftone_pattern<const INSIDE: bool>(
     region_bitmap: &mut Bitmap,
     shifted_patterns: &[ShiftedPattern],
     patterns: &[Bitmap],
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
     pattern_index: usize,
     x: i64,
     y: i64,
@@ -181,17 +193,17 @@ fn place_halftone_pattern<const INSIDE: bool>(
     let inside = if INSIDE {
         true
     } else {
-        if region_x + pattern_width <= 0
-            || region_x >= region_width
-            || region_y + pattern_height <= 0
-            || region_y >= region_height
+        if region_x + layout.pattern_width <= 0
+            || region_x >= layout.region_width
+            || region_y + layout.pattern_height <= 0
+            || region_y >= layout.region_height
         {
             return;
         }
         region_x >= 0
             && region_y >= 0
-            && region_x + pattern_width <= region_width
-            && region_y + pattern_height <= region_height
+            && region_x + layout.pattern_width <= layout.region_width
+            && region_y + layout.pattern_height <= layout.region_height
     };
     if inside {
         let region_x_u = region_x as usize;
@@ -208,7 +220,7 @@ fn place_halftone_pattern<const INSIDE: bool>(
         unsafe {
             let dst_ptr = dst_data.as_mut_ptr();
             let src_ptr = src_data.as_ptr();
-            for _ in 0..pattern_height_usize {
+            for _ in 0..layout.pattern_height_usize {
                 or_row_bytes_ptr(dst_ptr.add(dst_row_start), src_ptr.add(src_row_start), src_stride);
                 dst_row_start += dst_stride;
                 src_row_start += src_stride;
@@ -227,20 +239,10 @@ fn render_halftone_grid<const INSIDE: bool>(
     patterns: &[Bitmap],
     gray_scale_bit_planes: &[Bitmap],
     bits_per_value: usize,
-    grid_width: usize,
-    grid_height: usize,
-    grid_vector_x: i64,
-    grid_vector_y: i64,
-    grid_offset_x: i64,
-    grid_offset_y: i64,
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
 ) {
-    let total_bytes = (grid_width + 7) >> 3;
-    let tail_bits = grid_width & 7;
+    let total_bytes = (layout.grid_width + 7) >> 3;
+    let tail_bits = layout.grid_width & 7;
     let full_bytes = total_bytes.saturating_sub(usize::from(tail_bits != 0));
     let needs_clamp = patterns.len() != (1usize << bits_per_value);
     let max_pattern_index = patterns.len().saturating_sub(1);
@@ -250,17 +252,7 @@ fn render_halftone_grid<const INSIDE: bool>(
             region_bitmap,
             shifted_patterns,
             patterns,
-            grid_width,
-            grid_height,
-            grid_vector_x,
-            grid_vector_y,
-            grid_offset_x,
-            grid_offset_y,
-            pattern_height_usize,
-            pattern_width,
-            pattern_height,
-            region_width,
-            region_height,
+            layout,
             full_bytes,
             tail_bits,
         ),
@@ -272,17 +264,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     patterns,
                     &gray_scale_bit_planes[0].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -294,17 +276,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     patterns,
                     &gray_scale_bit_planes[0].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -320,17 +292,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     &gray_scale_bit_planes[0].data,
                     &gray_scale_bit_planes[1].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -343,17 +305,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     &gray_scale_bit_planes[0].data,
                     &gray_scale_bit_planes[1].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -370,17 +322,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     &gray_scale_bit_planes[1].data,
                     &gray_scale_bit_planes[2].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -394,17 +336,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     &gray_scale_bit_planes[1].data,
                     &gray_scale_bit_planes[2].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -422,17 +354,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     &gray_scale_bit_planes[2].data,
                     &gray_scale_bit_planes[3].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -447,17 +369,7 @@ fn render_halftone_grid<const INSIDE: bool>(
                     &gray_scale_bit_planes[2].data,
                     &gray_scale_bit_planes[3].data,
                     gray_scale_bit_planes[0].stride,
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -473,20 +385,10 @@ fn render_halftone_grid<const INSIDE: bool>(
                     gray_scale_bit_planes,
                     bits_per_value,
                     gray_scale_bit_planes
-                        .get(0)
+                        .first()
                         .map(|plane| plane.stride)
                         .unwrap_or(0),
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -499,20 +401,10 @@ fn render_halftone_grid<const INSIDE: bool>(
                     gray_scale_bit_planes,
                     bits_per_value,
                     gray_scale_bit_planes
-                        .get(0)
+                        .first()
                         .map(|plane| plane.stride)
                         .unwrap_or(0),
-                    grid_width,
-                    grid_height,
-                    grid_vector_x,
-                    grid_vector_y,
-                    grid_offset_x,
-                    grid_offset_y,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     full_bytes,
                     tail_bits,
                     max_pattern_index,
@@ -527,23 +419,13 @@ fn render_halftone_grid_b0<const INSIDE: bool>(
     region_bitmap: &mut Bitmap,
     shifted_patterns: &[ShiftedPattern],
     patterns: &[Bitmap],
-    _grid_width: usize,
-    grid_height: usize,
-    grid_vector_x: i64,
-    grid_vector_y: i64,
-    grid_offset_x: i64,
-    grid_offset_y: i64,
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
     full_bytes: usize,
     tail_bits: usize,
 ) {
-    let mut base_x = grid_offset_x;
-    let mut base_y = grid_offset_y;
-    for _ in 0..grid_height {
+    let mut base_x = layout.grid_offset_x;
+    let mut base_y = layout.grid_offset_y;
+    for _ in 0..layout.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         for _ in 0..full_bytes {
@@ -552,17 +434,13 @@ fn render_halftone_grid_b0<const INSIDE: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     0,
                     x,
                     y,
                 );
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
         if tail_bits != 0 {
@@ -571,21 +449,17 @@ fn render_halftone_grid_b0<const INSIDE: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     0,
                     x,
                     y,
                 );
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
-        base_x += grid_vector_y;
-        base_y += grid_vector_x;
+        base_x += layout.grid_vector_y;
+        base_y += layout.grid_vector_x;
     }
 }
 
@@ -596,30 +470,20 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
     patterns: &[Bitmap],
     plane0: &[u8],
     plane_stride: usize,
-    _grid_width: usize,
-    grid_height: usize,
-    grid_vector_x: i64,
-    grid_vector_y: i64,
-    grid_offset_x: i64,
-    grid_offset_y: i64,
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
     full_bytes: usize,
     tail_bits: usize,
     max_pattern_index: usize,
 ) {
-    let mut base_x = grid_offset_x;
-    let mut base_y = grid_offset_y;
+    let mut base_x = layout.grid_offset_x;
+    let mut base_y = layout.grid_offset_y;
     let mut row_offset = 0usize;
-    for _ in 0..grid_height {
+    for _ in 0..layout.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         let plane0_row = &plane0[row_offset..];
-        for byte_index in 0..full_bytes {
-            let mut p0 = plane0_row[byte_index];
+        for p0_byte in plane0_row.iter().take(full_bytes) {
+            let mut p0 = *p0_byte;
             for _ in 0..8 {
                 let mut pattern_index = (p0 >> 7) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
@@ -629,18 +493,14 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
                 );
                 p0 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
         if tail_bits != 0 {
@@ -654,22 +514,18 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
                 );
                 p0 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
-        base_x += grid_vector_y;
-        base_y += grid_vector_x;
+        base_x += layout.grid_vector_y;
+        base_y += layout.grid_vector_x;
         row_offset += plane_stride;
     }
 }
@@ -682,25 +538,15 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
     plane0: &[u8],
     plane1: &[u8],
     plane_stride: usize,
-    _grid_width: usize,
-    grid_height: usize,
-    grid_vector_x: i64,
-    grid_vector_y: i64,
-    grid_offset_x: i64,
-    grid_offset_y: i64,
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
     full_bytes: usize,
     tail_bits: usize,
     max_pattern_index: usize,
 ) {
-    let mut base_x = grid_offset_x;
-    let mut base_y = grid_offset_y;
+    let mut base_x = layout.grid_offset_x;
+    let mut base_y = layout.grid_offset_y;
     let mut row_offset = 0usize;
-    for _ in 0..grid_height {
+    for _ in 0..layout.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         let plane0_row = &plane0[row_offset..];
@@ -717,19 +563,15 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
                 );
                 p0 <<= 1;
                 p1 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
         if tail_bits != 0 {
@@ -744,23 +586,19 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
                 );
                 p0 <<= 1;
                 p1 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
-        base_x += grid_vector_y;
-        base_y += grid_vector_x;
+        base_x += layout.grid_vector_y;
+        base_y += layout.grid_vector_x;
         row_offset += plane_stride;
     }
 }
@@ -774,25 +612,15 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
     plane1: &[u8],
     plane2: &[u8],
     plane_stride: usize,
-    _grid_width: usize,
-    grid_height: usize,
-    grid_vector_x: i64,
-    grid_vector_y: i64,
-    grid_offset_x: i64,
-    grid_offset_y: i64,
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
     full_bytes: usize,
     tail_bits: usize,
     max_pattern_index: usize,
 ) {
-    let mut base_x = grid_offset_x;
-    let mut base_y = grid_offset_y;
+    let mut base_x = layout.grid_offset_x;
+    let mut base_y = layout.grid_offset_y;
     let mut row_offset = 0usize;
-    for _ in 0..grid_height {
+    for _ in 0..layout.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         let plane0_row = &plane0[row_offset..];
@@ -812,11 +640,7 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
@@ -824,8 +648,8 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
         if tail_bits != 0 {
@@ -842,11 +666,7 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
@@ -854,12 +674,12 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
-        base_x += grid_vector_y;
-        base_y += grid_vector_x;
+        base_x += layout.grid_vector_y;
+        base_y += layout.grid_vector_x;
         row_offset += plane_stride;
     }
 }
@@ -874,25 +694,15 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
     plane2: &[u8],
     plane3: &[u8],
     plane_stride: usize,
-    _grid_width: usize,
-    grid_height: usize,
-    grid_vector_x: i64,
-    grid_vector_y: i64,
-    grid_offset_x: i64,
-    grid_offset_y: i64,
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
     full_bytes: usize,
     tail_bits: usize,
     max_pattern_index: usize,
 ) {
-    let mut base_x = grid_offset_x;
-    let mut base_y = grid_offset_y;
+    let mut base_x = layout.grid_offset_x;
+    let mut base_y = layout.grid_offset_y;
     let mut row_offset = 0usize;
-    for _ in 0..grid_height {
+    for _ in 0..layout.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         let plane0_row = &plane0[row_offset..];
@@ -916,11 +726,7 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
@@ -929,8 +735,8 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
                 p1 <<= 1;
                 p2 <<= 1;
                 p3 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
         if tail_bits != 0 {
@@ -950,11 +756,7 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
@@ -963,12 +765,12 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
                 p1 <<= 1;
                 p2 <<= 1;
                 p3 <<= 1;
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
-        base_x += grid_vector_y;
-        base_y += grid_vector_x;
+        base_x += layout.grid_vector_y;
+        base_y += layout.grid_vector_x;
         row_offset += plane_stride;
     }
 }
@@ -981,30 +783,19 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
     gray_scale_bit_planes: &[Bitmap],
     bits_per_value: usize,
     plane_stride: usize,
-    _grid_width: usize,
-    grid_height: usize,
-    grid_vector_x: i64,
-    grid_vector_y: i64,
-    grid_offset_x: i64,
-    grid_offset_y: i64,
-    pattern_height_usize: usize,
-    pattern_width: i64,
-    pattern_height: i64,
-    region_width: i64,
-    region_height: i64,
+    layout: &HalftoneLayout,
     full_bytes: usize,
     tail_bits: usize,
     max_pattern_index: usize,
 ) {
-    let mut base_x = grid_offset_x;
-    let mut base_y = grid_offset_y;
+    let mut base_x = layout.grid_offset_x;
+    let mut base_y = layout.grid_offset_y;
     let mut row_offset = 0usize;
-    for _ in 0..grid_height {
+    for _ in 0..layout.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         for byte_index in 0..full_bytes {
-            for bit in 0..8 {
-                let bit_mask = BIT_MASKS[bit];
+            for bit_mask in &BIT_MASKS {
                 let mut pattern_index = 0usize;
                 for (j, plane) in gray_scale_bit_planes.iter().enumerate().take(bits_per_value) {
                     if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
@@ -1018,23 +809,18 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
                 );
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
         if tail_bits != 0 {
             let byte_index = full_bytes;
-            for bit in 0..tail_bits {
-                let bit_mask = BIT_MASKS[bit];
+            for bit_mask in BIT_MASKS.iter().take(tail_bits) {
                 let mut pattern_index = 0usize;
                 for (j, plane) in gray_scale_bit_planes.iter().enumerate().take(bits_per_value) {
                     if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
@@ -1048,21 +834,17 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
                     region_bitmap,
                     shifted_patterns,
                     patterns,
-                    pattern_height_usize,
-                    pattern_width,
-                    pattern_height,
-                    region_width,
-                    region_height,
+                    layout,
                     pattern_index,
                     x,
                     y,
                 );
-                x += grid_vector_x;
-                y -= grid_vector_y;
+                x += layout.grid_vector_x;
+                y -= layout.grid_vector_y;
             }
         }
-        base_x += grid_vector_y;
-        base_y += grid_vector_x;
+        base_x += layout.grid_vector_y;
+        base_y += layout.grid_vector_x;
         row_offset += plane_stride;
     }
 }
@@ -1196,12 +978,22 @@ pub(crate) fn decode_halftone_region_with_shifted(
     }
     // Render patterns into the output bitmap using the grid geometry.
     let shifted_patterns = shifted_patterns.unwrap_or_else(|| get_shifted_patterns(params.patterns));
-    let grid_vector_x = params.grid_vector_x as i64;
-    let grid_vector_y = params.grid_vector_y as i64;
-    let grid_offset_x = params.grid_offset_x as i64;
-    let grid_offset_y = params.grid_offset_y as i64;
     let region_width = params.region_width as i64;
     let region_height = params.region_height as i64;
+
+    let layout = HalftoneLayout {
+        grid_width: params.grid_width,
+        grid_height: params.grid_height,
+        grid_vector_x: params.grid_vector_x as i64,
+        grid_vector_y: params.grid_vector_y as i64,
+        grid_offset_x: params.grid_offset_x as i64,
+        grid_offset_y: params.grid_offset_y as i64,
+        pattern_height_usize,
+        pattern_width,
+        pattern_height,
+        region_width,
+        region_height,
+    };
     if grid_inside {
         render_halftone_grid::<true>(
             &mut region_bitmap,
@@ -1209,17 +1001,7 @@ pub(crate) fn decode_halftone_region_with_shifted(
             params.patterns,
             &gray_scale_bit_planes,
             bits_per_value,
-            params.grid_width,
-            params.grid_height,
-            grid_vector_x,
-            grid_vector_y,
-            grid_offset_x,
-            grid_offset_y,
-            pattern_height_usize,
-            pattern_width,
-            pattern_height,
-            region_width,
-            region_height,
+            &layout,
         );
     } else {
         render_halftone_grid::<false>(
@@ -1228,17 +1010,7 @@ pub(crate) fn decode_halftone_region_with_shifted(
             params.patterns,
             &gray_scale_bit_planes,
             bits_per_value,
-            params.grid_width,
-            params.grid_height,
-            grid_vector_x,
-            grid_vector_y,
-            grid_offset_x,
-            grid_offset_y,
-            pattern_height_usize,
-            pattern_width,
-            pattern_height,
-            region_width,
-            region_height,
+            &layout,
         );
     }
     Ok(region_bitmap)

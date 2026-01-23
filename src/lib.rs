@@ -115,8 +115,8 @@ pub mod document;
 pub mod huffman;
 pub mod parser;
 pub mod profile;
-pub mod validation;
 
+pub use common::validation;
 pub use common::error::Jbig2Error;
 pub use document::{Jbig2Chunk, Jbig2Document, Jbig2Image};
 pub use profile::DecodeProfile;

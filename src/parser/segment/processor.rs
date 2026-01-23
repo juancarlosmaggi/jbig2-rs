@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 // Dispatch parsed segments to visitor callbacks.
 
 use super::parser::{
@@ -174,7 +175,7 @@ pub fn process_segment<'a>(
             let page_segment_flags = data[start + 16];
             let striping = read_u16(data, start + 17);
             let mut striped = (striping & 0x8000) != 0;
-            let mut stripe_size = (striping & 0x7fff) as u16;
+            let mut stripe_size = striping & 0x7fff;
             let height_unknown = height == 0xffffffff;
 
             if width == 0 || height == 0 {

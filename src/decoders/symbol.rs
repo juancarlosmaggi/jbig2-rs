@@ -9,7 +9,7 @@ use crate::arithmetic::helpers::{decode_iaid_context, decode_integer_context};
 use crate::common::error::Jbig2Error;
 use crate::huffman::{SymbolDictionaryHuffmanTables, get_standard_table};
 use crate::common::reader::Reader;
-use crate::validation;
+use crate::common::validation;
 
 /// Inputs required to decode a symbol dictionary segment.
 #[derive(Clone)]
@@ -291,7 +291,7 @@ pub fn decode_symbol_dictionary(
                         &params.symbols,
                         &new_symbols,
                         decoding_context,
-                        huffman_input.as_mut().map(|reader| &mut **reader),
+                        huffman_input.as_deref_mut(),
                     )?;
                     new_symbols.push(bitmap);
                 }

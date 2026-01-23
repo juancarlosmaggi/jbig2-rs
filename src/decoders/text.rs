@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 use crate::bitmap::Bitmap;
 use crate::bitmap::utils as bitmap_utils;
 use crate::arithmetic::contexts::DecodingContext;
@@ -9,7 +10,7 @@ use crate::arithmetic::helpers::{
 use crate::common::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::common::reader::Reader;
-use crate::validation;
+use crate::common::validation;
 
 /// Inputs required to decode a text region.
 #[derive(Clone)]

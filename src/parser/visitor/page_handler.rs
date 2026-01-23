@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 use crate::bitmap::Bitmap;
 use crate::bitmap::utils as bitmap_utils;
 use crate::parser::segment::PageInfo;
