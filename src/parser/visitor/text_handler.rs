@@ -4,7 +4,8 @@ use crate::decoders::text::decode_text_region;
 use crate::common::error::Jbig2Error;
 use crate::huffman::{HuffmanTable, TextRegionHuffmanParams};
 use crate::common::reader::Reader;
-use crate::parser::segment::{PageInfo, RegionInfo, read_u16};
+use crate::document::PageInfo;
+use crate::parser::segment::{RegionInfo, read_u16};
 use std::collections::HashMap;
 
 use super::region_handlers::{REGION_SEGMENT_INFORMATION_FIELD_LENGTH, draw_bitmap};

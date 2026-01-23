@@ -42,45 +42,35 @@
 //!
 //! ```mermaid
 //! graph TD
-//!     A[jbig2-rs] --> B[segment]
+//!     A[jbig2-rs] --> B[parser]
 //!     A --> C[huffman]
-//!     A --> D[visitor]
-//!     A --> E[decode]
-//!     A --> F[image]
+//!     A --> D[decoders]
+//!     A --> E[document]
+//!     A --> F[bitmap]
+//!     A --> G[arithmetic]
 //!     
-//!     B --> B1[types]
-//!     B --> B2[parser]
-//!     B --> B3[processor]
-//!     B --> B4[utils]
+//!     B --> B1[segment]
+//!     B --> B2[visitor]
 //!     
-//!     C --> C1[standard_tables]
-//!     C --> C2[table_selectors]
-//!     
-//!     D --> D1[page_handler]
-//!     D --> D2[symbol_handler]
-//!     D --> D3[text_handler]
-//!     D --> D4[region_handlers]
-//!     
-//!     E --> E1[decode_mmr]
-//!     E --> E2[decode_symbol]
-//!     E --> E3[decode_text]
-//!     E --> E4[arithmetic]
+//!     E --> E1[core]
+//!     E --> E2[page]
+//!     E --> E3[info]
 //! ```
 //!
 //! ## Module Organization
 //!
-//! - **[`segment`]** - Segment parsing and processing (ITU T.88 section 7)
+//! - **[`parser`]** - Segment parsing, processing, and visitor implementation
 //! - **[`huffman`]** - Huffman decoding with standard and custom tables
-//! - **[`visitor`]** - Segment handler pattern for processing decoded segments
-//! - **[`decode`]** - Format-specific decoders (MMR, symbol dictionary, text region, etc.)
-//! - **[`image`]** - High-level API for document and page management
-//! - **[`error`]** - Structured error types with context
+//! - **[`decoders`]** - Format-specific decoders (MMR, symbol dictionary, text region, etc.)
+//! - **[`document`]** - High-level API for document and page management
+//! - **[`common`]** - Shared utilities and error types
 //! - **[`bitmap`]** - Bitmap data structures and operations
 //! - **[`arithmetic`]** - Arithmetic decoder implementation
 //!
 //! ## Main Types
 //!
 //! - [`Jbig2Document`] - Represents a complete JBIG2 document with one or more pages
+//! - [`Jbig2Page`] - Represents a decoded page with bitmap and metadata
 //! - [`Jbig2Image`] - Type alias for a single page (backward compatibility)
 //! - [`Jbig2Error`] - Structured error type with context information
 //!

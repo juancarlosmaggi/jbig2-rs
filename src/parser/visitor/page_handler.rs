@@ -1,6 +1,6 @@
 use crate::bitmap::Bitmap;
 use crate::bitmap::utils as bitmap_utils;
-use crate::parser::segment::PageInfo;
+use crate::document::{Jbig2Page, PageInfo};
 
 /// Convert a bitmap to bit-packed rows (MSB first).
 pub(super) fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
@@ -21,37 +21,6 @@ pub(super) fn bitmap_to_bit_packed(bitmap: &Bitmap) -> Vec<u8> {
         }
     }
     packed
-}
-
-#[derive(Clone)]
-pub struct Jbig2Page {
-    pub page_info: PageInfo,
-    pub bitmap: Bitmap,
-    pub bit_packed_data: Vec<u8>,
-}
-
-impl Jbig2Page {
-    /// Expand the packed bitmap into 8-bit grayscale pixels.
-    pub fn to_image_data(&self) -> Vec<u8> {
-        let width = self.page_info.width as usize;
-        let height = self.page_info.height as usize;
-        let mut img_data = vec![0u8; width * height];
-        let row_size = width.div_ceil(8);
-        for y in 0..height {
-            for x in 0..width {
-                let byte_index = y * row_size + (x / 8);
-                let bit_index = 7 - (x % 8);
-                // Map packed bits into grayscale pixels.
-                let pixel = if (self.bit_packed_data[byte_index] & (1 << bit_index)) != 0 {
-                    0
-                } else {
-                    255
-                };
-                img_data[y * width + x] = pixel;
-            }
-        }
-        img_data
-    }
 }
 
 fn finalize_page(page_info: &mut PageInfo, bitmap: &mut Bitmap, current_y: usize) {

@@ -2,7 +2,8 @@ use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
 use crate::decoders::halftone::{ShiftedPattern, decode_halftone_region_with_shifted};
 use crate::common::error::Jbig2Error;
-use crate::parser::segment::{PageInfo, RegionInfo};
+use crate::document::PageInfo;
+use crate::parser::segment::RegionInfo;
 use std::collections::HashMap;
 use std::sync::Arc;
 
