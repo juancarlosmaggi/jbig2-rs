@@ -1,5 +1,5 @@
 use crate::common::error::Jbig2Error;
-use crate::profile::DecodeProfile;
+use crate::common::profile::DecodeProfile;
 use crate::parser::segment::{process_segments, read_segments};
 use crate::parser::visitor::{Jbig2Page, SimpleSegmentVisitor};
 use std::time::Instant;

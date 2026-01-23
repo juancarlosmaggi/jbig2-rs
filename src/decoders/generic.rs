@@ -3,7 +3,7 @@ use crate::arithmetic::contexts::DecodingContext;
 use crate::decoders::mmr::decode_mmr_bitmap;
 use crate::common::error::Jbig2Error;
 use crate::common::reader::Reader;
-use crate::validation;
+use crate::common::validation;
 
 const REUSED_CONTEXTS: [u16; 4] = [
     0x9b25, // 10011 0110010 0101
@@ -94,7 +94,7 @@ fn decode_bitmap_template0(
                 let mut result = 0u8;
                 for x_minor in 0..minor_width {
                     let bit = decoder.read_bit(contexts, context as usize)?;
-                    result |= (bit as u8) << (7 - x_minor);
+                    result |= bit << (7 - x_minor);
                     context = ((context & 0x7bf7) << 1) | (bit as u32);
                 }
                 row[x >> 3] = result;
@@ -119,8 +119,8 @@ fn decode_bitmap_template0(
                 let mut result = 0u8;
                 for x_minor in 0..minor_width {
                     let bit = decoder.read_bit(contexts, context as usize)?;
-                    result |= (bit as u8) << (7 - x_minor);
-                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                    result |= bit << (7 - x_minor);
+                    let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                     context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
                 }
                 row[x >> 3] = result;
@@ -150,9 +150,9 @@ fn decode_bitmap_template0(
             let mut result = 0u8;
             for x_minor in 0..minor_width {
                 let bit = decoder.read_bit(contexts, context as usize)?;
-                result |= (bit as u8) << (7 - x_minor);
-                let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
-                let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                result |= bit << (7 - x_minor);
+                let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
+                let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
                 context =
                     ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
             }
@@ -195,7 +195,7 @@ fn decode_bitmap_template0_with_skip(
                     let mut result = 0u8;
                     for x_minor in 0..minor_width {
                         let bit = decoder.read_bit(contexts, context as usize)?;
-                        result |= (bit as u8) << (7 - x_minor);
+                        result |= bit << (7 - x_minor);
                         context = ((context & 0x7bf7) << 1) | (bit as u32);
                     }
                     row[x >> 3] = result;
@@ -214,7 +214,7 @@ fn decode_bitmap_template0_with_skip(
                         } else {
                             decoder.read_bit(contexts, context as usize)?
                         };
-                        result |= (bit as u8) << (7 - x_minor);
+                        result |= bit << (7 - x_minor);
                         context = ((context & 0x7bf7) << 1) | (bit as u32);
                         skip_mask >>= 1;
                     }
@@ -243,14 +243,14 @@ fn decode_bitmap_template0_with_skip(
                     let mut result = 0u8;
                     for x_minor in 0..minor_width {
                         let bit = decoder.read_bit(contexts, context as usize)?;
-                        result |= (bit as u8) << (7 - x_minor);
-                        let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                        result |= bit << (7 - x_minor);
+                        let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                         context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
                     }
                     row[x >> 3] = result;
                 } else if skip_byte == 0xFF {
                     for x_minor in 0..minor_width {
-                        let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                        let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                         context = ((context & 0x7bf7) << 1) | line_m1_bit;
                     }
                     row[x >> 3] = 0;
@@ -264,8 +264,8 @@ fn decode_bitmap_template0_with_skip(
                         } else {
                             decoder.read_bit(contexts, context as usize)?
                         };
-                        result |= (bit as u8) << (7 - x_minor);
-                        let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
+                        result |= bit << (7 - x_minor);
+                        let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                         context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
                         skip_mask >>= 1;
                     }
@@ -299,17 +299,17 @@ fn decode_bitmap_template0_with_skip(
                 let mut result = 0u8;
                 for x_minor in 0..minor_width {
                     let bit = decoder.read_bit(contexts, context as usize)?;
-                    result |= (bit as u8) << (7 - x_minor);
-                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
-                    let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                    result |= bit << (7 - x_minor);
+                    let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
+                    let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
                     context =
                         ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
                 }
                 row[x >> 3] = result;
             } else if skip_byte == 0xFF {
                 for x_minor in 0..minor_width {
-                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
-                    let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                    let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
+                    let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
                     context = ((context & 0x7bf7) << 1) | line_m1_bit | line_m2_bit;
                 }
                 row[x >> 3] = 0;
@@ -323,9 +323,9 @@ fn decode_bitmap_template0_with_skip(
                     } else {
                         decoder.read_bit(contexts, context as usize)?
                     };
-                    result |= (bit as u8) << (7 - x_minor);
-                    let line_m1_bit = ((line_m1 >> (7 - x_minor)) & 0x10) as u32;
-                    let line_m2_bit = ((line_m2 >> (7 - x_minor)) & 0x800) as u32;
+                    result |= bit << (7 - x_minor);
+                    let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
+                    let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
                     context =
                         ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
                     skip_mask >>= 1;

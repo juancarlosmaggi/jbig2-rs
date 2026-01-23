@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+
 //! # jbig2-rs
 //!
 //! A pure Rust implementation of the JBIG2 image compression standard (ITU-T T.88).
@@ -114,12 +116,10 @@ pub mod decoders;
 pub mod document;
 pub mod huffman;
 pub mod parser;
-pub mod profile;
-pub mod validation;
 
 pub use common::error::Jbig2Error;
 pub use document::{Jbig2Chunk, Jbig2Document, Jbig2Image};
-pub use profile::DecodeProfile;
+pub use common::profile::DecodeProfile;
 
 #[cfg(test)]
 mod tests {
