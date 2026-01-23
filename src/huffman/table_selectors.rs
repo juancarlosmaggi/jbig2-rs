@@ -1,7 +1,7 @@
 use super::standard_tables::get_standard_table;
 use super::{HuffmanLine, HuffmanTable};
-use crate::error::Jbig2Error;
-use crate::reader::Reader;
+use crate::common::error::Jbig2Error;
+use crate::common::reader::Reader;
 use std::collections::HashMap;
 
 // Custom Huffman table decoding and selection helpers.

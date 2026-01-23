@@ -1,5 +1,5 @@
 use clap::Parser;
-use jbig2_rs::image::Jbig2Document;
+use jbig2_rs::document::Jbig2Document;
 use std::fs;
 use std::path::Path;
 

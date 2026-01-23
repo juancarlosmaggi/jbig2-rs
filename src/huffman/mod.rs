@@ -13,8 +13,8 @@ pub use table_selectors::{
 };
 
 // Core Huffman types and decoding logic.
-use crate::error::Jbig2Error;
-use crate::reader::Reader;
+use crate::common::error::Jbig2Error;
+use crate::common::reader::Reader;
 
 /// Represents a single line in a Huffman table definition.
 #[derive(Clone)]

@@ -108,23 +108,17 @@
 //! ```
 
 pub mod arithmetic;
-pub mod arithmetic_tables;
 pub mod bitmap;
-pub mod bitmap_utils;
-pub mod contexts;
-pub mod core_utils;
-pub mod decode;
-pub mod decoder;
-pub mod error;
+pub mod common;
+pub mod decoders;
+pub mod document;
 pub mod huffman;
-pub mod image;
+pub mod parser;
 pub mod profile;
-pub mod reader;
-pub mod segment;
 pub mod validation;
-pub mod visitor;
-pub use error::Jbig2Error;
-pub use image::{Jbig2Chunk, Jbig2Document, Jbig2Image};
+
+pub use common::error::Jbig2Error;
+pub use document::{Jbig2Chunk, Jbig2Document, Jbig2Image};
 pub use profile::DecodeProfile;
 
 #[cfg(test)]
@@ -181,7 +175,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, // page association
             0x00, 0x00, 0x00, 0x00, // length
         ];
-        let header = crate::segment::read_segment_header(&data, 0, false);
+        let header = crate::parser::segment::read_segment_header(&data, 0, false);
         assert!(header.is_ok());
         let header = header.unwrap();
         assert_eq!(header.segment_type, 0);
@@ -194,7 +188,7 @@ mod tests {
         let mut symbol = crate::bitmap::Bitmap::new(2, 2);
         symbol.set_pixel(0, 0, 1);
         symbol.set_pixel(1, 1, 1);
-        crate::bitmap_utils::draw_symbol_at_position(&mut bitmap, &symbol, 1, 1, 0);
+        crate::bitmap::utils::draw_symbol_at_position(&mut bitmap, &symbol, 1, 1, 0);
         assert_eq!(bitmap.get_pixel(1, 1), 1);
         assert_eq!(bitmap.get_pixel(2, 2), 1);
         assert_eq!(bitmap.get_pixel(0, 0), 0);

@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use jbig2_rs::bitmap::Bitmap;
-use jbig2_rs::bitmap_utils;
+use jbig2_rs::bitmap::utils as bitmap_utils;
 
 /// Benchmark bitmap allocation.
 fn bench_bitmap_new(c: &mut Criterion) {

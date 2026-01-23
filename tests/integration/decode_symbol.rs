@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_symbol::{SymbolDictionaryParams, decode_symbol_dictionary};
+    use jbig2_rs::arithmetic::contexts::DecodingContext;
+    use jbig2_rs::decoders::symbol::{SymbolDictionaryParams, decode_symbol_dictionary};
 
     #[test]
     fn test_decode_symbol_dictionary_zero_new_symbols() {

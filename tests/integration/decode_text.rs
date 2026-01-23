@@ -2,8 +2,8 @@
 mod tests {
     use jbig2_rs::arithmetic::ArithmeticDecoder;
     use jbig2_rs::bitmap::Bitmap;
-    use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_text::{TextRegionParams, decode_text_region};
+    use jbig2_rs::arithmetic::contexts::DecodingContext;
+    use jbig2_rs::decoders::text::{TextRegionParams, decode_text_region};
 
     #[test]
     fn test_decode_text_region_no_symbols() {

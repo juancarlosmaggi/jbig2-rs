@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use jbig2_rs::bitmap::Bitmap;
-    use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_refinement::{
+    use jbig2_rs::arithmetic::contexts::DecodingContext;
+    use jbig2_rs::decoders::refinement::{
         RefinementParams, decode_refinement, get_refinement_template,
     };
 

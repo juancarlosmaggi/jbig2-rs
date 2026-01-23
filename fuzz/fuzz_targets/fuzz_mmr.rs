@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use jbig2_rs::decode::decode_mmr::decode_mmr_bitmap;
+use jbig2_rs::decoders::decode_mmr::decode_mmr_bitmap;
 
 fuzz_target!(|data: &[u8]| {
     if data.len() < 5 {
@@ -16,7 +16,7 @@ fuzz_target!(|data: &[u8]| {
     // Use remaining data as the MMR payload.
     let mmr_data = &data[3..];
 
-    let mut reader = jbig2_rs::reader::Reader::new(mmr_data.to_vec(), 0, mmr_data.len());
+    let mut reader = jbig2_rs::common::reader::Reader::new(mmr_data.to_vec(), 0, mmr_data.len());
 
     // Decode the bitmap; fuzzing ensures this does not panic.
     let _ = decode_mmr_bitmap(&mut reader, width, height, end_of_block);

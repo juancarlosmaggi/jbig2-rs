@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use jbig2_rs::reader::Reader;
+use jbig2_rs::common::reader::Reader;
 
 fuzz_target!(|data: &[u8]| {
     if data.is_empty() {

@@ -1,4 +1,4 @@
-use crate::error::Jbig2Error;
+use crate::common::error::Jbig2Error;
 
 /// Validate bitmap dimensions and buffer sizing constraints.
 pub fn validate_bitmap_dimensions(width: usize, height: usize) -> Result<(), Jbig2Error> {

@@ -1,5 +1,5 @@
 use image::{GrayImage, Luma};
-use jbig2_rs::image::Jbig2Document;
+use jbig2_rs::document::Jbig2Document;
 use std::fs;
 
 /// Convert a 1bpp bitmap to PNG and write it to disk.
