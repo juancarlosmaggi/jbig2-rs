@@ -1,7 +1,7 @@
 //! Helper functions for test assertions and common operations.
 
 use jbig2_rs::bitmap::Bitmap;
-use jbig2_rs::reader::Reader;
+use jbig2_rs::common::reader::Reader;
 use std::fs;
 
 /// Load a test fixture from `tests/resources`.

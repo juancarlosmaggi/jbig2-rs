@@ -1,4 +1,4 @@
-use jbig2_rs::reader::Reader;
+use jbig2_rs::common::reader::Reader;
 use proptest::prelude::*;
 
 proptest! {

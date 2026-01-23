@@ -1,5 +1,5 @@
 use super::{HuffmanLine, HuffmanTable};
-use crate::error::Jbig2Error;
+use crate::common::error::Jbig2Error;
 
 /// Return one of the predefined Huffman tables by id.
 pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {

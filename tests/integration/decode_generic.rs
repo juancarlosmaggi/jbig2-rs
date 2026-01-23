@@ -10,7 +10,7 @@ mod tests {
     #[case(4, 0)]
     #[case(99, 0)]
     fn test_get_coding_template(#[case] index: usize, #[case] expected_len: usize) {
-        let template = jbig2_rs::decode::decode_generic::get_coding_template(index);
+        let template = jbig2_rs::decoders::generic::get_coding_template(index);
         assert_eq!(template.len(), expected_len);
 
         // Ensure template coordinates are within expected bounds.
@@ -22,7 +22,7 @@ mod tests {
 
     #[test]
     fn test_get_coding_template_template0() {
-        let template = jbig2_rs::decode::decode_generic::get_coding_template(0);
+        let template = jbig2_rs::decoders::generic::get_coding_template(0);
         assert_eq!(template.len(), 12);
         // Spot-check specific positions.
         assert_eq!(template[0], (-1, -2));

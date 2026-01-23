@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_pattern::{PatternDictionaryParams, decode_pattern_dictionary};
+    use jbig2_rs::arithmetic::contexts::DecodingContext;
+    use jbig2_rs::decoders::pattern::{PatternDictionaryParams, decode_pattern_dictionary};
 
     #[test]
     fn test_decode_pattern_dictionary_zero_patterns() {

@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use jbig2_rs::bitmap::Bitmap;
-    use jbig2_rs::contexts::DecodingContext;
-    use jbig2_rs::decode::decode_halftone::{HalftoneRegionParams, decode_halftone_region};
+    use jbig2_rs::arithmetic::contexts::DecodingContext;
+    use jbig2_rs::decoders::halftone::{HalftoneRegionParams, decode_halftone_region};
 
     #[test]
     fn test_decode_halftone_region_invalid_combination_operator() {

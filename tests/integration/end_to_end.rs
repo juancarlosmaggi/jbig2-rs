@@ -1,5 +1,5 @@
 use crate::common::load_test_file;
-use jbig2_rs::image::{Jbig2Document, Jbig2Image};
+use jbig2_rs::document::{Jbig2Document, Jbig2Image};
 
 #[test]
 fn test_minimal_valid() {
