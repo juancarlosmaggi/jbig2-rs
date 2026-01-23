@@ -7,6 +7,7 @@ use super::parser::{
 use super::types::*;
 use super::utils::*;
 use crate::common::error::Jbig2Error;
+use crate::document::PageInfo;
 use crate::parser::visitor::SimpleSegmentVisitor;
 
 /// Group segments by page and dispatch them to the visitor in decode order.

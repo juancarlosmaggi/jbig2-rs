@@ -13,9 +13,11 @@ mod utils;
 // Re-export public types and constants
 pub use types::{
     ERR_INSUFFICIENT_DATA, ERR_INVALID_SEGMENT, ERR_MISMATCH, ERR_OVERRUN, ERR_UNKNOWN_LENGTH,
-    GenericRegion, PageInfo, REGION_SEGMENT_INFORMATION_FIELD_LENGTH, RegionInfo, SEGMENT_TYPES,
+    GenericRegion, REGION_SEGMENT_INFORMATION_FIELD_LENGTH, RegionInfo, SEGMENT_TYPES,
     Segment, SegmentHeader, SymbolDictionaryParams,
 };
+
+pub use crate::document::PageInfo;
 
 // Re-export public utility functions
 pub use utils::{parse_at_parameters, read_u16, read_u16_le, read_u32, read_u32_le};

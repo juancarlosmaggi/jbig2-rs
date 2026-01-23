@@ -3,7 +3,8 @@ use crate::bitmap::utils as bitmap_utils;
 use crate::arithmetic::contexts::DecodingContext;
 use crate::decoders::generic::{DecodeBitmapParams, decode_bitmap};
 use crate::common::error::Jbig2Error;
-use crate::parser::segment::{GenericRegion, PageInfo, RegionInfo, parse_at_parameters};
+use crate::document::PageInfo;
+use crate::parser::segment::{GenericRegion, RegionInfo, parse_at_parameters};
 use std::collections::HashMap;
 
 pub(super) const REGION_SEGMENT_INFORMATION_FIELD_LENGTH: usize = 17;

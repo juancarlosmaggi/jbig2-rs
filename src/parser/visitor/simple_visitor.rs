@@ -3,13 +3,11 @@ use crate::decoders::halftone::ShiftedPattern;
 use crate::common::error::Jbig2Error;
 use crate::huffman::HuffmanTable;
 use crate::common::profile::DecodeProfile;
-use crate::parser::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams};
+use crate::parser::segment::{GenericRegion, RegionInfo, SymbolDictionaryParams};
+use crate::document::{Jbig2Page, PageInfo};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-// Re-export Jbig2Page from page_handler.
-pub use super::page_handler::Jbig2Page;
 
 /// Visitor that accumulates decoded segments into pages.
 #[derive(Default)]
