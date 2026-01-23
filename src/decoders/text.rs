@@ -9,7 +9,7 @@ use crate::arithmetic::helpers::{
 use crate::common::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::common::reader::Reader;
-use crate::validation;
+use crate::common::validation;
 
 /// Inputs required to decode a text region.
 #[derive(Clone)]

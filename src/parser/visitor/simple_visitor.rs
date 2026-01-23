@@ -2,7 +2,7 @@ use crate::bitmap::Bitmap;
 use crate::decoders::halftone::ShiftedPattern;
 use crate::common::error::Jbig2Error;
 use crate::huffman::HuffmanTable;
-use crate::profile::DecodeProfile;
+use crate::common::profile::DecodeProfile;
 use crate::parser::segment::{GenericRegion, PageInfo, RegionInfo, SymbolDictionaryParams};
 use std::collections::HashMap;
 use std::sync::Arc;
