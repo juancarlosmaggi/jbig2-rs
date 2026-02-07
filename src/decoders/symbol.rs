@@ -463,9 +463,9 @@ pub fn decode_symbol_dictionary(
 
     let mut exported_symbols = Vec::with_capacity(params.number_of_exported_symbols);
     let input_symbols_len = params.symbols.len();
-    for (symbol, &export) in params.symbols.into_iter().zip(flags.iter()) {
+    for (symbol, &export) in params.symbols.iter().zip(flags.iter()) {
         if export {
-            exported_symbols.push(symbol);
+            exported_symbols.push((*symbol).clone());
         }
     }
 

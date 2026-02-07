@@ -83,7 +83,7 @@ pub(super) fn on_symbol_dictionary(
     };
 
     let exported_symbols = decode_symbol_dictionary(
-        symbol_params,
+        &symbol_params,
         &mut decoding_context,
         huffman_input.as_mut(),
     )?;

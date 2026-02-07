@@ -21,7 +21,7 @@ mod tests {
             huffman_tables: None,
         };
 
-        let result = decode_symbol_dictionary(params, &mut context, None);
+        let result = decode_symbol_dictionary(&params, &mut context, None);
         assert!(result.is_err());
     }
 
@@ -43,7 +43,7 @@ mod tests {
             huffman_tables: None,
         };
 
-        let result = decode_symbol_dictionary(params, &mut context, None);
+        let result = decode_symbol_dictionary(&params, &mut context, None);
         assert!(result.is_err());
     }
 
@@ -65,7 +65,7 @@ mod tests {
             huffman_tables: None,
         };
 
-        let result = decode_symbol_dictionary(params, &mut context, None);
+        let result = decode_symbol_dictionary(&params, &mut context, None);
         assert!(result.is_err());
     }
 
@@ -87,7 +87,7 @@ mod tests {
             huffman_tables: None,
         };
 
-        let result = decode_symbol_dictionary(params, &mut context, None);
+        let result = decode_symbol_dictionary(&params, &mut context, None);
         assert!(result.is_err());
     }
 }
