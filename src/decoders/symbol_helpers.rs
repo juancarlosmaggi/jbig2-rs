@@ -1,10 +1,10 @@
 // Helpers shared by symbol dictionary decoding paths.
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
+use crate::bitmap::Bitmap;
+use crate::common::error::Jbig2Error;
+use crate::common::reader::Reader;
 use crate::decoders::text::TextRegionParams;
 use crate::huffman::{TextRegionHuffmanTables, get_aggregate_symbol_huffman_tables};
-use crate::common::reader::Reader;
-use crate::common::error::Jbig2Error;
 
 /// Parameters for decoding an aggregate symbol bitmap.
 #[derive(Clone)]
@@ -102,7 +102,7 @@ pub fn create_aggregate_text_params<'a>(
         symbol_id_limit: params.total_symbols,
         transposed: false,
         ds_offset: 0,
-        reference_corner: 1, // top-left reference point for aggregate symbols
+        reference_corner: 1,     // top-left reference point for aggregate symbols
         combination_operator: 0, // OR
         log_strip_size: 0,
         huffman_tables,
@@ -137,9 +137,5 @@ pub fn decode_aggregate_symbol(
 
     let text_params = create_aggregate_text_params(params, input_symbols, huffman_tables);
 
-    crate::decoders::text::decode_text_region(
-        &text_params,
-        decoding_context,
-        huffman_input,
-    )
+    crate::decoders::text::decode_text_region(&text_params, decoding_context, huffman_input)
 }

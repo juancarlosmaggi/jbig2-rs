@@ -1,7 +1,7 @@
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
-use crate::decoders::generic::{DecodeBitmapParams, decode_bitmap};
+use crate::bitmap::Bitmap;
 use crate::common::error::Jbig2Error;
+use crate::decoders::generic::{DecodeBitmapParams, decode_bitmap};
 
 /// Inputs required to decode a pattern dictionary.
 #[derive(Clone)]

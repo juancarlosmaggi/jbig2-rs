@@ -193,7 +193,11 @@ pub fn process_segment<'a>(
                 stripe_size = 0x7fff;
             }
             if height_unknown {
-                let initial_height = if stripe_size == 0 { 1 } else { stripe_size as u32 };
+                let initial_height = if stripe_size == 0 {
+                    1
+                } else {
+                    stripe_size as u32
+                };
                 height = initial_height;
             }
             let info = PageInfo {

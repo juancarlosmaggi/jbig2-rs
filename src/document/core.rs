@@ -222,7 +222,12 @@ impl Jbig2Document {
 
         visitor.record_profile("total_decode", total_start.elapsed());
         let profile = visitor.take_profile().unwrap_or_default();
-        Ok((Jbig2Document { pages: visitor.pages }, profile))
+        Ok((
+            Jbig2Document {
+                pages: visitor.pages,
+            },
+            profile,
+        ))
     }
 
     /// Parse JBIG2 data from multiple chunks.
@@ -292,7 +297,12 @@ impl Jbig2Document {
         visitor.finalize_current_page();
         visitor.record_profile("total_decode", total_start.elapsed());
         let profile = visitor.take_profile().unwrap_or_default();
-        Ok((Jbig2Document { pages: visitor.pages }, profile))
+        Ok((
+            Jbig2Document {
+                pages: visitor.pages,
+            },
+            profile,
+        ))
     }
 
     /// Return the total number of pages in the document.

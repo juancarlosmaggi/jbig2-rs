@@ -1,15 +1,15 @@
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
+use crate::arithmetic::helpers::{decode_iaid_context, decode_integer_context};
+use crate::bitmap::Bitmap;
+use crate::common::error::Jbig2Error;
+use crate::common::reader::Reader;
+use crate::common::validation;
 use crate::decoders::mmr::decode_mmr_bitmap;
 use crate::decoders::symbol_helpers::{
     AggregateSymbolParams, decode_aggregate_symbol, split_collective_bitmap,
 };
 use crate::decoders::utils::read_uncompressed_bitmap;
-use crate::arithmetic::helpers::{decode_iaid_context, decode_integer_context};
-use crate::common::error::Jbig2Error;
 use crate::huffman::{SymbolDictionaryHuffmanTables, get_standard_table};
-use crate::common::reader::Reader;
-use crate::common::validation;
 
 /// Inputs required to decode a symbol dictionary segment.
 #[derive(Clone)]
@@ -86,19 +86,13 @@ pub fn decode_symbol_dictionary(
                 .table_delta_height
                 .decode_entry(huffman_input.as_mut().unwrap())?;
             if oob {
-                return Err(Jbig2Error::new(
-                    "OOB when decoding height class delta",
-                ));
+                return Err(Jbig2Error::new("OOB when decoding height class delta"));
             }
             val
         } else {
             match decode_integer_context(decoding_context, "IADH")? {
                 Some(v) => v,
-                None => {
-                    return Err(Jbig2Error::new(
-                        "OOB when decoding height class delta",
-                    ))
-                }
+                None => return Err(Jbig2Error::new("OOB when decoding height class delta")),
             }
         };
 
@@ -143,9 +137,7 @@ pub fn decode_symbol_dictionary(
                 .checked_add(dw)
                 .ok_or_else(|| Jbig2Error::new("symbol width overflow"))?;
             if current_width < 0 {
-                return Err(Jbig2Error::new(
-                    "DW value would make symbol width negative",
-                ));
+                return Err(Jbig2Error::new("DW value would make symbol width negative"));
             }
             total_width = total_width
                 .checked_add(current_width)
@@ -171,7 +163,7 @@ pub fn decode_symbol_dictionary(
                         None => {
                             return Err(Jbig2Error::new(
                                 "OOB when decoding aggregate instance count",
-                            ))
+                            ));
                         }
                     }
                 };
@@ -201,14 +193,12 @@ pub fn decode_symbol_dictionary(
                     } else {
                         let symbol_id =
                             decode_iaid_context(decoding_context, symbol_code_length)? as usize;
-                        let rdx = decode_integer_context(decoding_context, "IARDX")?
-                            .ok_or_else(|| {
-                                Jbig2Error::new("OOB when decoding refinement x offset")
-                            })?;
-                        let rdy = decode_integer_context(decoding_context, "IARDY")?
-                            .ok_or_else(|| {
-                                Jbig2Error::new("OOB when decoding refinement y offset")
-                            })?;
+                        let rdx = decode_integer_context(decoding_context, "IARDX")?.ok_or_else(
+                            || Jbig2Error::new("OOB when decoding refinement x offset"),
+                        )?;
+                        let rdy = decode_integer_context(decoding_context, "IARDY")?.ok_or_else(
+                            || Jbig2Error::new("OOB when decoding refinement y offset"),
+                        )?;
                         (symbol_id, rdx, rdy, None)
                     };
 
@@ -313,12 +303,11 @@ pub fn decode_symbol_dictionary(
                 )?;
                 new_symbols.push(bitmap);
             }
-
         }
 
-    // Decode a collective bitmap for Huffman direct-mode symbols.
-    if huffman
-        && !refinement
+        // Decode a collective bitmap for Huffman direct-mode symbols.
+        if huffman
+            && !refinement
             && !symbol_widths.is_empty()
             && total_width > 0
             && current_height > 0
@@ -350,11 +339,8 @@ pub fn decode_symbol_dictionary(
                 bmp
             };
 
-            let symbols = split_collective_bitmap(
-                &collective_bitmap,
-                &symbol_widths,
-                current_height_usize,
-            );
+            let symbols =
+                split_collective_bitmap(&collective_bitmap, &symbol_widths, current_height_usize);
             new_symbols.extend(symbols);
         }
     }
@@ -426,7 +412,7 @@ pub fn decode_symbol_dictionary(
                 None => {
                     return Err(Jbig2Error::new(
                         "OOB when decoding runlength for exported symbols",
-                    ))
+                    ));
                 }
             };
             let run_len_u32 = run as u32;
@@ -444,9 +430,7 @@ pub fn decode_symbol_dictionary(
             if run_len > total_symbols - i {
                 run_len = total_symbols - i;
             }
-            if export
-                && exported_count + run_len > params.number_of_exported_symbols
-            {
+            if export && exported_count + run_len > params.number_of_exported_symbols {
                 run_len = params.number_of_exported_symbols - exported_count;
             }
 
@@ -470,10 +454,10 @@ pub fn decode_symbol_dictionary(
     }
 
     let offset = input_symbols_len;
-    for (j, symbol) in new_symbols.into_iter().enumerate() {
+    for (j, symbol) in new_symbols.iter().enumerate() {
         let flag_idx = offset + j;
         if flag_idx < flags.len() && flags[flag_idx] {
-            exported_symbols.push(symbol);
+            exported_symbols.push(symbol.clone());
         }
     }
 

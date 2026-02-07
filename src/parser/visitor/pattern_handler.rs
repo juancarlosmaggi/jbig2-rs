@@ -1,8 +1,8 @@
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
+use crate::bitmap::Bitmap;
+use crate::common::error::Jbig2Error;
 use crate::decoders::halftone::{ShiftedPattern, build_shifted_patterns};
 use crate::decoders::pattern::decode_pattern_dictionary;
-use crate::common::error::Jbig2Error;
 use std::collections::HashMap;
 use std::sync::Arc;
 

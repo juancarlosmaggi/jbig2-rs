@@ -12,5 +12,5 @@ mod text_handler;
 // Main visitor module
 pub mod simple_visitor;
 
-pub use simple_visitor::SimpleSegmentVisitor;
 pub use crate::document::Jbig2Page;
+pub use simple_visitor::SimpleSegmentVisitor;

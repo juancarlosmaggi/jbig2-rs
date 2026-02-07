@@ -1,10 +1,10 @@
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
-use crate::decoders::text::decode_text_region;
+use crate::bitmap::Bitmap;
 use crate::common::error::Jbig2Error;
-use crate::huffman::{HuffmanTable, TextRegionHuffmanParams};
 use crate::common::reader::Reader;
+use crate::decoders::text::decode_text_region;
 use crate::document::PageInfo;
+use crate::huffman::{HuffmanTable, TextRegionHuffmanParams};
 use crate::parser::segment::{RegionInfo, read_u16};
 use std::collections::HashMap;
 
@@ -103,7 +103,9 @@ pub(super) fn on_immediate_text_region(
     }
 
     if pos + 4 > end {
-        return Err(Jbig2Error::new("text region segment too short for instance count"));
+        return Err(Jbig2Error::new(
+            "text region segment too short for instance count",
+        ));
     }
     pos += 4;
 
@@ -255,7 +257,9 @@ pub(super) fn on_intermediate_text_region(
     }
 
     if pos + 4 > end {
-        return Err(Jbig2Error::new("text region segment too short for instance count"));
+        return Err(Jbig2Error::new(
+            "text region segment too short for instance count",
+        ));
     }
     pos += 4;
 

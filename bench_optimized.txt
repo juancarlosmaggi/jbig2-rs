@@ -1,0 +1,36 @@
+   Compiling jbig2-rs v0.1.0 (/app)
+warning: unused variable: `row_len`
+   --> src/decoders/mmr.rs:412:13
+    |
+412 |         let row_len = (self.width + 7) >> 3;
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_row_len`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `jbig2-rs` (lib) generated 1 warning (run `cargo fix --lib -p jbig2-rs` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 7.71s
+     Running benches/full_bench.rs (target/release/deps/full_bench-67d4ad149b9f8eaa)
+Gnuplot not found, using plotters backend
+Benchmarking full_file_decoding/symbol_dictionary
+Benchmarking full_file_decoding/symbol_dictionary: Warming up for 3.0000 s
+Benchmarking full_file_decoding/symbol_dictionary: Collecting 100 samples in estimated 5.1486 s (300 iterations)
+Benchmarking full_file_decoding/symbol_dictionary: Analyzing
+full_file_decoding/symbol_dictionary
+                        time:   [17.240 ms 17.383 ms 17.543 ms]
+                        change: [-0.1770% +2.1614% +4.0282%] (p = 0.04 < 0.05)
+                        Change within noise threshold.
+Found 17 outliers among 100 measurements (17.00%)
+  4 (4.00%) low mild
+  5 (5.00%) high mild
+  8 (8.00%) high severe
+Benchmarking full_file_decoding/text_region
+Benchmarking full_file_decoding/text_region: Warming up for 3.0000 s
+Benchmarking full_file_decoding/text_region: Collecting 100 samples in estimated 6.5608 s (300 iterations)
+Benchmarking full_file_decoding/text_region: Analyzing
+full_file_decoding/text_region
+                        time:   [17.722 ms 18.016 ms 18.349 ms]
+                        change: [-14.080% -11.434% -8.8489%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 12 outliers among 100 measurements (12.00%)
+  1 (1.00%) high mild
+  11 (11.00%) high severe
