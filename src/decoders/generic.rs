@@ -583,7 +583,10 @@ fn decode_bitmap_no_skip(
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
 
-        for j in (safe_start + 1)..safe_end {
+        let mut j = safe_start + 1;
+
+        // Process pixels one by one until byte alignment
+        while j < safe_end && (j & 7) != 0 {
             context_label = (context_label << 1) & reuse_mask;
             for k in 0..changing_entries_length {
                 let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
@@ -594,6 +597,60 @@ fn decode_bitmap_no_skip(
             }
             let pixel = decoder.read_bit(contexts, context_label as usize)?;
             bitmap.set_pixel_unchecked(j, i, pixel);
+            j += 1;
+        }
+
+        // Process aligned bytes
+        if j < safe_end {
+            let row_offset = i * bitmap.stride;
+            let data_ptr = bitmap.data.as_mut_ptr();
+            let stride = bitmap.stride;
+
+            while j + 8 <= safe_end {
+                let byte_offset = row_offset + (j >> 3);
+                let byte_ptr = unsafe { data_ptr.add(byte_offset) };
+
+                for bit_idx in 0..8 {
+                    let curr_j = j + bit_idx;
+                    context_label = (context_label << 1) & reuse_mask;
+
+                    for k in 0..changing_entries_length {
+                        let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
+                        let j0 = (curr_j as i32 + changing_template_x[k] as i32) as usize;
+
+                        let bit_set = unsafe {
+                            let idx = i0 * stride + (j0 >> 3);
+                            let bit = 7 - (j0 & 7);
+                            (*data_ptr.add(idx) >> bit) & 1 != 0
+                        };
+
+                        if bit_set {
+                            context_label |= changing_template_bit[k];
+                        }
+                    }
+
+                    let pixel = decoder.read_bit(contexts, context_label as usize)?;
+                    if pixel != 0 {
+                        unsafe { *byte_ptr |= 1 << (7 - bit_idx); }
+                    }
+                }
+                j += 8;
+            }
+        }
+
+        // Process remaining pixels
+        while j < safe_end {
+            context_label = (context_label << 1) & reuse_mask;
+            for k in 0..changing_entries_length {
+                let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
+                let j0 = (j as i32 + changing_template_x[k] as i32) as usize;
+                if bitmap.get_pixel_unchecked(j0, i0) != 0 {
+                    context_label |= changing_template_bit[k];
+                }
+            }
+            let pixel = decoder.read_bit(contexts, context_label as usize)?;
+            bitmap.set_pixel_unchecked(j, i, pixel);
+            j += 1;
         }
 
         for j in safe_end..params.width {
