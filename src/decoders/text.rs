@@ -10,6 +10,7 @@ use crate::common::error::Jbig2Error;
 use crate::huffman::TextRegionHuffmanTables;
 use crate::common::reader::Reader;
 use crate::common::validation;
+use std::borrow::Cow;
 
 /// Inputs required to decode a text region.
 #[derive(Clone)]
@@ -266,9 +267,13 @@ pub fn decode_text_region(
                     if let Some(size) = bmsize {
                         huffman_input.as_mut().unwrap().skip(size as usize);
                     }
-                    (refined_width, refined_height, Some(bitmap))
+                    (refined_width, refined_height, Some(Cow::Owned(bitmap)))
                 } else {
-                    (symbol_width, symbol_height, Some(symbol_bitmap.clone()))
+                    (
+                        symbol_width,
+                        symbol_height,
+                        Some(Cow::Borrowed(symbol_bitmap)),
+                    )
                 }
             } else {
                 if apply_refinement {
