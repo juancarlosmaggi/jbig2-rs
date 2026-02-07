@@ -16,18 +16,78 @@ struct CCITTFaxDecoder<'a> {
 
 impl<'a> CCITTFaxDecoder<'a> {
     fn new(reader: Reader<'a>, width: usize, height: usize, end_of_block: bool) -> Self {
+        // Packed lines: (width + 7) / 8 bytes.
+        let stride = (width + 7) >> 3;
         CCITTFaxDecoder {
             reader,
             width,
             height,
             end_of_block,
-            ref_line: vec![0; width],
-            curr_line: vec![0; width],
+            ref_line: vec![0; stride],
+            curr_line: vec![0; stride],
         }
     }
 
     fn read_bit(&mut self) -> Result<u8, Jbig2Error> {
         self.reader.read_bit()
+    }
+
+    fn set_run(&mut self, start: usize, end: usize, val: u8) {
+        if val == 0 || start >= end {
+            return;
+        }
+
+        // We only need to set bits to 1 because the line is initialized to 0.
+        let mut idx = start;
+
+        // Handle first partial byte
+        if (idx & 7) != 0 {
+            let byte_idx = idx >> 3;
+            if byte_idx >= self.curr_line.len() { return; }
+
+            let bits_in_byte = 8 - (idx & 7);
+            let bits = bits_in_byte.min(end - idx);
+
+            // Construct mask: 1s for the bits we want to set.
+            // High bits are at lower indices (MSB first).
+            // Shift 1s to the right position.
+            // Example: idx&7=1 (start at bit 6), bits=3.
+            // We want 01110000.
+            // 0xFF >> (idx & 7) -> 01111111
+            // 0xFF << (8 - ((idx&7) + bits)) -> 11110000 (wait)
+
+            // Mask for high part starting at idx&7: 0xFF >> (idx&7)
+            // Mask for low part ending at idx&7+bits: !(0xFF >> (idx&7+bits))
+
+            let start_bit = idx & 7;
+            let end_bit = start_bit + bits;
+
+            let mask = (0xFF >> start_bit) & (0xFF << (8 - end_bit));
+
+            self.curr_line[byte_idx] |= mask;
+            idx += bits;
+        }
+
+        // Handle full bytes
+        while idx + 8 <= end {
+            let byte_idx = idx >> 3;
+            if byte_idx >= self.curr_line.len() { return; }
+            self.curr_line[byte_idx] = 0xFF;
+            idx += 8;
+        }
+
+        // Handle last partial byte
+        if idx < end {
+            let byte_idx = idx >> 3;
+            if byte_idx >= self.curr_line.len() { return; }
+
+            let bits = end - idx;
+            // start_bit is 0 because we are aligned now (except if we started unaligned and finished in same byte, which is handled by first block)
+            // wait, if we had a first partial block, idx is now aligned.
+
+            let mask = 0xFF << (8 - bits);
+            self.curr_line[byte_idx] |= mask;
+        }
     }
 
     fn decode_2d_line(&mut self, _eofb: &mut bool) -> Result<(), Jbig2Error> {
@@ -65,9 +125,8 @@ impl<'a> CCITTFaxDecoder<'a> {
             match mode {
                 0 => {
                     // Pass mode
-                    for i in x..b2 {
-                        self.curr_line[i] = current_color;
-                    }
+                    // Fill from x to b2 with current_color
+                    self.set_run(x, b2, current_color);
                     x = b2;
                     a0 = x as i32;
                     // color unchanged
@@ -90,9 +149,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                     }
 
                     let end = (a1 as usize).min(self.width);
-                    for i in x..end {
-                        self.curr_line[i] = current_color;
-                    }
+                    self.set_run(x, end, current_color);
                     x = end;
                     a0 = a1;
                     current_color = 1 - current_color;
@@ -113,18 +170,12 @@ impl<'a> CCITTFaxDecoder<'a> {
                         }
                     };
 
-                    for i in 0..r1 {
-                        if x + i < self.width {
-                            self.curr_line[x + i] = current_color;
-                        }
-                    }
+                    let end1 = (x + r1).min(self.width);
+                    self.set_run(x, end1, current_color);
                     x += r1;
 
-                    for i in 0..r2 {
-                        if x + i < self.width {
-                            self.curr_line[x + i] = 1 - current_color;
-                        }
-                    }
+                    let end2 = (x + r2).min(self.width);
+                    self.set_run(x, end2, 1 - current_color);
                     x += r2;
 
                     a0 = x as i32;
@@ -199,28 +250,85 @@ impl<'a> CCITTFaxDecoder<'a> {
         if width == 0 {
             return 0;
         }
-        if pos < 0 {
-            let mut x = 0usize;
-            while x < width {
-                if line[x] != 0 {
-                    return x;
-                }
-                x += 1;
-            }
-            return width;
-        }
-        let mut x = pos as usize;
+
+        // Determine starting position x
+        let mut x = if pos < 0 { 0 } else { pos as usize };
+
         if x >= width {
             return width;
         }
-        let color = line[x];
-        x = x.saturating_add(1);
-        while x < width {
-            if line[x] != color {
+
+        // Determine the color we are looking for change FROM.
+        // If pos < 0, we treat the virtual pixel at -1 as white (0).
+        // So we are looking for the first pixel that is NOT 0.
+        // If pos >= 0, we look for the first pixel that is NOT line[pos].
+
+        let color_to_match = if pos < 0 {
+             0
+        } else {
+             let byte = line[x >> 3];
+             (byte >> (7 - (x & 7))) & 1
+        };
+
+        // We want to find the first pixel >= x that is != color_to_match.
+        // Or conceptually, we skip pixels == color_to_match.
+
+        // If color_to_match is 0, we search for 1.
+        // If color_to_match is 1, we search for 0.
+
+        // If pos >= 0, we advance x by 1 first as per original logic:
+        // "x = x.saturating_add(1);"
+        if pos >= 0 {
+             x = x.saturating_add(1);
+        }
+
+        if x >= width {
+            return width;
+        }
+
+        // Align to byte boundary
+        while x < width && (x & 7) != 0 {
+            let byte = line[x >> 3];
+            let bit = (byte >> (7 - (x & 7))) & 1;
+            if bit != color_to_match {
                 return x;
             }
             x += 1;
         }
+
+        if x >= width {
+            return width;
+        }
+
+        // Process full bytes
+        // If color_to_match == 0, we look for non-zero byte.
+        // If color_to_match == 1, we look for non-0xFF byte.
+        let target_byte = if color_to_match == 0 { 0x00 } else { 0xFF };
+
+        let mut byte_idx = x >> 3;
+        let limit_byte = (width + 7) >> 3;
+
+        while byte_idx < limit_byte {
+            let b = line[byte_idx];
+            if b != target_byte {
+                // Found a byte with a changing element
+                // Find the specific bit
+                // If color_to_match == 0 (target 0), we want first 1. b has at least one 1.
+                // If color_to_match == 1 (target 0xFF), we want first 0. b has at least one 0.
+
+                let check_byte = if color_to_match == 0 { b } else { !b };
+                let bit_offset = check_byte.leading_zeros() as usize;
+
+                let result_x = (byte_idx << 3) + bit_offset;
+                if result_x < width {
+                    return result_x;
+                } else {
+                    return width;
+                }
+            }
+            byte_idx += 1;
+        }
+
         width
     }
 
@@ -232,8 +340,18 @@ impl<'a> CCITTFaxDecoder<'a> {
         color: u8,
     ) -> usize {
         let mut x = self.find_changing_element(line, pos, width);
-        if x < width && line[x] != color {
-            x = self.find_changing_element(line, x as i32, width);
+
+        // Check if the pixel at x is already `color`.
+        // If x < width, line[x] is the new color (which is different from prev color).
+        // If line[x] == color, we are done.
+        // If line[x] != color, we need to find the next change.
+
+        if x < width {
+            let byte = line[x >> 3];
+            let pixel_color = (byte >> (7 - (x & 7))) & 1;
+            if pixel_color != color {
+                 x = self.find_changing_element(line, x as i32, width);
+            }
         }
         x
     }
@@ -291,11 +409,17 @@ impl<'a> CCITTFaxDecoder<'a> {
         let mut eofb = false;
         let mut y = 0usize;
 
+        let row_len = (self.width + 7) >> 3;
+
         while y < self.height && !eofb {
             self.decode_2d_line(&mut eofb)?;
 
-            for x in 0..self.width {
-                bitmap.set_pixel(x, y, self.curr_line[x]);
+            // Copy curr_line to bitmap
+            // Bitmap data is packed similarly.
+            // We can just copy the bytes.
+            let dst_start = y * bitmap.stride;
+            if dst_start + row_len <= bitmap.data.len() {
+                bitmap.data[dst_start..dst_start + row_len].copy_from_slice(&self.curr_line[..row_len]);
             }
 
             std::mem::swap(&mut self.ref_line, &mut self.curr_line);
