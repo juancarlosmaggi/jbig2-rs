@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use jbig2_rs::bitmap::Bitmap;
     use jbig2_rs::arithmetic::contexts::DecodingContext;
+    use jbig2_rs::bitmap::Bitmap;
     use jbig2_rs::decoders::refinement::{
         RefinementParams, decode_refinement, get_refinement_template,
     };
@@ -152,7 +152,11 @@ mod tests {
             let reference = Bitmap::new(16, 16);
             let at = [(0, 0), (0, 0)];
 
-            let at = if template_index == 0 { &at[..1] } else { &at[..0] };
+            let at = if template_index == 0 {
+                &at[..1]
+            } else {
+                &at[..0]
+            };
 
             let params = RefinementParams {
                 width: 8,

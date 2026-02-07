@@ -1,9 +1,9 @@
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
-use crate::decoders::symbol::decode_symbol_dictionary;
+use crate::bitmap::Bitmap;
 use crate::common::error::Jbig2Error;
-use crate::huffman::HuffmanTable;
 use crate::common::reader::Reader;
+use crate::decoders::symbol::decode_symbol_dictionary;
+use crate::huffman::HuffmanTable;
 use crate::parser::segment::SymbolDictionaryParams;
 use std::collections::HashMap;
 
@@ -83,7 +83,7 @@ pub(super) fn on_symbol_dictionary(
     };
 
     let exported_symbols = decode_symbol_dictionary(
-        symbol_params,
+        &symbol_params,
         &mut decoding_context,
         huffman_input.as_mut(),
     )?;

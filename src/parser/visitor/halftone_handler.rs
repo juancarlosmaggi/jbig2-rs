@@ -1,7 +1,7 @@
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
-use crate::decoders::halftone::{ShiftedPattern, decode_halftone_region_with_shifted};
+use crate::bitmap::Bitmap;
 use crate::common::error::Jbig2Error;
+use crate::decoders::halftone::{ShiftedPattern, decode_halftone_region_with_shifted};
 use crate::document::PageInfo;
 use crate::parser::segment::RegionInfo;
 use std::collections::HashMap;
@@ -98,11 +98,8 @@ pub(super) fn on_immediate_halftone_region(
         grid_vector_y,
     };
 
-    let bitmap = decode_halftone_region_with_shifted(
-        &params,
-        shifted_patterns,
-        &mut decoding_context,
-    )?;
+    let bitmap =
+        decode_halftone_region_with_shifted(&params, shifted_patterns, &mut decoding_context)?;
 
     draw_bitmap(
         current_page_info,
@@ -170,11 +167,8 @@ pub(super) fn on_intermediate_halftone_region(
         grid_vector_y,
     };
 
-    let bitmap = decode_halftone_region_with_shifted(
-        &params,
-        shifted_patterns,
-        &mut decoding_context,
-    )?;
+    let bitmap =
+        decode_halftone_region_with_shifted(&params, shifted_patterns, &mut decoding_context)?;
 
     bitmaps.insert(segment_number, bitmap);
     Ok(())

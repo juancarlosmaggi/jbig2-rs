@@ -79,9 +79,7 @@ pub(super) fn on_end_of_stripe(
 ) {
     let next_row = end_row.saturating_add(1);
     *current_y = next_row;
-    if let (Some(page_info), Some(bitmap)) =
-        (current_page_info.as_mut(), current_bitmap.as_mut())
-    {
+    if let (Some(page_info), Some(bitmap)) = (current_page_info.as_mut(), current_bitmap.as_mut()) {
         if page_info.height_unknown {
             let stripe = page_info.stripe_size as usize;
             let mut next_height = next_row.max(1);

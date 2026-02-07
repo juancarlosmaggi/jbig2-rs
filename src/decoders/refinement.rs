@@ -1,6 +1,6 @@
 use crate::arithmetic::ArithmeticDecoder;
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
+use crate::bitmap::Bitmap;
 use crate::common::error::Jbig2Error;
 const REFINEMENT_REUSED_CONTEXTS: [u16; 2] = [
     0x0100, // TPGRON start context for template 0
@@ -19,8 +19,7 @@ const REFERENCE_TEMPLATE_0: [(i8, i8); 8] = [
     (0, -1),
 ];
 const CODING_TEMPLATE_1: [(i8, i8); 4] = [(-1, 0), (1, -1), (0, -1), (-1, -1)];
-const REFERENCE_TEMPLATE_1: [(i8, i8); 6] =
-    [(1, 1), (0, 1), (1, 0), (0, 0), (-1, 0), (0, -1)];
+const REFERENCE_TEMPLATE_1: [(i8, i8); 6] = [(1, 1), (0, 1), (1, 0), (0, 0), (-1, 0), (0, -1)];
 const MAX_CODING_TEMPLATE_LEN: usize = 4;
 const MAX_REFERENCE_TEMPLATE_LEN: usize = 9;
 
@@ -180,11 +179,7 @@ fn decode_refinement_range_slow(
         for k in 0..reference_template_length {
             let i0 = row as i32 + reference_template_y[k] - offset_y;
             let j0 = j as i32 + reference_template_x[k] - offset_x;
-            if i0 >= 0
-                && i0 < reference_height_i32
-                && j0 >= 0
-                && j0 < reference_width_i32
-            {
+            if i0 >= 0 && i0 < reference_height_i32 && j0 >= 0 && j0 < reference_width_i32 {
                 let bit = reference_bitmap.get_pixel_unchecked(j0 as usize, i0 as usize) as u16;
                 if bit != 0 {
                     context_label |= 1 << (coding_template_length + k);
@@ -263,15 +258,11 @@ pub fn decode_refinement<'a>(
     let offset_x = params.offset_x;
     let offset_y = params.offset_y;
     let start_context = REFINEMENT_REUSED_CONTEXTS[params.template_index];
-    let safe_x_start = 0
-        .max(-coding_min_x)
-        .max(offset_x - ref_min_x);
+    let safe_x_start = 0.max(-coding_min_x).max(offset_x - ref_min_x);
     let safe_x_end = width_i32
         .min(width_i32 - coding_max_x)
         .min(offset_x + reference_width_i32 - ref_max_x);
-    let safe_y_start = 0
-        .max(-coding_min_y)
-        .max(offset_y - ref_min_y);
+    let safe_y_start = 0.max(-coding_min_y).max(offset_y - ref_min_y);
     let safe_y_end = height_i32
         .min(height_i32 - coding_max_y)
         .min(offset_y + reference_height_i32 - ref_max_y);
@@ -320,11 +311,7 @@ pub fn decode_refinement<'a>(
                     let i_ref = j as i32 - offset_x;
                     let j_ref = i as i32 - offset_y;
                     let get_ref = |x: i32, y: i32| -> u8 {
-                        if x < 0
-                            || y < 0
-                            || x >= reference_width_i32
-                            || y >= reference_height_i32
-                        {
+                        if x < 0 || y < 0 || x >= reference_width_i32 || y >= reference_height_i32 {
                             0
                         } else {
                             params

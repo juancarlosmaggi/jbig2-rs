@@ -302,7 +302,7 @@ impl Bitmap {
                 match operator {
                     0 => new_byte |= src_aligned & mask, // OR
                     1 => new_byte = (dst_byte & src_aligned & mask) | (dst_byte & !mask), // AND within mask, preserve outside
-                    2 => new_byte ^= src_aligned & mask, // XOR
+                    2 => new_byte ^= src_aligned & mask,                                  // XOR
                     3 => {
                         // XNOR.
                         let xor = dst_byte ^ src_aligned;
@@ -771,9 +771,9 @@ mod tests {
         assert_eq!(bm2.height, 5);
     }
 
-// #[test]
-// #[should_panic(expected = "Bitmap dimensions unreasonable")]
-// fn test_bitmap_unreasonable_dimensions() {
-//     Bitmap::new(300_000_000, 1);
-// }
+    // #[test]
+    // #[should_panic(expected = "Bitmap dimensions unreasonable")]
+    // fn test_bitmap_unreasonable_dimensions() {
+    //     Bitmap::new(300_000_000, 1);
+    // }
 }

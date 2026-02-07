@@ -1,10 +1,10 @@
 use crate::bitmap::Bitmap;
-use crate::decoders::halftone::ShiftedPattern;
 use crate::common::error::Jbig2Error;
-use crate::huffman::HuffmanTable;
 use crate::common::profile::DecodeProfile;
-use crate::parser::segment::{GenericRegion, RegionInfo, SymbolDictionaryParams};
+use crate::decoders::halftone::ShiftedPattern;
 use crate::document::{Jbig2Page, PageInfo};
+use crate::huffman::HuffmanTable;
+use crate::parser::segment::{GenericRegion, RegionInfo, SymbolDictionaryParams};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
