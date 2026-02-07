@@ -88,9 +88,7 @@ impl<'a> DecodingContext<'a> {
         }
     }
 
-    pub fn get_decoder(
-        &self,
-    ) -> std::cell::RefMut<'_, crate::arithmetic::ArithmeticDecoder<'a>> {
+    pub fn get_decoder(&self) -> std::cell::RefMut<'_, crate::arithmetic::ArithmeticDecoder<'a>> {
         let mut opt = self.decoder.borrow_mut();
         if opt.is_none() {
             // Initialize on demand so callers can reuse the same stateful decoder.

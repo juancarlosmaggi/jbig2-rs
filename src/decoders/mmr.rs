@@ -43,7 +43,9 @@ impl<'a> CCITTFaxDecoder<'a> {
         // Handle first partial byte
         if (idx & 7) != 0 {
             let byte_idx = idx >> 3;
-            if byte_idx >= self.curr_line.len() { return; }
+            if byte_idx >= self.curr_line.len() {
+                return;
+            }
 
             let bits_in_byte = 8 - (idx & 7);
             let bits = bits_in_byte.min(end - idx);
@@ -71,7 +73,9 @@ impl<'a> CCITTFaxDecoder<'a> {
         // Handle full bytes
         while idx + 8 <= end {
             let byte_idx = idx >> 3;
-            if byte_idx >= self.curr_line.len() { return; }
+            if byte_idx >= self.curr_line.len() {
+                return;
+            }
             self.curr_line[byte_idx] = 0xFF;
             idx += 8;
         }
@@ -79,7 +83,9 @@ impl<'a> CCITTFaxDecoder<'a> {
         // Handle last partial byte
         if idx < end {
             let byte_idx = idx >> 3;
-            if byte_idx >= self.curr_line.len() { return; }
+            if byte_idx >= self.curr_line.len() {
+                return;
+            }
 
             let bits = end - idx;
             // start_bit is 0 because we are aligned now (except if we started unaligned and finished in same byte, which is handled by first block)
@@ -264,10 +270,10 @@ impl<'a> CCITTFaxDecoder<'a> {
         // If pos >= 0, we look for the first pixel that is NOT line[pos].
 
         let color_to_match = if pos < 0 {
-             0
+            0
         } else {
-             let byte = line[x >> 3];
-             (byte >> (7 - (x & 7))) & 1
+            let byte = line[x >> 3];
+            (byte >> (7 - (x & 7))) & 1
         };
 
         // We want to find the first pixel >= x that is != color_to_match.
@@ -279,7 +285,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         // If pos >= 0, we advance x by 1 first as per original logic:
         // "x = x.saturating_add(1);"
         if pos >= 0 {
-             x = x.saturating_add(1);
+            x = x.saturating_add(1);
         }
 
         if x >= width {
@@ -350,7 +356,7 @@ impl<'a> CCITTFaxDecoder<'a> {
             let byte = line[x >> 3];
             let pixel_color = (byte >> (7 - (x & 7))) & 1;
             if pixel_color != color {
-                 x = self.find_changing_element(line, x as i32, width);
+                x = self.find_changing_element(line, x as i32, width);
             }
         }
         x
@@ -409,7 +415,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         let mut eofb = false;
         let mut y = 0usize;
 
-        let row_len = (self.width + 7) >> 3;
+        let _row_len = (self.width + 7) >> 3;
 
         while y < self.height && !eofb {
             self.decode_2d_line(&mut eofb)?;

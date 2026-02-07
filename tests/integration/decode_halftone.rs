@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use jbig2_rs::bitmap::Bitmap;
     use jbig2_rs::arithmetic::contexts::DecodingContext;
+    use jbig2_rs::bitmap::Bitmap;
     use jbig2_rs::decoders::halftone::{HalftoneRegionParams, decode_halftone_region};
 
     #[test]

@@ -1,8 +1,8 @@
+use crate::arithmetic::contexts::DecodingContext;
 use crate::bitmap::Bitmap;
 use crate::bitmap::utils as bitmap_utils;
-use crate::arithmetic::contexts::DecodingContext;
-use crate::decoders::generic::{DecodeBitmapParams, decode_bitmap};
 use crate::common::error::Jbig2Error;
+use crate::decoders::generic::{DecodeBitmapParams, decode_bitmap};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -89,7 +89,10 @@ fn build_shifted_rows(pattern: &Bitmap, shift: usize) -> ShiftedRows {
         }
     }
 
-    ShiftedRows { stride: dst_stride, data }
+    ShiftedRows {
+        stride: dst_stride,
+        data,
+    }
 }
 
 fn build_shifted_pattern(pattern: &Bitmap) -> ShiftedPattern {
@@ -202,14 +205,20 @@ fn place_halftone_pattern<const INSIDE: bool>(
             let dst_ptr = dst_data.as_mut_ptr();
             let src_ptr = src_data.as_ptr();
             for _ in 0..params.pattern_height_usize {
-                or_row_bytes_ptr(dst_ptr.add(dst_row_start), src_ptr.add(src_row_start), src_stride);
+                or_row_bytes_ptr(
+                    dst_ptr.add(dst_row_start),
+                    src_ptr.add(src_row_start),
+                    src_stride,
+                );
                 dst_row_start += dst_stride;
                 src_row_start += src_stride;
             }
         }
     } else {
         let pattern_bitmap = &params.patterns[pattern_index];
-        params.region_bitmap.combine_or(pattern_bitmap, region_x as isize, region_y as isize);
+        params
+            .region_bitmap
+            .combine_or(pattern_bitmap, region_x as isize, region_y as isize);
     }
 }
 
@@ -243,11 +252,7 @@ fn render_halftone_grid<const INSIDE: bool>(
     let max_pattern_index = params.patterns.len().saturating_sub(1);
 
     match bits_per_value {
-        0 => render_halftone_grid_b0::<INSIDE>(
-            params,
-            full_bytes,
-            tail_bits,
-        ),
+        0 => render_halftone_grid_b0::<INSIDE>(params, full_bytes, tail_bits),
         1 => {
             if needs_clamp {
                 render_halftone_grid_b1::<INSIDE, true>(
@@ -351,24 +356,14 @@ fn render_halftone_grid_b0<const INSIDE: bool>(
         let mut y = base_y;
         for _ in 0..full_bytes {
             for _ in 0..8 {
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    0,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, 0, x, y);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
         }
         if tail_bits != 0 {
             for _ in 0..tail_bits {
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    0,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, 0, x, y);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
@@ -400,12 +395,7 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
@@ -418,12 +408,7 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
@@ -459,12 +444,7 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 p1 <<= 1;
                 x += params.grid_vector_x;
@@ -479,12 +459,7 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 p1 <<= 1;
                 x += params.grid_vector_x;
@@ -519,17 +494,11 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
             let mut p1 = plane1_row[byte_index];
             let mut p2 = plane2_row[byte_index];
             for _ in 0..8 {
-                let mut pattern_index =
-                    ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2)) as usize;
+                let mut pattern_index = ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -542,17 +511,11 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
             let mut p1 = plane1_row[full_bytes];
             let mut p2 = plane2_row[full_bytes];
             for _ in 0..tail_bits {
-                let mut pattern_index =
-                    ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2)) as usize;
+                let mut pattern_index = ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -590,19 +553,12 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
             let mut p2 = plane2_row[byte_index];
             let mut p3 = plane3_row[byte_index];
             for _ in 0..8 {
-                let mut pattern_index = ((p0 >> 7)
-                    | ((p1 >> 7) << 1)
-                    | ((p2 >> 7) << 2)
-                    | ((p3 >> 7) << 3)) as usize;
+                let mut pattern_index =
+                    ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2) | ((p3 >> 7) << 3)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -617,19 +573,12 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
             let mut p2 = plane2_row[full_bytes];
             let mut p3 = plane3_row[full_bytes];
             for _ in 0..tail_bits {
-                let mut pattern_index = ((p0 >> 7)
-                    | ((p1 >> 7) << 1)
-                    | ((p2 >> 7) << 2)
-                    | ((p3 >> 7) << 3)) as usize;
+                let mut pattern_index =
+                    ((p0 >> 7) | ((p1 >> 7) << 1) | ((p2 >> 7) << 2) | ((p3 >> 7) << 3)) as usize;
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -655,14 +604,23 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
     let mut base_x = params.grid_offset_x;
     let mut base_y = params.grid_offset_y;
     let mut row_offset = 0usize;
-    let plane_stride = params.gray_scale_bit_planes.first().map(|plane| plane.stride).unwrap_or(0);
+    let plane_stride = params
+        .gray_scale_bit_planes
+        .first()
+        .map(|plane| plane.stride)
+        .unwrap_or(0);
     for _ in 0..params.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         for byte_index in 0..full_bytes {
             for &bit_mask in &BIT_MASKS {
                 let mut pattern_index = 0usize;
-                for (j, plane) in params.gray_scale_bit_planes.iter().enumerate().take(bits_per_value) {
+                for (j, plane) in params
+                    .gray_scale_bit_planes
+                    .iter()
+                    .enumerate()
+                    .take(bits_per_value)
+                {
                     if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
                         pattern_index |= 1usize << j;
                     }
@@ -670,12 +628,7 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
@@ -684,7 +637,12 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
             let byte_index = full_bytes;
             for &bit_mask in BIT_MASKS.iter().take(tail_bits) {
                 let mut pattern_index = 0usize;
-                for (j, plane) in params.gray_scale_bit_planes.iter().enumerate().take(bits_per_value) {
+                for (j, plane) in params
+                    .gray_scale_bit_planes
+                    .iter()
+                    .enumerate()
+                    .take(bits_per_value)
+                {
                     if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
                         pattern_index |= 1usize << j;
                     }
@@ -692,12 +650,7 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(
-                    &mut params,
-                    pattern_index,
-                    x,
-                    y,
-                );
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
@@ -759,8 +712,7 @@ pub(crate) fn decode_halftone_region_with_shifted(
     let pattern_width = pattern_width_usize as i64;
     let pattern_height = pattern_height_usize as i64;
     let bits_per_value = crate::common::utils::log2(number_of_patterns as u32) as usize;
-    const HALFTONE_AT_TEMPLATE_0_1: [(i8, i8); 4] =
-        [(3, -1), (-3, -1), (2, -2), (-2, -2)];
+    const HALFTONE_AT_TEMPLATE_0_1: [(i8, i8); 4] = [(3, -1), (-3, -1), (2, -2), (-2, -2)];
     const HALFTONE_AT_TEMPLATE_2_3: [(i8, i8); 1] = [(2, -1)];
     let at: &[(i8, i8)] = if params.mmr {
         &[]
@@ -836,7 +788,8 @@ pub(crate) fn decode_halftone_region_with_shifted(
         }
     }
     // Render patterns into the output bitmap using the grid geometry.
-    let shifted_patterns = shifted_patterns.unwrap_or_else(|| get_shifted_patterns(params.patterns));
+    let shifted_patterns =
+        shifted_patterns.unwrap_or_else(|| get_shifted_patterns(params.patterns));
     let grid_vector_x = params.grid_vector_x as i64;
     let grid_vector_y = params.grid_vector_y as i64;
     let grid_offset_x = params.grid_offset_x as i64;
@@ -863,15 +816,9 @@ pub(crate) fn decode_halftone_region_with_shifted(
     };
 
     if grid_inside {
-        render_halftone_grid::<true>(
-            render_params,
-            bits_per_value,
-        );
+        render_halftone_grid::<true>(render_params, bits_per_value);
     } else {
-        render_halftone_grid::<false>(
-            render_params,
-            bits_per_value,
-        );
+        render_halftone_grid::<false>(render_params, bits_per_value);
     }
     Ok(region_bitmap)
 }

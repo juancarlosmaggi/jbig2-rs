@@ -161,7 +161,13 @@ pub fn read_generic_region(data: &[u8], start: usize) -> Result<GenericRegion, J
     let template = ((generic_region_segment_flags >> 1) & 3) as usize;
     let prediction = (generic_region_segment_flags & 8) != 0;
     // MMR-coded generic regions omit adaptive template parameters.
-    let at_length = if mmr { 0 } else if template == 0 { 4 } else { 1 };
+    let at_length = if mmr {
+        0
+    } else if template == 0 {
+        4
+    } else {
+        1
+    };
     let pos = start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1;
     let at = parse_at_parameters(data, pos, at_length)?;
     Ok(GenericRegion {

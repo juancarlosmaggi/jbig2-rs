@@ -54,101 +54,27 @@ impl HuffmanLine {
     }
 }
 
-/// Binary tree node used to decode Huffman codes.
-pub struct HuffmanTreeNode {
-    pub children: [Option<Box<HuffmanTreeNode>>; 2],
-    pub is_leaf: bool,
-    pub range_length: u32,
-    pub range_low: i32,
-    pub is_lower_range: bool,
-    pub is_oob: bool,
-}
+const NO_CHILD: u32 = u32::MAX;
 
-impl Clone for HuffmanTreeNode {
-    fn clone(&self) -> Self {
-        HuffmanTreeNode {
-            children: [
-                self.children[0].as_ref().map(|c| Box::new((**c).clone())),
-                self.children[1].as_ref().map(|c| Box::new((**c).clone())),
-            ],
-            is_leaf: self.is_leaf,
-            range_length: self.range_length,
-            range_low: self.range_low,
-            is_lower_range: self.is_lower_range,
-            is_oob: self.is_oob,
-        }
-    }
-}
-
-impl HuffmanTreeNode {
-    /// Create a leaf node from a Huffman line definition.
-    pub fn new_leaf(line: &HuffmanLine) -> Self {
-        HuffmanTreeNode {
-            children: [None, None],
-            is_leaf: true,
-            range_length: line.range_length,
-            range_low: line.range_low,
-            is_lower_range: line.is_lower_range,
-            is_oob: line.is_oob,
-        }
-    }
-
-    /// Create an internal tree node.
-    pub fn new_intermediate() -> Self {
-        HuffmanTreeNode {
-            children: [None, None],
-            is_leaf: false,
-            range_length: 0,
-            range_low: 0,
-            is_lower_range: false,
-            is_oob: false,
-        }
-    }
-
-    /// Insert a Huffman line into the decode tree.
-    pub fn build_tree(&mut self, line: &HuffmanLine, shift: u32) {
-        let bit = ((line.prefix_code >> shift) & 1) as usize;
-        if shift == 0 {
-            self.children[bit] = Some(Box::new(HuffmanTreeNode::new_leaf(line)));
-        } else {
-            if self.children[bit].is_none() {
-                self.children[bit] = Some(Box::new(HuffmanTreeNode::new_intermediate()));
-            }
-            if let Some(ref mut child) = self.children[bit] {
-                child.build_tree(line, shift - 1);
-            }
-        }
-    }
-
-    /// Decode a value by walking the tree with incoming bits.
-    pub fn decode_node(&self, reader: &mut Reader<'_>) -> Result<(i32, bool), Jbig2Error> {
-        if self.is_leaf {
-            if self.is_oob {
-                return Ok((0, true));
-            }
-            let ht_offset = reader.read_bits(self.range_length)?;
-            let val = self.range_low
-                + if self.is_lower_range {
-                    -(ht_offset as i32)
-                } else {
-                    ht_offset as i32
-                };
-            Ok((val, false))
-        } else {
-            let bit = reader.read_bit()? as usize;
-            if let Some(ref child) = self.children[bit] {
-                child.decode_node(reader)
-            } else {
-                Err(Jbig2Error::new("invalid Huffman data"))
-            }
-        }
-    }
+/// Flattened Huffman tree node.
+#[derive(Clone, Copy, Debug)]
+pub enum HuffmanNode {
+    Internal {
+        left: u32,
+        right: u32,
+    },
+    Leaf {
+        range_length: u32,
+        range_low: i32,
+        is_lower_range: bool,
+        is_oob: bool,
+    },
 }
 
 /// Huffman table with a decoded binary tree.
 #[derive(Clone)]
 pub struct HuffmanTable {
-    pub root_node: HuffmanTreeNode,
+    pub nodes: Vec<HuffmanNode>,
 }
 
 impl HuffmanTable {
@@ -157,23 +83,138 @@ impl HuffmanTable {
         if !prefix_codes_done {
             Self::assign_prefix_codes(&mut lines);
         }
-        let mut root = HuffmanTreeNode::new_intermediate();
+
+        let mut nodes = vec![HuffmanNode::Internal {
+            left: NO_CHILD,
+            right: NO_CHILD,
+        }];
+
         for line in &lines {
             if line.prefix_length > 0 {
-                root.build_tree(line, line.prefix_length - 1);
+                Self::add_line(&mut nodes, line);
             }
         }
-        HuffmanTable { root_node: root }
+
+        HuffmanTable { nodes }
+    }
+
+    fn add_line(nodes: &mut Vec<HuffmanNode>, line: &HuffmanLine) {
+        let mut current_index = 0;
+        let len = line.prefix_length;
+
+        for i in 0..len {
+            let shift = len - 1 - i;
+            let bit = ((line.prefix_code >> shift) & 1) as usize;
+
+            if shift == 0 {
+                // We are at the leaf position. Create a leaf node.
+                let leaf = HuffmanNode::Leaf {
+                    range_length: line.range_length,
+                    range_low: line.range_low,
+                    is_lower_range: line.is_lower_range,
+                    is_oob: line.is_oob,
+                };
+                let new_index = nodes.len() as u32;
+                nodes.push(leaf);
+
+                // Link the new leaf to the current parent.
+                if let HuffmanNode::Internal {
+                    ref mut left,
+                    ref mut right,
+                } = nodes[current_index]
+                {
+                    if bit == 0 {
+                        *left = new_index;
+                    } else {
+                        *right = new_index;
+                    }
+                }
+            } else {
+                // We are at an intermediate position.
+                // Check if the child exists.
+                let child_index = match nodes[current_index] {
+                    HuffmanNode::Internal { left, right } => {
+                        if bit == 0 {
+                            left
+                        } else {
+                            right
+                        }
+                    }
+                    _ => NO_CHILD, // Should not happen for valid tables (prefix property)
+                };
+
+                if child_index != NO_CHILD {
+                    // Child exists, move down.
+                    current_index = child_index as usize;
+                } else {
+                    // Child does not exist, create a new internal node.
+                    let new_node = HuffmanNode::Internal {
+                        left: NO_CHILD,
+                        right: NO_CHILD,
+                    };
+                    let new_index = nodes.len() as u32;
+                    nodes.push(new_node);
+
+                    // Link the new node to the parent.
+                    if let HuffmanNode::Internal {
+                        ref mut left,
+                        ref mut right,
+                    } = nodes[current_index]
+                    {
+                        if bit == 0 {
+                            *left = new_index;
+                        } else {
+                            *right = new_index;
+                        }
+                    }
+                    current_index = new_index as usize;
+                }
+            }
+        }
     }
 
     /// Decode a value from the input stream.
     pub fn decode(&self, reader: &mut Reader<'_>) -> Result<i32, Jbig2Error> {
-        self.root_node.decode_node(reader).map(|(val, _)| val)
+        self.decode_entry(reader).map(|(val, _)| val)
     }
 
     /// Decode a value and return whether it was an OOB marker.
     pub fn decode_entry(&self, reader: &mut Reader<'_>) -> Result<(i32, bool), Jbig2Error> {
-        self.root_node.decode_node(reader)
+        let mut current_index = 0;
+        loop {
+            // Safety: We construct the tree such that indices are valid.
+            let node = unsafe { self.nodes.get_unchecked(current_index) };
+
+            match node {
+                HuffmanNode::Leaf {
+                    range_length,
+                    range_low,
+                    is_lower_range,
+                    is_oob,
+                } => {
+                    if *is_oob {
+                        return Ok((0, true));
+                    }
+                    let ht_offset = reader.read_bits(*range_length)?;
+                    let val = *range_low
+                        + if *is_lower_range {
+                            -(ht_offset as i32)
+                        } else {
+                            ht_offset as i32
+                        };
+                    return Ok((val, false));
+                }
+                HuffmanNode::Internal { left, right } => {
+                    let bit = reader.read_bit()?;
+                    let next_index = if bit == 0 { *left } else { *right };
+
+                    if next_index == NO_CHILD {
+                        return Err(Jbig2Error::new("invalid Huffman data"));
+                    }
+                    current_index = next_index as usize;
+                }
+            }
+        }
     }
 
     /// Assign canonical prefix codes based on line prefix lengths.

@@ -1,9 +1,9 @@
-use crate::bitmap::Bitmap;
 use crate::arithmetic::contexts::DecodingContext;
-use crate::decoders::mmr::decode_mmr_bitmap;
+use crate::bitmap::Bitmap;
 use crate::common::error::Jbig2Error;
 use crate::common::reader::Reader;
 use crate::common::validation;
+use crate::decoders::mmr::decode_mmr_bitmap;
 
 const REUSED_CONTEXTS: [u16; 4] = [
     0x9b25, // 10011 0110010 0101
@@ -153,8 +153,7 @@ fn decode_bitmap_template0(
                 result |= bit << (7 - x_minor);
                 let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                 let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
-                context =
-                    ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
             }
             row[x >> 3] = result;
         }
@@ -302,8 +301,7 @@ fn decode_bitmap_template0_with_skip(
                     result |= bit << (7 - x_minor);
                     let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                     let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
-                    context =
-                        ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
                 }
                 row[x >> 3] = result;
             } else if skip_byte == 0xFF {
@@ -326,8 +324,7 @@ fn decode_bitmap_template0_with_skip(
                     result |= bit << (7 - x_minor);
                     let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                     let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
-                    context =
-                        ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
                     skip_mask >>= 1;
                 }
                 row[x >> 3] = result;

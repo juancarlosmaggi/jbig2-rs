@@ -108,8 +108,8 @@ pub mod huffman;
 pub mod parser;
 
 pub use common::error::Jbig2Error;
-pub use document::{Jbig2Chunk, Jbig2Document, Jbig2Image};
 pub use common::profile::DecodeProfile;
+pub use document::{Jbig2Chunk, Jbig2Document, Jbig2Image};
 
 #[cfg(test)]
 mod tests {

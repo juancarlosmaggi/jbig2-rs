@@ -142,20 +142,14 @@ impl<'a> ArithmeticDecoder<'a> {
             }
 
             let b = ((self.next_word >> 24) & 0xFF) as u8;
-            self.c = self
-                .c
-                .wrapping_add(0xFF00u32.wrapping_sub((b as u32) << 8));
+            self.c = self.c.wrapping_add(0xFF00u32.wrapping_sub((b as u32) << 8));
             self.ct = 8;
         }
     }
 
     /// Decode a single bit using the specified context state.
     #[inline(always)]
-    pub fn read_bit(
-        &mut self,
-        contexts: &mut [i8],
-        pos: usize,
-    ) -> Result<u8, Jbig2Error> {
+    pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> Result<u8, Jbig2Error> {
         debug_assert!(pos < contexts.len());
         let ctx_val = unsafe { *contexts.get_unchecked(pos) };
         let cx_index = (ctx_val >> 1) as usize;

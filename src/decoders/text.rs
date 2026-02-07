@@ -1,15 +1,15 @@
-use crate::bitmap::Bitmap;
-use crate::bitmap::utils as bitmap_utils;
 use crate::arithmetic::contexts::DecodingContext;
-use crate::decoders::refinement::RefinementParams;
-use crate::decoders::refinement::decode_refinement;
 use crate::arithmetic::helpers::{
     decode_i32_huffman_or_arith, decode_integer_context, decode_u32_huffman_or_arith,
 };
+use crate::bitmap::Bitmap;
+use crate::bitmap::utils as bitmap_utils;
 use crate::common::error::Jbig2Error;
-use crate::huffman::TextRegionHuffmanTables;
 use crate::common::reader::Reader;
 use crate::common::validation;
+use crate::decoders::refinement::RefinementParams;
+use crate::decoders::refinement::decode_refinement;
+use crate::huffman::TextRegionHuffmanTables;
 use std::borrow::Cow;
 
 /// Inputs required to decode a text region.
@@ -196,10 +196,12 @@ pub fn decode_text_region(
                     huffman_input.as_mut().unwrap().byte_align();
                 } else {
                     // Pure Arithmetic coding
-                    rdw = decode_integer_context(decoding_context, "IARDW")?
-                        .ok_or_else(|| Jbig2Error::new("OOB when decoding refinement width delta"))?;
-                    rdh = decode_integer_context(decoding_context, "IARDH")?
-                        .ok_or_else(|| Jbig2Error::new("OOB when decoding refinement height delta"))?;
+                    rdw = decode_integer_context(decoding_context, "IARDW")?.ok_or_else(|| {
+                        Jbig2Error::new("OOB when decoding refinement width delta")
+                    })?;
+                    rdh = decode_integer_context(decoding_context, "IARDH")?.ok_or_else(|| {
+                        Jbig2Error::new("OOB when decoding refinement height delta")
+                    })?;
                     rdx = decode_integer_context(decoding_context, "IARDX")?
                         .ok_or_else(|| Jbig2Error::new("OOB when decoding refinement x offset"))?;
                     rdy = decode_integer_context(decoding_context, "IARDY")?
@@ -307,36 +309,30 @@ pub fn decode_text_region(
                     match params.reference_corner {
                         0 => (s, t.wrapping_sub(height_adjust)), // bottom-left
                         1 => (s, t),                             // top-left
-                        2 => (
-                            s.wrapping_sub(width_adjust),
-                            t.wrapping_sub(height_adjust),
-                        ), // bottom-right
+                        2 => (s.wrapping_sub(width_adjust), t.wrapping_sub(height_adjust)), // bottom-right
                         _ => (s.wrapping_sub(width_adjust), t), // top-right
                     }
                 } else {
                     match params.reference_corner {
                         0 => (t, s.wrapping_sub(height_adjust)), // bottom-left
                         1 => (t, s),                             // top-left
-                        2 => (
-                            t.wrapping_sub(width_adjust),
-                            s.wrapping_sub(height_adjust),
-                        ), // bottom-right
+                        2 => (t.wrapping_sub(width_adjust), s.wrapping_sub(height_adjust)), // bottom-right
                         _ => (t.wrapping_sub(width_adjust), s), // top-right
                     }
                 }
             } else if !params.transposed {
                 match params.reference_corner {
-                    0 => (s, t.wrapping_add(1)), // bottom-left
-                    1 => (s, t),                 // top-left
+                    0 => (s, t.wrapping_add(1)),                 // bottom-left
+                    1 => (s, t),                                 // top-left
                     2 => (s.wrapping_add(1), t.wrapping_add(1)), // bottom-right
-                    _ => (s.wrapping_add(1), t), // top-right
+                    _ => (s.wrapping_add(1), t),                 // top-right
                 }
             } else {
                 match params.reference_corner {
-                    0 => (t, s.wrapping_add(1)), // bottom-left
-                    1 => (t, s),                 // top-left
+                    0 => (t, s.wrapping_add(1)),                 // bottom-left
+                    1 => (t, s),                                 // top-left
                     2 => (t.wrapping_add(1), s.wrapping_add(1)), // bottom-right
-                    _ => (t.wrapping_add(1), s), // top-right
+                    _ => (t.wrapping_add(1), s),                 // top-right
                 }
             };
 
@@ -363,15 +359,10 @@ pub fn decode_text_region(
             }
             let delta_s = if params.huffman {
                 let tables = huffman_tables.unwrap();
-                let (val, oob) =
-                    tables
-                        .table_delta_s
-                        .decode_entry(huffman_input.as_mut().unwrap())?;
-                if oob {
-                    None
-                } else {
-                    Some(val)
-                }
+                let (val, oob) = tables
+                    .table_delta_s
+                    .decode_entry(huffman_input.as_mut().unwrap())?;
+                if oob { None } else { Some(val) }
             } else {
                 decode_integer_context(decoding_context, "IADS")?
             };
