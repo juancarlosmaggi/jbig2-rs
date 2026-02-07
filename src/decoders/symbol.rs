@@ -13,10 +13,10 @@ use crate::common::validation;
 
 /// Inputs required to decode a symbol dictionary segment.
 #[derive(Clone)]
-pub struct SymbolDictionaryParams {
+pub struct SymbolDictionaryParams<'a> {
     pub huffman: bool,
     pub refinement: bool,
-    pub symbols: Vec<Bitmap>,
+    pub symbols: Vec<&'a Bitmap>,
     pub number_of_new_symbols: usize,
     pub number_of_exported_symbols: usize,
     pub template_index: usize,
@@ -28,7 +28,7 @@ pub struct SymbolDictionaryParams {
 
 /// Decode a symbol dictionary and return the exported symbols.
 pub fn decode_symbol_dictionary(
-    params: &SymbolDictionaryParams,
+    params: &SymbolDictionaryParams<'_>,
     decoding_context: &mut DecodingContext<'_>,
     mut huffman_input: Option<&mut Reader<'_>>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
@@ -217,7 +217,7 @@ pub fn decode_symbol_dictionary(
                         return Err(Jbig2Error::new("invalid refinement symbol id"));
                     }
                     let sym = if symbol_id < params.symbols.len() {
-                        &params.symbols[symbol_id]
+                        params.symbols[symbol_id]
                     } else {
                         &new_symbols[symbol_id - params.symbols.len()]
                     };

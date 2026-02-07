@@ -13,7 +13,7 @@ use crate::common::validation;
 
 /// Inputs required to decode a text region.
 #[derive(Clone)]
-pub struct TextRegionParams {
+pub struct TextRegionParams<'a> {
     pub huffman: bool,
     pub refinement: bool,
     pub width: usize,
@@ -21,7 +21,7 @@ pub struct TextRegionParams {
     pub default_pixel_value: u8,
     pub number_of_symbol_instances: usize,
     pub strip_size: usize,
-    pub input_symbols: Vec<Bitmap>,
+    pub input_symbols: Vec<&'a Bitmap>,
     pub symbol_code_length: usize,
     pub symbol_id_limit: usize,
     pub transposed: bool,
@@ -36,7 +36,7 @@ pub struct TextRegionParams {
 
 /// Decode a text region and return the composed bitmap.
 pub fn decode_text_region(
-    params: &TextRegionParams,
+    params: &TextRegionParams<'_>,
     decoding_context: &mut DecodingContext<'_>,
     mut huffman_input: Option<&mut Reader<'_>>,
 ) -> Result<Bitmap, Jbig2Error> {
@@ -138,7 +138,7 @@ pub fn decode_text_region(
                     params.number_of_symbol_instances
                 )));
             }
-            let symbol_bitmap = params.input_symbols.get(symbol_id);
+            let symbol_bitmap = params.input_symbols.get(symbol_id).copied();
             let symbol_present = symbol_bitmap
                 .map(|bm| bm.width > 0 && bm.height > 0)
                 .unwrap_or(false);

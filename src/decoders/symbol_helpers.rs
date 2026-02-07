@@ -84,11 +84,11 @@ pub fn split_collective_bitmap(
 }
 
 /// Build text-region parameters for aggregate symbol decoding.
-pub fn create_aggregate_text_params(
+pub fn create_aggregate_text_params<'a>(
     params: &AggregateSymbolParams,
-    input_symbols: Vec<Bitmap>,
+    input_symbols: Vec<&'a Bitmap>,
     huffman_tables: Option<TextRegionHuffmanTables>,
-) -> TextRegionParams {
+) -> TextRegionParams<'a> {
     TextRegionParams {
         huffman: params.huffman,
         refinement: params.refinement,
@@ -114,13 +114,14 @@ pub fn create_aggregate_text_params(
 /// Decode an aggregate symbol bitmap using text-region decoding.
 pub fn decode_aggregate_symbol(
     params: &AggregateSymbolParams,
-    existing_symbols: &[Bitmap],
+    existing_symbols: &[&Bitmap],
     new_symbols: &[Bitmap],
     decoding_context: &mut DecodingContext<'_>,
     mut huffman_input: Option<&mut Reader<'_>>,
 ) -> Result<Bitmap, Jbig2Error> {
-    let mut input_symbols = existing_symbols.to_vec();
-    input_symbols.extend(new_symbols.iter().cloned());
+    let mut input_symbols = Vec::with_capacity(existing_symbols.len() + new_symbols.len());
+    input_symbols.extend(existing_symbols.iter().copied());
+    input_symbols.extend(new_symbols.iter());
 
     let huffman_tables = if params.huffman {
         let reader = huffman_input

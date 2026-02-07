@@ -8,16 +8,16 @@ use crate::parser::segment::SymbolDictionaryParams;
 use std::collections::HashMap;
 
 /// Gather symbols referenced by the given segment list.
-pub(super) fn collect_input_symbols(
-    symbols: &HashMap<u32, Vec<Bitmap>>,
+pub(super) fn collect_input_symbols<'a>(
+    symbols: &'a HashMap<u32, Vec<Bitmap>>,
     referred_segments: &[u32],
-) -> Vec<Bitmap> {
+) -> Vec<&'a Bitmap> {
     let mut input_symbols = Vec::new();
 
     for &segment_id in referred_segments {
         if let Some(symbols) = symbols.get(&segment_id) {
             input_symbols.reserve(symbols.len());
-            input_symbols.extend_from_slice(symbols);
+            input_symbols.extend(symbols.iter());
         }
     }
     input_symbols
