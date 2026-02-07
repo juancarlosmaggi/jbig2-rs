@@ -462,13 +462,14 @@ pub fn decode_symbol_dictionary(
     }
 
     let mut exported_symbols = Vec::with_capacity(params.number_of_exported_symbols);
-    for (i, &export) in flags.iter().take(params.symbols.len()).enumerate() {
+    let input_symbols_len = params.symbols.len();
+    for (symbol, &export) in params.symbols.into_iter().zip(flags.iter()) {
         if export {
-            exported_symbols.push(params.symbols[i].clone());
+            exported_symbols.push(symbol);
         }
     }
 
-    let offset = params.symbols.len();
+    let offset = input_symbols_len;
     for (j, symbol) in new_symbols.into_iter().enumerate() {
         let flag_idx = offset + j;
         if flag_idx < flags.len() && flags[flag_idx] {
