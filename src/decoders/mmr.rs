@@ -415,23 +415,13 @@ impl<'a> CCITTFaxDecoder<'a> {
         let mut eofb = false;
         let mut y = 0usize;
 
-        let _row_len = (self.width + 7) >> 3;
-
         while y < self.height && !eofb {
             self.decode_2d_line(&mut eofb)?;
 
             let row_start = y * bitmap.stride;
             let row_slice = &mut bitmap.data[row_start..row_start + bitmap.stride];
 
-            for (i, chunk) in self.curr_line.chunks(8).enumerate() {
-                let mut byte = 0u8;
-                for (bit_idx, &pixel) in chunk.iter().enumerate() {
-                    if pixel != 0 {
-                        byte |= 1 << (7 - bit_idx);
-                    }
-                }
-                row_slice[i] = byte;
-            }
+            row_slice.copy_from_slice(&self.curr_line);
 
             std::mem::swap(&mut self.ref_line, &mut self.curr_line);
             self.curr_line.fill(0);
