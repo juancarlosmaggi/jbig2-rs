@@ -136,6 +136,34 @@ fn decode_refinement_range_slow(
     reference_template_x: &[i32],
     reference_template_y: &[i32],
 ) -> Result<(), Jbig2Error> {
+    let row_start_index = unsafe { bitmap.get_row_start_index_unchecked(row) };
+    let bitmap_height = bitmap.height as i32;
+
+    let mut coding_offsets = [0usize; 16];
+    let mut coding_is_valid = [false; 16];
+    for k in 0..coding_template_length {
+        let i0 = row as i32 + coding_template_y[k];
+        if i0 >= 0 && i0 < bitmap_height {
+            coding_is_valid[k] = true;
+            coding_offsets[k] = unsafe { bitmap.get_row_start_index_unchecked(i0 as usize) };
+        } else {
+            coding_is_valid[k] = false;
+        }
+    }
+
+    let mut reference_offsets = [0usize; 16];
+    let mut reference_is_valid = [false; 16];
+    for k in 0..reference_template_length {
+        let i0 = row as i32 + reference_template_y[k] - offset_y;
+        if i0 >= 0 && i0 < reference_height_i32 {
+            reference_is_valid[k] = true;
+            reference_offsets[k] =
+                unsafe { reference_bitmap.get_row_start_index_unchecked(i0 as usize) };
+        } else {
+            reference_is_valid[k] = false;
+        }
+    }
+
     for j in start..end {
         let mut context_label = 0u16;
         let mut implicit = None;
@@ -163,31 +191,37 @@ fn decode_refinement_range_slow(
             }
         }
         if let Some(pixel) = implicit {
-            bitmap.set_pixel_unchecked(j, row, pixel);
+            unsafe {
+                bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
+            }
             continue;
         }
         for k in 0..coding_template_length {
-            let i0 = row as i32 + coding_template_y[k];
             let j0 = j as i32 + coding_template_x[k];
-            if i0 >= 0 && j0 >= 0 && j0 < width_i32 {
-                let bit = bitmap.get_pixel_unchecked(j0 as usize, i0 as usize) as u16;
+            if j0 >= 0 && j0 < width_i32 && coding_is_valid[k] {
+                let bit = unsafe {
+                    bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0 as usize)
+                } as u16;
                 if bit != 0 {
                     context_label |= 1 << k;
                 }
             }
         }
         for k in 0..reference_template_length {
-            let i0 = row as i32 + reference_template_y[k] - offset_y;
             let j0 = j as i32 + reference_template_x[k] - offset_x;
-            if i0 >= 0 && i0 < reference_height_i32 && j0 >= 0 && j0 < reference_width_i32 {
-                let bit = reference_bitmap.get_pixel_unchecked(j0 as usize, i0 as usize) as u16;
+            if j0 >= 0 && j0 < reference_width_i32 && reference_is_valid[k] {
+                let bit = unsafe {
+                    reference_bitmap.get_pixel_at_index_unchecked(reference_offsets[k], j0 as usize)
+                } as u16;
                 if bit != 0 {
                     context_label |= 1 << (coding_template_length + k);
                 }
             }
         }
         let pixel = decoder.read_bit(contexts, context_label as usize)?;
-        bitmap.set_pixel_unchecked(j, row, pixel);
+        unsafe {
+            bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
+        }
     }
     Ok(())
 }
@@ -304,6 +338,21 @@ pub fn decode_refinement<'a>(
                 &reference_template_y,
             )?;
 
+            // Precalculate offsets for safe inner loops
+            let row_start_index = unsafe { bitmap.get_row_start_index_unchecked(i) };
+            let mut coding_offsets = [0usize; 16];
+            for k in 0..coding_template_length {
+                let i0 = (i as i32 + coding_template_y[k]) as usize;
+                coding_offsets[k] = unsafe { bitmap.get_row_start_index_unchecked(i0) };
+            }
+
+            let mut reference_offsets = [0usize; 16];
+            for k in 0..reference_template_length {
+                let i0 = (i as i32 + reference_template_y[k] - offset_y) as usize;
+                reference_offsets[k] =
+                    unsafe { params.reference_bitmap.get_row_start_index_unchecked(i0) };
+            }
+
             if use_prediction {
                 for j in safe_x_start..safe_x_end {
                     let mut context_label = 0u16;
@@ -332,49 +381,63 @@ pub fn decode_refinement<'a>(
                         implicit = Some(m);
                     }
                     if let Some(pixel) = implicit {
-                        bitmap.set_pixel_unchecked(j, i, pixel);
+                        unsafe {
+                            bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
+                        }
                         continue;
                     }
                     for k in 0..coding_template_length {
-                        let i0 = (i as i32 + coding_template_y[k]) as usize;
                         let j0 = (j as i32 + coding_template_x[k]) as usize;
-                        let bit = bitmap.get_pixel_unchecked(j0, i0) as u16;
+                        let bit = unsafe {
+                            bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0)
+                        } as u16;
                         if bit != 0 {
                             context_label |= 1 << k;
                         }
                     }
                     for k in 0..reference_template_length {
-                        let i0 = (i as i32 + reference_template_y[k] - offset_y) as usize;
                         let j0 = (j as i32 + reference_template_x[k] - offset_x) as usize;
-                        let bit = params.reference_bitmap.get_pixel_unchecked(j0, i0) as u16;
+                        let bit = unsafe {
+                            params
+                                .reference_bitmap
+                                .get_pixel_at_index_unchecked(reference_offsets[k], j0)
+                        } as u16;
                         if bit != 0 {
                             context_label |= 1 << (coding_template_length + k);
                         }
                     }
                     let pixel = decoder.read_bit(contexts, context_label as usize)?;
-                    bitmap.set_pixel_unchecked(j, i, pixel);
+                    unsafe {
+                        bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
+                    }
                 }
             } else {
                 for j in safe_x_start..safe_x_end {
                     let mut context_label = 0u16;
                     for k in 0..coding_template_length {
-                        let i0 = (i as i32 + coding_template_y[k]) as usize;
                         let j0 = (j as i32 + coding_template_x[k]) as usize;
-                        let bit = bitmap.get_pixel_unchecked(j0, i0) as u16;
+                        let bit = unsafe {
+                            bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0)
+                        } as u16;
                         if bit != 0 {
                             context_label |= 1 << k;
                         }
                     }
                     for k in 0..reference_template_length {
-                        let i0 = (i as i32 + reference_template_y[k] - offset_y) as usize;
                         let j0 = (j as i32 + reference_template_x[k] - offset_x) as usize;
-                        let bit = params.reference_bitmap.get_pixel_unchecked(j0, i0) as u16;
+                        let bit = unsafe {
+                            params
+                                .reference_bitmap
+                                .get_pixel_at_index_unchecked(reference_offsets[k], j0)
+                        } as u16;
                         if bit != 0 {
                             context_label |= 1 << (coding_template_length + k);
                         }
                     }
                     let pixel = decoder.read_bit(contexts, context_label as usize)?;
-                    bitmap.set_pixel_unchecked(j, i, pixel);
+                    unsafe {
+                        bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
+                    }
                 }
             }
 
