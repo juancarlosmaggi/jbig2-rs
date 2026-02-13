@@ -19,7 +19,7 @@ pub fn decode_integer(
      -> Result<u32, Jbig2Error> {
         let mut v = 0;
         for _ in 0..length {
-            let bit = decoder.read_bit(contexts, *prev)? as usize;
+            let bit = decoder.read_bit(contexts, *prev) as usize;
             *prev = if *prev < 256 {
                 (*prev << 1) | bit
             } else {
@@ -83,7 +83,7 @@ pub fn decode_iaid(
     let contexts = context_cache.get_contexts("IAID");
     let mut prev = 1;
     for _ in 0..code_length {
-        let bit = decoder.read_bit(contexts.as_mut(), prev)?;
+        let bit = decoder.read_bit(contexts.as_mut(), prev);
         prev = (prev << 1) | bit as usize;
     }
     if code_length < 31 {
