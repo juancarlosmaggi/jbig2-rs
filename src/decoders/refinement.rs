@@ -218,7 +218,7 @@ fn decode_refinement_range_slow(
                 }
             }
         }
-        let pixel = decoder.read_bit(contexts, context_label as usize)?;
+        let pixel = decoder.read_bit(contexts, context_label as usize);
         unsafe {
             bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
         }
@@ -309,7 +309,7 @@ pub fn decode_refinement<'a>(
     let mut ltp = 0i32;
     for i in 0..params.height {
         if params.prediction {
-            let sltp = decoder.read_bit(contexts, start_context as usize)? as i32;
+            let sltp = decoder.read_bit(contexts, start_context as usize) as i32;
             ltp ^= sltp;
         }
         let use_prediction = params.prediction && ltp != 0;
@@ -406,7 +406,7 @@ pub fn decode_refinement<'a>(
                             context_label |= 1 << (coding_template_length + k);
                         }
                     }
-                    let pixel = decoder.read_bit(contexts, context_label as usize)?;
+                    let pixel = decoder.read_bit(contexts, context_label as usize);
                     unsafe {
                         bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
                     }
@@ -434,7 +434,7 @@ pub fn decode_refinement<'a>(
                             context_label |= 1 << (coding_template_length + k);
                         }
                     }
-                    let pixel = decoder.read_bit(contexts, context_label as usize)?;
+                    let pixel = decoder.read_bit(contexts, context_label as usize);
                     unsafe {
                         bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
                     }

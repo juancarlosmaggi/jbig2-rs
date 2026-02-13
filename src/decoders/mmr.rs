@@ -71,13 +71,23 @@ impl<'a> CCITTFaxDecoder<'a> {
         }
 
         // Handle full bytes
-        while idx + 8 <= end {
-            let byte_idx = idx >> 3;
-            if byte_idx >= self.curr_line.len() {
+        let start_byte = idx >> 3;
+        if start_byte >= self.curr_line.len() {
+            return;
+        }
+
+        let num_bytes = (end - idx) >> 3;
+        if num_bytes > 0 {
+            let end_byte = start_byte + num_bytes;
+            let actual_end_byte = end_byte.min(self.curr_line.len());
+
+            self.curr_line[start_byte..actual_end_byte].fill(0xFF);
+
+            idx += (actual_end_byte - start_byte) << 3;
+
+            if actual_end_byte == self.curr_line.len() {
                 return;
             }
-            self.curr_line[byte_idx] = 0xFF;
-            idx += 8;
         }
 
         // Handle last partial byte
