@@ -18,26 +18,19 @@ thread_local! {
 
 struct ShiftedRows {
     stride: usize,
-    data: Vec<u8>,
+    offset: usize,
 }
 
 pub(crate) struct ShiftedPattern {
     shifts: [ShiftedRows; 8],
+    data: Vec<u8>,
     has_black: bool,
 }
 
-fn build_shifted_rows(pattern: &Bitmap, shift: usize) -> ShiftedRows {
-    if pattern.width == 0 || pattern.height == 0 {
-        return ShiftedRows {
-            stride: 0,
-            data: Vec::new(),
-        };
-    }
-
+fn fill_shifted_rows(pattern: &Bitmap, shift: usize, dst_stride: usize, dst: &mut [u8]) {
     let width = pattern.width;
     let height = pattern.height;
     let src_stride = pattern.stride;
-    let dst_stride = (width + shift + 7) >> 3;
     let src_rem_bits = width & 7;
     let src_mask = if src_rem_bits == 0 {
         0xFF
@@ -52,13 +45,11 @@ fn build_shifted_rows(pattern: &Bitmap, shift: usize) -> ShiftedRows {
         0xFFu8 << (8 - rem_bits)
     };
 
-    let mut data = vec![0u8; dst_stride * height];
-
     for row in 0..height {
         let src_row_start = row * src_stride;
         let dst_row_start = row * dst_stride;
         let src_row = &pattern.data[src_row_start..src_row_start + src_stride];
-        let dst_row = &mut data[dst_row_start..dst_row_start + dst_stride];
+        let dst_row = &mut dst[dst_row_start..dst_row_start + dst_stride];
 
         if shift == 0 {
             dst_row.copy_from_slice(src_row);
@@ -88,24 +79,52 @@ fn build_shifted_rows(pattern: &Bitmap, shift: usize) -> ShiftedRows {
             dst_row[dst_stride - 1] &= last_mask;
         }
     }
-
-    ShiftedRows {
-        stride: dst_stride,
-        data,
-    }
 }
 
 fn build_shifted_pattern(pattern: &Bitmap) -> ShiftedPattern {
     let has_black = pattern.data.iter().any(|&b| b != 0);
-    if !has_black {
+    let width = pattern.width;
+    let height = pattern.height;
+
+    if !has_black || width == 0 || height == 0 {
         let shifts = std::array::from_fn(|_| ShiftedRows {
             stride: 0,
-            data: Vec::new(),
+            offset: 0,
         });
-        return ShiftedPattern { shifts, has_black };
+        return ShiftedPattern {
+            shifts,
+            data: Vec::new(),
+            has_black,
+        };
     }
-    let shifts = std::array::from_fn(|shift| build_shifted_rows(pattern, shift));
-    ShiftedPattern { shifts, has_black }
+
+    let mut total_size = 0;
+    let shifts = std::array::from_fn(|shift| {
+        let dst_stride = (width + shift + 7) >> 3;
+        let offset = total_size;
+        total_size += dst_stride * height;
+        ShiftedRows {
+            stride: dst_stride,
+            offset,
+        }
+    });
+
+    let mut data = vec![0u8; total_size];
+    for shift in 0..8 {
+        let info = &shifts[shift];
+        fill_shifted_rows(
+            pattern,
+            shift,
+            info.stride,
+            &mut data[info.offset..info.offset + info.stride * height],
+        );
+    }
+
+    ShiftedPattern {
+        shifts,
+        data,
+        has_black,
+    }
 }
 
 pub(crate) fn build_shifted_patterns(patterns: &[Bitmap]) -> Arc<Vec<ShiftedPattern>> {
@@ -195,15 +214,14 @@ fn place_halftone_pattern<const INSIDE: bool>(
         let shift = region_x_u & 7;
         let shifted_rows = &shifted_pattern.shifts[shift];
         let src_stride = shifted_rows.stride;
-        let src_data = shifted_rows.data.as_slice();
         let dst_stride = params.region_bitmap.stride;
         let dst_byte_offset = region_x_u >> 3;
         let dst_data = &mut params.region_bitmap.data;
         let mut dst_row_start = region_y_u * dst_stride + dst_byte_offset;
-        let mut src_row_start = 0usize;
+        let mut src_row_start = shifted_rows.offset;
         unsafe {
             let dst_ptr = dst_data.as_mut_ptr();
-            let src_ptr = src_data.as_ptr();
+            let src_ptr = shifted_pattern.data.as_ptr();
             for _ in 0..params.pattern_height_usize {
                 or_row_bytes_ptr(
                     dst_ptr.add(dst_row_start),
