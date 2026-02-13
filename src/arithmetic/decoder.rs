@@ -1,7 +1,6 @@
 //! Arithmetic decoder used by region and symbol decoders.
 
 use crate::arithmetic::tables::QE_TABLE;
-use crate::common::error::Jbig2Error;
 
 /// MQ arithmetic decoder with internal interval and bit counter state.
 pub struct ArithmeticDecoder<'a> {
@@ -149,7 +148,7 @@ impl<'a> ArithmeticDecoder<'a> {
 
     /// Decode a single bit using the specified context state.
     #[inline(always)]
-    pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> Result<u8, Jbig2Error> {
+    pub fn read_bit(&mut self, contexts: &mut [i8], pos: usize) -> u8 {
         debug_assert!(pos < contexts.len());
         let ctx_val = unsafe { *contexts.get_unchecked(pos) };
         let cx_index = (ctx_val >> 1) as usize;
@@ -168,7 +167,7 @@ impl<'a> ArithmeticDecoder<'a> {
             // MPS path.
             if (self.a & 0x8000) != 0 {
                 // No renormalization needed; keep context unchanged.
-                return Ok(mps);
+                return mps;
             }
             if self.a < qe {
                 d = 1 ^ mps;
@@ -216,7 +215,7 @@ impl<'a> ArithmeticDecoder<'a> {
             *contexts.get_unchecked_mut(pos) = ((new_cx_index as i8) << 1) | (mps as i8);
         }
 
-        Ok(d)
+        d
     }
 
     /// Return the number of bytes consumed from the input stream.
