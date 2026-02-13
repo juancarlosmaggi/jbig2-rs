@@ -92,10 +92,45 @@ fn decode_bitmap_template0(
             for x in (0..padded_width).step_by(8) {
                 let minor_width = if width - x > 8 { 8 } else { width - x };
                 let mut result = 0u8;
-                for x_minor in 0..minor_width {
+                if minor_width == 8 {
+                    // Unrolled loop for the common case
                     let bit = decoder.read_bit(contexts, context as usize)?;
-                    result |= bit << (7 - x_minor);
+                    result |= bit << 7;
                     context = ((context & 0x7bf7) << 1) | (bit as u32);
+
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= bit << 6;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= bit << 5;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= bit << 4;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= bit << 3;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= bit << 2;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= bit << 1;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+
+                    let bit = decoder.read_bit(contexts, context as usize)?;
+                    result |= bit;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32);
+                } else {
+                    for x_minor in 0..minor_width {
+                        let bit = decoder.read_bit(contexts, context as usize)?;
+                        result |= bit << (7 - x_minor);
+                        context = ((context & 0x7bf7) << 1) | (bit as u32);
+                    }
                 }
                 row[x >> 3] = result;
             }
