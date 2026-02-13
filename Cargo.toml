@@ -39,3 +39,7 @@ harness = false
 [[bench]]
 name = "mmr_bench"
 harness = false
+
+[[bench]]
+name = "generic_bench"
+harness = false
