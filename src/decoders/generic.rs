@@ -93,7 +93,7 @@ fn decode_bitmap_template0(
                 let minor_width = if width - x > 8 { 8 } else { width - x };
                 let mut result = 0u8;
                 for x_minor in 0..minor_width {
-                    let bit = decoder.read_bit(contexts, context as usize);
+                    let bit = decoder.read_bit(contexts, context as usize)?;
                     result |= bit << (7 - x_minor);
                     context = ((context & 0x7bf7) << 1) | (bit as u32);
                 }
@@ -118,7 +118,7 @@ fn decode_bitmap_template0(
 
                 let mut result = 0u8;
                 for x_minor in 0..minor_width {
-                    let bit = decoder.read_bit(contexts, context as usize);
+                    let bit = decoder.read_bit(contexts, context as usize)?;
                     result |= bit << (7 - x_minor);
                     let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                     context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
@@ -149,7 +149,7 @@ fn decode_bitmap_template0(
 
             let mut result = 0u8;
             for x_minor in 0..minor_width {
-                let bit = decoder.read_bit(contexts, context as usize);
+                let bit = decoder.read_bit(contexts, context as usize)?;
                 result |= bit << (7 - x_minor);
                 let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                 let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
@@ -193,7 +193,7 @@ fn decode_bitmap_template0_with_skip(
                 if skip_byte == 0 {
                     let mut result = 0u8;
                     for x_minor in 0..minor_width {
-                        let bit = decoder.read_bit(contexts, context as usize);
+                        let bit = decoder.read_bit(contexts, context as usize)?;
                         result |= bit << (7 - x_minor);
                         context = ((context & 0x7bf7) << 1) | (bit as u32);
                     }
@@ -211,7 +211,7 @@ fn decode_bitmap_template0_with_skip(
                         let bit = if skip_set {
                             0
                         } else {
-                            decoder.read_bit(contexts, context as usize)
+                            decoder.read_bit(contexts, context as usize)?
                         };
                         result |= bit << (7 - x_minor);
                         context = ((context & 0x7bf7) << 1) | (bit as u32);
@@ -241,7 +241,7 @@ fn decode_bitmap_template0_with_skip(
                 if skip_byte == 0 {
                     let mut result = 0u8;
                     for x_minor in 0..minor_width {
-                        let bit = decoder.read_bit(contexts, context as usize);
+                        let bit = decoder.read_bit(contexts, context as usize)?;
                         result |= bit << (7 - x_minor);
                         let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                         context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
@@ -261,7 +261,7 @@ fn decode_bitmap_template0_with_skip(
                         let bit = if skip_set {
                             0
                         } else {
-                            decoder.read_bit(contexts, context as usize)
+                            decoder.read_bit(contexts, context as usize)?
                         };
                         result |= bit << (7 - x_minor);
                         let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
@@ -297,7 +297,7 @@ fn decode_bitmap_template0_with_skip(
             if skip_byte == 0 {
                 let mut result = 0u8;
                 for x_minor in 0..minor_width {
-                    let bit = decoder.read_bit(contexts, context as usize);
+                    let bit = decoder.read_bit(contexts, context as usize)?;
                     result |= bit << (7 - x_minor);
                     let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
                     let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
@@ -319,7 +319,7 @@ fn decode_bitmap_template0_with_skip(
                     let bit = if skip_set {
                         0
                     } else {
-                        decoder.read_bit(contexts, context as usize)
+                        decoder.read_bit(contexts, context as usize)?
                     };
                     result |= bit << (7 - x_minor);
                     let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
@@ -501,7 +501,7 @@ fn decode_bitmap_no_skip(
     let mut ltp = 0i32;
     for i in 0..params.height {
         if params.prediction {
-            let sltp = decoder.read_bit(contexts, pseudo_pixel_context as usize) as i32;
+            let sltp = decoder.read_bit(contexts, pseudo_pixel_context as usize)? as i32;
             ltp ^= sltp;
             if ltp != 0 {
                 let dst_start = i * bitmap.stride;
@@ -536,7 +536,7 @@ fn decode_bitmap_no_skip(
                     shift -= 1;
                 }
                 context_label = full;
-                let pixel = decoder.read_bit(contexts, context_label as usize);
+                let pixel = decoder.read_bit(contexts, context_label as usize)?;
                 bitmap.set_pixel_unchecked(j, i, pixel);
             }
             continue;
@@ -559,7 +559,7 @@ fn decode_bitmap_no_skip(
                 shift -= 1;
             }
             context_label = full;
-            let pixel = decoder.read_bit(contexts, context_label as usize);
+            let pixel = decoder.read_bit(contexts, context_label as usize)?;
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
 
@@ -576,7 +576,7 @@ fn decode_bitmap_no_skip(
                 shift -= 1;
             }
             context_label = full;
-            let pixel = decoder.read_bit(contexts, context_label as usize);
+            let pixel = decoder.read_bit(contexts, context_label as usize)?;
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
 
@@ -598,7 +598,7 @@ fn decode_bitmap_no_skip(
                     context_label |= changing_template_bit[k];
                 }
             }
-            let pixel = decoder.read_bit(contexts, context_label as usize);
+            let pixel = decoder.read_bit(contexts, context_label as usize)?;
             let byte_idx = j >> 3;
             let bit_idx = 7 - (j & 7);
             if pixel != 0 {
@@ -625,7 +625,7 @@ fn decode_bitmap_no_skip(
                 shift -= 1;
             }
             context_label = full;
-            let pixel = decoder.read_bit(contexts, context_label as usize);
+            let pixel = decoder.read_bit(contexts, context_label as usize)?;
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
     }
@@ -662,7 +662,7 @@ fn decode_bitmap_with_skip(
     let mut ltp = 0i32;
     for i in 0..params.height {
         if params.prediction {
-            let sltp = decoder.read_bit(contexts, pseudo_pixel_context as usize) as i32;
+            let sltp = decoder.read_bit(contexts, pseudo_pixel_context as usize)? as i32;
             ltp ^= sltp;
             if ltp != 0 {
                 let dst_start = i * bitmap.stride;
@@ -704,7 +704,7 @@ fn decode_bitmap_with_skip(
                 let pixel = if (skip_row[byte_index] & mask) != 0 {
                     0
                 } else {
-                    decoder.read_bit(contexts, context_label as usize)
+                    decoder.read_bit(contexts, context_label as usize)?
                 };
                 bitmap.set_pixel_unchecked(j, i, pixel);
             }
@@ -733,7 +733,7 @@ fn decode_bitmap_with_skip(
             let pixel = if (skip_row[byte_index] & mask) != 0 {
                 0
             } else {
-                decoder.read_bit(contexts, context_label as usize)
+                decoder.read_bit(contexts, context_label as usize)?
             };
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
@@ -756,7 +756,7 @@ fn decode_bitmap_with_skip(
             let pixel = if (skip_row[byte_index] & mask) != 0 {
                 0
             } else {
-                decoder.read_bit(contexts, context_label as usize)
+                decoder.read_bit(contexts, context_label as usize)?
             };
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
@@ -785,7 +785,7 @@ fn decode_bitmap_with_skip(
             let pixel = if (skip_row[byte_idx] & mask) != 0 {
                 0
             } else {
-                decoder.read_bit(contexts, context_label as usize)
+                decoder.read_bit(contexts, context_label as usize)?
             };
             if pixel != 0 {
                 unsafe { *dst_row_ptr.add(byte_idx) |= mask };
@@ -816,7 +816,7 @@ fn decode_bitmap_with_skip(
             let pixel = if (skip_row[byte_index] & mask) != 0 {
                 0
             } else {
-                decoder.read_bit(contexts, context_label as usize)
+                decoder.read_bit(contexts, context_label as usize)?
             };
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
