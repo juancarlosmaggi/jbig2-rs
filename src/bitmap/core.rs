@@ -124,6 +124,58 @@ impl Bitmap {
         }
     }
 
+    /// Return the byte offset for the start of the given row.
+    /// Returns None if y is out of bounds.
+    #[inline(always)]
+    pub fn get_row_start_index(&self, y: usize) -> Option<usize> {
+        if y >= self.height {
+            None
+        } else {
+            Some(y * self.stride)
+        }
+    }
+
+    /// Return the byte offset for the start of the given row without bounds checks.
+    #[inline(always)]
+    pub unsafe fn get_row_start_index_unchecked(&self, y: usize) -> usize {
+        debug_assert!(y < self.height);
+        y * self.stride
+    }
+
+    /// Return the pixel value at `(x, row_start_index)` without bounds checks.
+    ///
+    /// Caller must ensure `x < width` and `row_start_index` is valid for `y < height`.
+    #[inline(always)]
+    pub unsafe fn get_pixel_at_index_unchecked(&self, row_start_index: usize, x: usize) -> u8 {
+        debug_assert!(x < self.width);
+        let byte_index = row_start_index + (x >> 3);
+        let bit_index = 7 - (x & 7);
+        unsafe { (*self.data.get_unchecked(byte_index) >> bit_index) & 1 }
+    }
+
+    /// Set the pixel at `(x, row_start_index)` without bounds checks.
+    ///
+    /// Caller must ensure `x < width` and `row_start_index` is valid for `y < height`.
+    #[inline(always)]
+    pub unsafe fn set_pixel_at_index_unchecked(
+        &mut self,
+        row_start_index: usize,
+        x: usize,
+        value: u8,
+    ) {
+        debug_assert!(x < self.width);
+        let byte_index = row_start_index + (x >> 3);
+        let bit_index = 7 - (x & 7);
+        unsafe {
+            let byte = self.data.get_unchecked_mut(byte_index);
+            if value != 0 {
+                *byte |= 1 << bit_index;
+            } else {
+                *byte &= !(1 << bit_index);
+            }
+        }
+    }
+
     /// Count the number of set pixels across the entire bitmap.
     pub fn count_black_pixels(&self) -> u32 {
         if self.width == 0 || self.height == 0 {
