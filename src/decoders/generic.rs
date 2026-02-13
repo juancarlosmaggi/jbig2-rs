@@ -580,17 +580,32 @@ fn decode_bitmap_no_skip(
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
 
+        let stride = bitmap.stride;
+        let data_ptr = bitmap.data.as_mut_ptr();
+        let mut context_row_ptrs = [std::ptr::null::<u8>(); 16];
+        for k in 0..changing_entries_length {
+            let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
+            context_row_ptrs[k] = unsafe { data_ptr.add(i0 * stride) };
+        }
+        let dst_row_ptr = unsafe { data_ptr.add(i * stride) };
+
         for j in (safe_start + 1)..safe_end {
             context_label = (context_label << 1) & reuse_mask;
             for k in 0..changing_entries_length {
-                let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
                 let j0 = (j as i32 + changing_template_x[k] as i32) as usize;
-                if bitmap.get_pixel_unchecked(j0, i0) != 0 {
+                let val = unsafe { *context_row_ptrs[k].add(j0 >> 3) };
+                if (val >> (7 - (j0 & 7))) & 1 != 0 {
                     context_label |= changing_template_bit[k];
                 }
             }
             let pixel = decoder.read_bit(contexts, context_label as usize)?;
-            bitmap.set_pixel_unchecked(j, i, pixel);
+            let byte_idx = j >> 3;
+            let bit_idx = 7 - (j & 7);
+            if pixel != 0 {
+                unsafe { *dst_row_ptr.add(byte_idx) |= 1 << bit_idx };
+            } else {
+                unsafe { *dst_row_ptr.add(byte_idx) &= !(1 << bit_idx) };
+            }
         }
 
         for j in safe_end..params.width {
@@ -746,23 +761,37 @@ fn decode_bitmap_with_skip(
             bitmap.set_pixel_unchecked(j, i, pixel);
         }
 
+        let stride = bitmap.stride;
+        let data_ptr = bitmap.data.as_mut_ptr();
+        let mut context_row_ptrs = [std::ptr::null::<u8>(); 16];
+        for k in 0..changing_entries_length {
+            let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
+            context_row_ptrs[k] = unsafe { data_ptr.add(i0 * stride) };
+        }
+        let dst_row_ptr = unsafe { data_ptr.add(i * stride) };
+
         for j in (safe_start + 1)..safe_end {
             context_label = (context_label << 1) & reuse_mask;
             for k in 0..changing_entries_length {
-                let i0 = (i as i32 + changing_template_y[k] as i32) as usize;
                 let j0 = (j as i32 + changing_template_x[k] as i32) as usize;
-                if bitmap.get_pixel_unchecked(j0, i0) != 0 {
+                let val = unsafe { *context_row_ptrs[k].add(j0 >> 3) };
+                if (val >> (7 - (j0 & 7))) & 1 != 0 {
                     context_label |= changing_template_bit[k];
                 }
             }
-            let byte_index = j >> 3;
-            let mask = 1u8 << (7 - (j & 7));
-            let pixel = if (skip_row[byte_index] & mask) != 0 {
+            let byte_idx = j >> 3;
+            let bit_idx = 7 - (j & 7);
+            let mask = 1u8 << bit_idx;
+            let pixel = if (skip_row[byte_idx] & mask) != 0 {
                 0
             } else {
                 decoder.read_bit(contexts, context_label as usize)?
             };
-            bitmap.set_pixel_unchecked(j, i, pixel);
+            if pixel != 0 {
+                unsafe { *dst_row_ptr.add(byte_idx) |= mask };
+            } else {
+                unsafe { *dst_row_ptr.add(byte_idx) &= !mask };
+            }
         }
 
         for j in safe_end..params.width {
