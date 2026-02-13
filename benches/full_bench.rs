@@ -33,6 +33,19 @@ fn bench_full_file_decoding(c: &mut Criterion) {
         eprintln!("Warning: tests/resources/text_region.jb2 not found");
     }
 
+    // Benchmark a halftone region-heavy file if present.
+    let halftone_region_path = Path::new("tests/resources/halftone_region.jb2");
+    if halftone_region_path.exists() {
+        let data = fs::read(halftone_region_path).expect("Failed to read halftone_region.jb2");
+        group.bench_function("halftone_region", |b| {
+            b.iter(|| {
+                let _ = Jbig2Document::parse(black_box(&data));
+            })
+        });
+    } else {
+        eprintln!("Warning: tests/resources/halftone_region.jb2 not found");
+    }
+
     group.finish();
 }
 
