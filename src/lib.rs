@@ -106,10 +106,12 @@ pub mod decoders;
 pub mod document;
 pub mod huffman;
 pub mod parser;
+pub mod probe;
 
 pub use common::error::Jbig2Error;
 pub use common::profile::DecodeProfile;
 pub use document::{Jbig2Chunk, Jbig2Document, Jbig2Image};
+pub use probe::probe_stream_consumed_bytes;
 
 #[cfg(test)]
 mod tests {
