@@ -183,23 +183,26 @@ impl Bitmap {
         }
         let full_bytes = self.width / 8;
         let rem_bits = self.width % 8;
-        let mask = if rem_bits == 0 {
-            0xFF
-        } else {
-            0xFFu8 << (8 - rem_bits)
-        };
-        let mut total = 0u32;
-        for y in 0..self.height {
-            let row_start = y * self.stride;
-            let row = &self.data[row_start..row_start + self.stride];
-            for &b in &row[..full_bytes] {
-                total += b.count_ones();
-            }
-            if rem_bits != 0 {
-                total += (row[full_bytes] & mask).count_ones();
-            }
+
+        // Fast path: if no intra-row padding, sum all relevant bytes in one pass.
+        if rem_bits == 0 && self.stride == full_bytes {
+            return self.data[..self.stride * self.height]
+                .iter()
+                .map(|&b| b.count_ones())
+                .sum();
         }
-        total
+
+        let mask = if rem_bits == 0 { 0 } else { 0xFFu8 << (8 - rem_bits) };
+        self.data[..self.stride * self.height]
+            .chunks_exact(self.stride)
+            .map(|row| {
+                let mut count = row[..full_bytes].iter().map(|&b| b.count_ones()).sum::<u32>();
+                if rem_bits != 0 {
+                    count += (row[full_bytes] & mask).count_ones();
+                }
+                count
+            })
+            .sum()
     }
 
     /// Return `(min, max, full_rows)` black pixel counts per row.
@@ -209,24 +212,21 @@ impl Bitmap {
         }
         let full_bytes = self.width / 8;
         let rem_bits = self.width % 8;
-        let mask = if rem_bits == 0 {
-            0xFF
-        } else {
-            0xFFu8 << (8 - rem_bits)
-        };
+        let mask = if rem_bits == 0 { 0 } else { 0xFFu8 << (8 - rem_bits) };
+
         let mut min_row = u32::MAX;
         let mut max_row = 0u32;
         let mut full_rows = 0u32;
-        for y in 0..self.height {
-            let row_start = y * self.stride;
-            let row = &self.data[row_start..row_start + self.stride];
-            let mut row_count = 0u32;
-            for &b in &row[..full_bytes] {
-                row_count += b.count_ones();
-            }
-            if rem_bits != 0 {
-                row_count += (row[full_bytes] & mask).count_ones();
-            }
+
+        for row in self.data[..self.stride * self.height].chunks_exact(self.stride) {
+            let row_count = {
+                let mut count = row[..full_bytes].iter().map(|&b| b.count_ones()).sum::<u32>();
+                if rem_bits != 0 {
+                    count += (row[full_bytes] & mask).count_ones();
+                }
+                count
+            };
+
             if row_count < min_row {
                 min_row = row_count;
             }
@@ -237,6 +237,7 @@ impl Bitmap {
                 full_rows = full_rows.saturating_add(1);
             }
         }
+
         if min_row == u32::MAX {
             min_row = 0;
         }

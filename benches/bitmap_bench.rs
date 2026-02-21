@@ -64,11 +64,33 @@ fn bench_draw_symbol(c: &mut Criterion) {
     });
 }
 
+/// Benchmark counting black pixels.
+fn bench_count_black_pixels(c: &mut Criterion) {
+    let mut bitmap = Bitmap::new(2000, 2000);
+    // Fill with some data
+    for i in 0..bitmap.data.len() {
+        bitmap.data[i] = (i % 255) as u8;
+    }
+
+    c.bench_function("count_black_pixels_2000x2000", |b| {
+        b.iter(|| black_box(bitmap.count_black_pixels()))
+    });
+
+    let mut bitmap_padded = Bitmap::new(1999, 1999);
+    for i in 0..bitmap_padded.data.len() {
+        bitmap_padded.data[i] = (i % 255) as u8;
+    }
+    c.bench_function("count_black_pixels_1999x1999", |b| {
+        b.iter(|| black_box(bitmap_padded.count_black_pixels()))
+    });
+}
+
 criterion_group!(
     benches,
     bench_bitmap_new,
     bench_bitmap_get_pixel,
     bench_bitmap_set_pixel,
-    bench_draw_symbol
+    bench_draw_symbol,
+    bench_count_black_pixels
 );
 criterion_main!(benches);
