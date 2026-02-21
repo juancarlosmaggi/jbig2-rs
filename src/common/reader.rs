@@ -16,8 +16,10 @@ impl<'a> Reader<'a> {
     where
         D: Into<Cow<'a, [u8]>>,
     {
+        let data = data.into();
+        let end = end.min(data.len());
         Reader {
-            data: data.into(),
+            data,
             end,
             position: start,
             shift: -1,
@@ -33,7 +35,9 @@ impl<'a> Reader<'a> {
                     "end of data while reading bit",
                 ));
             }
-            self.current_byte = self.data[self.position];
+            // SAFETY: self.end is clamped to self.data.len() in new() and set_limit().
+            // Thus, position < end implies position < data.len().
+            self.current_byte = unsafe { *self.data.get_unchecked(self.position) };
             self.position += 1;
             self.shift = 7;
         }
@@ -85,7 +89,8 @@ impl<'a> Reader<'a> {
                     "end of data while reading bits",
                 ));
             }
-            let byte = self.data[self.position];
+            // SAFETY: position < end <= data.len()
+            let byte = unsafe { *self.data.get_unchecked(self.position) };
             self.position += 1;
             result = (result << 8) | (byte as u32);
             num_bits -= 8;
@@ -98,7 +103,8 @@ impl<'a> Reader<'a> {
                     "end of data while reading bits",
                 ));
             }
-            self.current_byte = self.data[self.position];
+            // SAFETY: position < end <= data.len()
+            self.current_byte = unsafe { *self.data.get_unchecked(self.position) };
             self.position += 1;
             // Take top `num_bits`
             let shift_after = 7 - num_bits as i32;
@@ -160,7 +166,8 @@ impl<'a> Reader<'a> {
         if self.position >= self.end {
             return None;
         }
-        let b = self.data[self.position];
+        // SAFETY: position < end <= data.len()
+        let b = unsafe { *self.data.get_unchecked(self.position) };
         self.position += 1;
         Some(b)
     }
