@@ -192,11 +192,18 @@ impl Bitmap {
                 .sum();
         }
 
-        let mask = if rem_bits == 0 { 0 } else { 0xFFu8 << (8 - rem_bits) };
+        let mask = if rem_bits == 0 {
+            0
+        } else {
+            0xFFu8 << (8 - rem_bits)
+        };
         self.data[..self.stride * self.height]
             .chunks_exact(self.stride)
             .map(|row| {
-                let mut count = row[..full_bytes].iter().map(|&b| b.count_ones()).sum::<u32>();
+                let mut count = row[..full_bytes]
+                    .iter()
+                    .map(|&b| b.count_ones())
+                    .sum::<u32>();
                 if rem_bits != 0 {
                     count += (row[full_bytes] & mask).count_ones();
                 }
@@ -212,7 +219,11 @@ impl Bitmap {
         }
         let full_bytes = self.width / 8;
         let rem_bits = self.width % 8;
-        let mask = if rem_bits == 0 { 0 } else { 0xFFu8 << (8 - rem_bits) };
+        let mask = if rem_bits == 0 {
+            0
+        } else {
+            0xFFu8 << (8 - rem_bits)
+        };
 
         let mut min_row = u32::MAX;
         let mut max_row = 0u32;
@@ -220,7 +231,10 @@ impl Bitmap {
 
         for row in self.data[..self.stride * self.height].chunks_exact(self.stride) {
             let row_count = {
-                let mut count = row[..full_bytes].iter().map(|&b| b.count_ones()).sum::<u32>();
+                let mut count = row[..full_bytes]
+                    .iter()
+                    .map(|&b| b.count_ones())
+                    .sum::<u32>();
                 if rem_bits != 0 {
                     count += (row[full_bytes] & mask).count_ones();
                 }

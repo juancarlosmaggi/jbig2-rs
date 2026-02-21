@@ -36,10 +36,10 @@ fn bench_mmr_decode_black_large(c: &mut Criterion) {
     // Black run 2560: Makeup 2560 (000000011111, 12 bits) + Term 0 (0000110111, 10 bits)
 
     let codes = [
-        (0b001, 3),          // H
-        (0b00110101, 8),     // W0
-        (0b000000011111, 12),// B2560 (Makeup)
-        (0b0000110111, 10),  // B0 (Term)
+        (0b001, 3),           // H
+        (0b00110101, 8),      // W0
+        (0b000000011111, 12), // B2560 (Makeup)
+        (0b0000110111, 10),   // B0 (Term)
     ];
 
     // Pre-calculate one line of bits to speed up generation?
@@ -77,5 +77,9 @@ fn bench_mmr_decode_black_large(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_mmr_decode_white_large, bench_mmr_decode_black_large);
+criterion_group!(
+    benches,
+    bench_mmr_decode_white_large,
+    bench_mmr_decode_black_large
+);
 criterion_main!(benches);

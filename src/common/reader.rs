@@ -43,11 +43,70 @@ impl<'a> Reader<'a> {
     }
 
     /// Read a multi-bit value MSB-first from the stream.
-    pub fn read_bits(&mut self, num_bits: u32) -> Result<u32, crate::common::error::Jbig2Error> {
-        let mut result = 0;
-        for i in (0..num_bits).rev() {
-            result |= (self.read_bit()? as u32) << i;
+    pub fn read_bits(
+        &mut self,
+        mut num_bits: u32,
+    ) -> Result<u32, crate::common::error::Jbig2Error> {
+        if num_bits == 0 {
+            return Ok(0);
         }
+
+        // Ensure we have a valid current byte if needed
+        if self.shift < 0 {
+            if self.position >= self.end {
+                return Err(crate::common::error::Jbig2Error::new(
+                    "end of data while reading bits",
+                ));
+            }
+            self.current_byte = self.data[self.position];
+            self.position += 1;
+            self.shift = 7;
+        }
+
+        let available = (self.shift + 1) as u32;
+
+        if num_bits <= available {
+            // All bits are in the current byte
+            let shift_after = self.shift - num_bits as i32;
+            let result = (self.current_byte as u32 >> (shift_after + 1)) & ((1 << num_bits) - 1);
+            self.shift = shift_after;
+            return Ok(result);
+        }
+
+        // Take all available bits from current byte
+        let mut result = (self.current_byte as u32) & ((1 << available) - 1);
+        num_bits -= available;
+        self.shift = -1; // Current byte exhausted
+
+        // Read full bytes
+        while num_bits >= 8 {
+            if self.position >= self.end {
+                return Err(crate::common::error::Jbig2Error::new(
+                    "end of data while reading bits",
+                ));
+            }
+            let byte = self.data[self.position];
+            self.position += 1;
+            result = (result << 8) | (byte as u32);
+            num_bits -= 8;
+        }
+
+        // Read remaining bits from a new byte
+        if num_bits > 0 {
+            if self.position >= self.end {
+                return Err(crate::common::error::Jbig2Error::new(
+                    "end of data while reading bits",
+                ));
+            }
+            self.current_byte = self.data[self.position];
+            self.position += 1;
+            // Take top `num_bits`
+            let shift_after = 7 - num_bits as i32;
+            let chunk = self.current_byte as u32 >> (shift_after + 1);
+            result = (result << num_bits) | chunk;
+            self.shift = shift_after;
+        }
+
         Ok(result)
     }
 

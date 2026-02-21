@@ -44,7 +44,7 @@ fn bench_mmr_vertical_mode(c: &mut Criterion) {
     // We need 2000 transitions. So 2000 '1's.
     for _ in 1..height {
         for _ in 0..width {
-             write_bits(1, 1); // V(0)
+            write_bits(1, 1); // V(0)
         }
     }
 

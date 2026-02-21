@@ -199,9 +199,9 @@ fn decode_refinement_range_slow(
         for k in 0..coding_template_length {
             let j0 = j as i32 + coding_template_x[k];
             if j0 >= 0 && j0 < width_i32 && coding_is_valid[k] {
-                let bit = unsafe {
-                    bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0 as usize)
-                } as u16;
+                let bit =
+                    unsafe { bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0 as usize) }
+                        as u16;
                 if bit != 0 {
                     context_label |= 1 << k;
                 }
@@ -388,9 +388,9 @@ pub fn decode_refinement<'a>(
                     }
                     for k in 0..coding_template_length {
                         let j0 = (j as i32 + coding_template_x[k]) as usize;
-                        let bit = unsafe {
-                            bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0)
-                        } as u16;
+                        let bit =
+                            unsafe { bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0) }
+                                as u16;
                         if bit != 0 {
                             context_label |= 1 << k;
                         }
@@ -416,9 +416,9 @@ pub fn decode_refinement<'a>(
                     let mut context_label = 0u16;
                     for k in 0..coding_template_length {
                         let j0 = (j as i32 + coding_template_x[k]) as usize;
-                        let bit = unsafe {
-                            bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0)
-                        } as u16;
+                        let bit =
+                            unsafe { bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0) }
+                                as u16;
                         if bit != 0 {
                             context_label |= 1 << k;
                         }

@@ -1,16 +1,11 @@
-use criterion::{Criterion, criterion_group, criterion_main, black_box};
-use jbig2_rs::decoders::generic::{decode_bitmap, DecodeBitmapParams};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use jbig2_rs::arithmetic::contexts::DecodingContext;
 use jbig2_rs::common::error::Jbig2Error;
+use jbig2_rs::decoders::generic::{DecodeBitmapParams, decode_bitmap};
 
 fn bench_generic_decode_template0_y0(c: &mut Criterion) {
     // Setup parameters for the optimized path
-    let at = [
-        (3, -1),
-        (-3, -1),
-        (2, -2),
-        (-2, -2),
-    ];
+    let at = [(3, -1), (-3, -1), (2, -2), (-2, -2)];
 
     let params = DecodeBitmapParams {
         mmr: false,

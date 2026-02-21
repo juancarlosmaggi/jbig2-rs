@@ -34,7 +34,9 @@ pub fn probe_stream_consumed_bytes(data: &[u8]) -> Result<Option<usize>, Jbig2Er
             }
 
             let Some(segment_end) = pos.checked_add(header.length) else {
-                return Err(Jbig2Error::new("segment length overflow while probing stream"));
+                return Err(Jbig2Error::new(
+                    "segment length overflow while probing stream",
+                ));
             };
             if segment_end > data.len() {
                 return Ok(None);
@@ -42,7 +44,11 @@ pub fn probe_stream_consumed_bytes(data: &[u8]) -> Result<Option<usize>, Jbig2Er
             pos = segment_end;
             consumed_end = segment_end;
         }
-        return Ok(if any_segment { Some(consumed_end) } else { None });
+        return Ok(if any_segment {
+            Some(consumed_end)
+        } else {
+            None
+        });
     }
 
     let mut payload_lengths = Vec::new();
@@ -71,7 +77,9 @@ pub fn probe_stream_consumed_bytes(data: &[u8]) -> Result<Option<usize>, Jbig2Er
     let mut payload_pos = directory_end;
     for length in payload_lengths {
         let Some(next) = payload_pos.checked_add(length) else {
-            return Err(Jbig2Error::new("segment length overflow while probing stream"));
+            return Err(Jbig2Error::new(
+                "segment length overflow while probing stream",
+            ));
         };
         if next > data.len() {
             return Ok(None);
