@@ -46,3 +46,7 @@ harness = false
 [[bench]]
 name = "mmr_mode_bench"
 harness = false
+
+[[bench]]
+name = "reader_bench"
+harness = false
