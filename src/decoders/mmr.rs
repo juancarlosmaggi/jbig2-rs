@@ -206,31 +206,61 @@ impl<'a> CCITTFaxDecoder<'a> {
     }
 
     fn read_mode_code(&mut self) -> Result<u8, Jbig2Error> {
-        let mut code: u32 = 0;
-        let mut length: usize = 0;
+        // Unrolled decision tree for faster decoding
+        // V(0): 1
+        if self.read_bit()? == 1 {
+            return Ok(2);
+        }
 
-        // First try normal modes (1–7 bits).
-        for _ in 0..7 {
-            let bit = self.read_bit()? as u32;
-            code = (code << 1) | bit;
-            length += 1;
-
-            if let Some(mode) = match (code, length) {
-                (0b1, 1) => Some(2),       // V(0)
-                (0b001, 3) => Some(4),     // H
-                (0b010, 3) => Some(1),     // VL(-1)
-                (0b011, 3) => Some(3),     // VR(+1)
-                (0b0001, 4) => Some(0),    // Pass
-                (0b000010, 6) => Some(5),  // VL(-2)
-                (0b000011, 6) => Some(7),  // VR(+2)
-                (0b0000010, 7) => Some(6), // VL(-3)
-                (0b0000011, 7) => Some(8), // VR(+3)
-                _ => None,
-            } {
-                return Ok(mode);
+        // 0...
+        // H: 001
+        // VL(-1): 010
+        // VR(1): 011
+        if self.read_bit()? == 1 {
+            // 01...
+            if self.read_bit()? == 0 {
+                return Ok(1); // VL(-1): 010
+            } else {
+                return Ok(3); // VR(1): 011
             }
         }
 
+        // 00...
+        if self.read_bit()? == 1 {
+            return Ok(4); // H: 001
+        }
+
+        // 000...
+        // Pass: 0001
+        if self.read_bit()? == 1 {
+            return Ok(0); // Pass: 0001
+        }
+
+        // 0000...
+        // VL(-2): 000010
+        // VR(2): 000011
+        if self.read_bit()? == 1 {
+            // 00001...
+            if self.read_bit()? == 0 {
+                return Ok(5); // VL(-2): 000010
+            } else {
+                return Ok(7); // VR(2): 000011
+            }
+        }
+
+        // 00000...
+        // VL(-3): 0000010
+        // VR(3): 0000011
+        if self.read_bit()? == 1 {
+            // 000001...
+            if self.read_bit()? == 0 {
+                return Ok(6); // VL(-3): 0000010
+            } else {
+                return Ok(8); // VR(3): 0000011
+            }
+        }
+
+        // 000000... -> Invalid/Error
         Err(Jbig2Error::new("no valid MMR mode code"))
     }
 
