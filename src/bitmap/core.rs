@@ -94,16 +94,7 @@ impl Bitmap {
         if y >= self.height || x >= self.width {
             return; // Silently ignore out-of-bounds writes
         }
-        let byte_index = y * self.stride + (x >> 3);
-        if byte_index >= self.data.len() {
-            return;
-        }
-        let bit_index = 7 - (x & 7);
-        if value != 0 {
-            self.data[byte_index] |= 1 << bit_index;
-        } else {
-            self.data[byte_index] &= !(1 << bit_index);
-        }
+        self.set_pixel_unchecked(x, y, value);
     }
 
     /// Set the pixel at `(x, y)` without bounds checks.
