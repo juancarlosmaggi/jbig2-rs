@@ -121,12 +121,8 @@ impl<'a> CCITTFaxDecoder<'a> {
                 return Err(Jbig2Error::new("Infinite loop in MMR line decoding"));
             }
 
-            let b1 = self.find_changing_element_of_color(
-                ref_line,
-                a0,
-                self.width,
-                1 - current_color,
-            );
+            let b1 =
+                self.find_changing_element_of_color(ref_line, a0, self.width, 1 - current_color);
             let b2 = self.find_changing_element(ref_line, b1 as i32, self.width);
 
             let mode = match self.read_mode_code() {

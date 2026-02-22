@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use jbig2_rs::huffman::{HuffmanLine, HuffmanTable, get_standard_table};
 use jbig2_rs::common::reader::Reader;
+use jbig2_rs::huffman::{HuffmanLine, HuffmanTable, get_standard_table};
 
 fn get_table_lines() -> Vec<HuffmanLine> {
     // Table 10 (from standard_tables.rs)
@@ -51,9 +51,9 @@ fn bench_huffman_decode_zeros(c: &mut Criterion) {
         b.iter(|| {
             let mut reader = Reader::new(black_box(&data), 0, data.len());
             while let Ok(_) = table.decode_entry(&mut reader) {
-                 if reader.get_position() >= data_len - 1 {
-                     break;
-                 }
+                if reader.get_position() >= data_len - 1 {
+                    break;
+                }
             }
         })
     });
@@ -69,9 +69,9 @@ fn bench_huffman_decode_mixed(c: &mut Criterion) {
         b.iter(|| {
             let mut reader = Reader::new(black_box(&data), 0, data.len());
             while let Ok(_) = table.decode_entry(&mut reader) {
-                 if reader.get_position() >= data_len - 1 {
-                     break;
-                 }
+                if reader.get_position() >= data_len - 1 {
+                    break;
+                }
             }
         })
     });
@@ -88,13 +88,19 @@ fn bench_huffman_decode_table_10_mixed(c: &mut Criterion) {
         b.iter(|| {
             let mut reader = Reader::new(black_box(&data), 0, data.len());
             while let Ok(_) = table.decode_entry(&mut reader) {
-                 if reader.get_position() >= data_len - 1 {
-                     break;
-                 }
+                if reader.get_position() >= data_len - 1 {
+                    break;
+                }
             }
         })
     });
 }
 
-criterion_group!(benches, bench_huffman_new, bench_huffman_decode_zeros, bench_huffman_decode_mixed, bench_huffman_decode_table_10_mixed);
+criterion_group!(
+    benches,
+    bench_huffman_new,
+    bench_huffman_decode_zeros,
+    bench_huffman_decode_mixed,
+    bench_huffman_decode_table_10_mixed
+);
 criterion_main!(benches);
