@@ -33,7 +33,7 @@ pub fn decode_symbol_dictionary(
     mut huffman_input: Option<&mut Reader<'_>>,
 ) -> Result<Vec<Bitmap>, Jbig2Error> {
     if params.number_of_new_symbols == 0 {
-        // return Err(Jbig2Error::new("number of new symbols must be positive"));
+        return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
 
     // Validate that Huffman tables are provided when Huffman mode is enabled.
@@ -41,10 +41,6 @@ pub fn decode_symbol_dictionary(
         return Err(Jbig2Error::new(
             "Huffman tables required when Huffman mode is enabled",
         ));
-    }
-
-    if params.number_of_new_symbols == 0 {
-        return Err(Jbig2Error::new("number of new symbols must be positive"));
     }
 
     validation::validate_symbol_decode_params(params.template_index, params.number_of_new_symbols)?;
