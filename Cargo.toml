@@ -54,3 +54,7 @@ harness = false
 [[bench]]
 name = "uncompressed_bench"
 harness = false
+
+[[bench]]
+name = "huffman_bench"
+harness = false
