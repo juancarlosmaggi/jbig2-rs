@@ -870,21 +870,29 @@ pub(crate) fn decode_halftone_region_with_shifted(
 #[inline(always)]
 fn xor_plane_bytes(dst: &mut [u8], src: &[u8]) {
     debug_assert_eq!(dst.len(), src.len());
-    let len = dst.len();
-    let mut idx = 0usize;
-    unsafe {
-        while idx + 8 <= len {
-            let dst_ptr = dst.as_mut_ptr().add(idx) as *mut u64;
-            let src_ptr = src.as_ptr().add(idx) as *const u64;
-            let dst_val = std::ptr::read_unaligned(dst_ptr);
-            let src_val = std::ptr::read_unaligned(src_ptr);
-            std::ptr::write_unaligned(dst_ptr, dst_val ^ src_val);
-            idx += 8;
+    let (prefix, middle, suffix) = unsafe { dst.align_to_mut::<u64>() };
+
+    let prefix_len = prefix.len();
+    if prefix_len > 0 {
+        for (d, s) in prefix.iter_mut().zip(src[..prefix_len].iter()) {
+            *d ^= *s;
         }
     }
-    while idx < len {
-        dst[idx] ^= src[idx];
-        idx += 1;
+
+    let middle_byte_len = middle.len() * 8;
+    if middle_byte_len > 0 {
+        let src_middle = &src[prefix_len..prefix_len + middle_byte_len];
+        for (d, s_chunk) in middle.iter_mut().zip(src_middle.chunks_exact(8)) {
+            let s_val = u64::from_ne_bytes(s_chunk.try_into().unwrap());
+            *d ^= s_val;
+        }
+    }
+
+    let suffix_start = prefix_len + middle_byte_len;
+    if suffix_start < src.len() {
+        for (d, s) in suffix.iter_mut().zip(src[suffix_start..].iter()) {
+            *d ^= *s;
+        }
     }
 }
 
