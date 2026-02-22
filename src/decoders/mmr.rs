@@ -351,28 +351,44 @@ impl<'a> CCITTFaxDecoder<'a> {
         // If color_to_match == 1, we look for non-0xFF byte.
         let target_byte = if color_to_match == 0 { 0x00 } else { 0xFF };
 
-        let mut byte_idx = x >> 3;
+        let start_byte_idx = x >> 3;
         let limit_byte = (width + 7) >> 3;
 
-        while byte_idx < limit_byte {
-            let b = line[byte_idx];
-            if b != target_byte {
-                // Found a byte with a changing element
-                // Find the specific bit
-                // If color_to_match == 0 (target 0), we want first 1. b has at least one 1.
-                // If color_to_match == 1 (target 0xFF), we want first 0. b has at least one 0.
+        // Optimization: Scan for the first byte that is not target_byte
+        if start_byte_idx < limit_byte {
+            let slice = &line[start_byte_idx..limit_byte];
+            let mut chunks = slice.chunks_exact(8);
+            let target_chunk = if target_byte == 0 { 0u64 } else { !0u64 };
+            let mut offset = 0;
 
-                let check_byte = if color_to_match == 0 { b } else { !b };
-                let bit_offset = check_byte.leading_zeros() as usize;
+            for chunk in chunks.by_ref() {
+                // Check 8 bytes at once
+                let val = u64::from_ne_bytes(chunk.try_into().unwrap());
+                if val != target_chunk {
+                    // Found mismatch in this chunk
+                    for (i, &b) in chunk.iter().enumerate() {
+                        if b != target_byte {
+                            let byte_idx = start_byte_idx + offset + i;
+                            let check_byte = if color_to_match == 0 { b } else { !b };
+                            let bit_offset = check_byte.leading_zeros() as usize;
+                            let result_x = (byte_idx << 3) + bit_offset;
+                            return result_x.min(width);
+                        }
+                    }
+                }
+                offset += 8;
+            }
 
-                let result_x = (byte_idx << 3) + bit_offset;
-                if result_x < width {
-                    return result_x;
-                } else {
-                    return width;
+            // Check remaining bytes
+            for (i, &b) in chunks.remainder().iter().enumerate() {
+                if b != target_byte {
+                    let byte_idx = start_byte_idx + offset + i;
+                    let check_byte = if color_to_match == 0 { b } else { !b };
+                    let bit_offset = check_byte.leading_zeros() as usize;
+                    let result_x = (byte_idx << 3) + bit_offset;
+                    return result_x.min(width);
                 }
             }
-            byte_idx += 1;
         }
 
         width
