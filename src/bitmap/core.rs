@@ -22,6 +22,8 @@ pub struct Bitmap {
     pub stride: usize, // bytes per row
 }
 
+const MAX_BITMAP_DIMENSION: usize = 200_000_000;
+
 impl Bitmap {
     /// Create a new bitmap initialized to all zeros.
     ///
@@ -31,6 +33,9 @@ impl Bitmap {
     /// * `height` - Height in pixels
     ///
     pub fn new(width: usize, height: usize) -> Self {
+        if width > MAX_BITMAP_DIMENSION || height > MAX_BITMAP_DIMENSION {
+            panic!("Bitmap dimensions unreasonable");
+        }
         // Use checked arithmetic to avoid overflow in stride and buffer sizing.
         let stride = width
             .checked_add(7)
@@ -56,6 +61,9 @@ impl Bitmap {
     /// The caller must ensure that the bitmap data is written to before being read.
     #[allow(clippy::uninit_vec)]
     pub unsafe fn uninit(width: usize, height: usize) -> Self {
+        if width > MAX_BITMAP_DIMENSION || height > MAX_BITMAP_DIMENSION {
+            panic!("Bitmap dimensions unreasonable");
+        }
         // Use checked arithmetic to avoid overflow in stride and buffer sizing.
         let stride = width
             .checked_add(7)
@@ -928,9 +936,9 @@ mod tests {
         assert_eq!(bm2.height, 5);
     }
 
-    // #[test]
-    // #[should_panic(expected = "Bitmap dimensions unreasonable")]
-    // fn test_bitmap_unreasonable_dimensions() {
-    //     Bitmap::new(300_000_000, 1);
-    // }
+    #[test]
+    #[should_panic(expected = "Bitmap dimensions unreasonable")]
+    fn test_bitmap_unreasonable_dimensions() {
+        Bitmap::new(300_000_000, 1);
+    }
 }
