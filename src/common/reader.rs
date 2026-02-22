@@ -186,7 +186,6 @@ impl<'a> Reader<'a> {
             self.end = self.data.len();
         }
     }
-
 }
 
 #[cfg(test)]

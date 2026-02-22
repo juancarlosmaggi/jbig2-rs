@@ -668,7 +668,83 @@ fn decode_bitmap_no_skip(
         }
         let dst_row_ptr = unsafe { data_ptr.add(i * stride) };
 
-        for j in (safe_start + 1)..safe_end {
+        let mut j = safe_start + 1;
+        let limit = safe_end;
+
+        // Split entries into static (previous rows) and dynamic (current row).
+        let mut static_count = 0;
+        let mut static_bits = [0u16; 16];
+        let mut static_x = [0i8; 16];
+        let mut static_ptrs = [std::ptr::null::<u8>(); 16];
+
+        let mut dynamic_count = 0;
+        let mut dynamic_bits = [0u16; 16];
+        let mut dynamic_x = [0i8; 16];
+        let mut dynamic_ptrs = [std::ptr::null::<u8>(); 16];
+
+        for k in 0..changing_entries_length {
+            if changing_template_y[k] != 0 {
+                static_bits[static_count] = changing_template_bit[k];
+                static_x[static_count] = changing_template_x[k];
+                static_ptrs[static_count] = context_row_ptrs[k];
+                static_count += 1;
+            } else {
+                dynamic_bits[dynamic_count] = changing_template_bit[k];
+                dynamic_x[dynamic_count] = changing_template_x[k];
+                dynamic_ptrs[dynamic_count] = context_row_ptrs[k];
+                dynamic_count += 1;
+            }
+        }
+
+        // Optimization: process 56 pixels at a time using u64 registers for static entries.
+        let chunk_size = 56;
+        let safe_limit = (stride * 8).saturating_sub(128);
+        let chunk_limit = limit.min(safe_limit);
+
+        while j < chunk_limit {
+            let mut static_words = [0u64; 16];
+            for k in 0..static_count {
+                let j0 = (j as i32 + static_x[k] as i32) as usize;
+                let byte_offset = j0 >> 3;
+                let bit_offset = j0 & 7;
+                let ptr = unsafe { static_ptrs[k].add(byte_offset) };
+                let val = u64::from_be_bytes(unsafe { *(ptr as *const [u8; 8]) });
+                static_words[k] = val << bit_offset;
+            }
+
+            for _ in 0..chunk_size {
+                context_label = (context_label << 1) & reuse_mask;
+
+                // Process static entries (fast path)
+                for k in 0..static_count {
+                    if (static_words[k] as i64) < 0 {
+                        context_label |= static_bits[k];
+                    }
+                    static_words[k] <<= 1;
+                }
+
+                // Process dynamic entries (slow path)
+                for k in 0..dynamic_count {
+                    let j0 = (j as i32 + dynamic_x[k] as i32) as usize;
+                    let val = unsafe { *dynamic_ptrs[k].add(j0 >> 3) };
+                    if (val >> (7 - (j0 & 7))) & 1 != 0 {
+                        context_label |= dynamic_bits[k];
+                    }
+                }
+
+                let pixel = decoder.read_bit(contexts, context_label as usize);
+                let byte_idx = j >> 3;
+                let bit_idx = 7 - (j & 7);
+                if pixel != 0 {
+                    unsafe { *dst_row_ptr.add(byte_idx) |= 1 << bit_idx };
+                } else {
+                    unsafe { *dst_row_ptr.add(byte_idx) &= !(1 << bit_idx) };
+                }
+                j += 1;
+            }
+        }
+
+        for j in j..limit {
             context_label = (context_label << 1) & reuse_mask;
             for k in 0..changing_entries_length {
                 let j0 = (j as i32 + changing_template_x[k] as i32) as usize;
