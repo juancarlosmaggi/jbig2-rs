@@ -383,11 +383,11 @@ pub struct DecodeBitmapParams<'a> {
 
 struct GenericDecodeTemplate {
     template_length: usize,
-    template_x: Vec<i8>,
-    template_y: Vec<i8>,
-    changing_template_x: Vec<i8>,
-    changing_template_y: Vec<i8>,
-    changing_template_bit: Vec<u16>,
+    template_x: [i8; 16],
+    template_y: [i8; 16],
+    changing_template_x: [i8; 16],
+    changing_template_y: [i8; 16],
+    changing_template_bit: [u16; 16],
     changing_entries_length: usize,
     reuse_mask: u16,
     sbb_left: usize,
@@ -396,50 +396,68 @@ struct GenericDecodeTemplate {
 }
 
 fn build_generic_template(params: &DecodeBitmapParams<'_>) -> GenericDecodeTemplate {
-    let template = get_coding_template(params.template_index)
-        .iter()
-        .cloned()
-        .chain(params.at.iter().copied())
-        .collect::<Vec<_>>();
-    let mut template = template;
-    template.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
-    let template_length = template.len();
+    let mut template = [(0i8, 0i8); 16];
+    let mut template_length = 0;
+
+    for &item in get_coding_template(params.template_index) {
+        if template_length < 16 {
+            template[template_length] = item;
+            template_length += 1;
+        }
+    }
+    for &item in params.at {
+        if template_length < 16 {
+            template[template_length] = item;
+            template_length += 1;
+        }
+    }
+
+    template[..template_length].sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
     debug_assert!(template_length <= 16);
-    let mut template_x = vec![0i8; template_length];
-    let mut template_y = vec![0i8; template_length];
-    let mut changing_template_entries = Vec::new();
+
+    let mut template_x = [0i8; 16];
+    let mut template_y = [0i8; 16];
+    let mut changing_template_x = [0i8; 16];
+    let mut changing_template_y = [0i8; 16];
+    let mut changing_template_bit = [0u16; 16];
+
+    let mut changing_template_entries = [0usize; 16];
+    let mut changing_entries_length = 0;
+
     let mut reuse_mask = 0u16;
     let mut min_x = i8::MAX;
     let mut max_x = i8::MIN;
     let mut min_y = i8::MAX;
+
     for k in 0..template_length {
         template_x[k] = template[k].0;
         template_y[k] = template[k].1;
         min_x = min_x.min(template[k].0);
         max_x = max_x.max(template[k].0);
         min_y = min_y.min(template[k].1);
+
         if k < template_length - 1
             && template[k].1 == template[k + 1].1
             && template[k].0 == template[k + 1].0 - 1
         {
             reuse_mask |= 1 << (template_length - 1 - k);
         } else {
-            changing_template_entries.push(k);
+            changing_template_entries[changing_entries_length] = k;
+            changing_entries_length += 1;
         }
     }
-    let changing_entries_length = changing_template_entries.len();
-    let mut changing_template_x = vec![0i8; changing_entries_length];
-    let mut changing_template_y = vec![0i8; changing_entries_length];
-    let mut changing_template_bit = vec![0u16; changing_entries_length];
+
     for c in 0..changing_entries_length {
         let k = changing_template_entries[c];
         changing_template_x[c] = template[k].0;
         changing_template_y[c] = template[k].1;
         changing_template_bit[c] = 1 << (template_length - 1 - k);
     }
+
     let sbb_left = (-min_x) as usize;
     let sbb_top = (-min_y) as usize;
     let sbb_right = params.width.saturating_sub(max_x as usize);
+
     GenericDecodeTemplate {
         template_length,
         template_x,
