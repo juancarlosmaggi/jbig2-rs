@@ -776,21 +776,17 @@ fn decode_bitmap_no_skip(
         }
 
         for j in safe_end..params.width {
-            let mut full = 0u16;
-            let mut shift = template_length as i32 - 1;
-            for k in 0..template_length {
-                let j0 = j as i32 + template_x[k] as i32;
-                if j0 >= 0 && j0 < width_i32 && template_is_valid[k] {
-                    if unsafe {
-                        bitmap.get_pixel_at_index_unchecked(template_offsets[k], j0 as usize)
-                    } != 0
-                    {
-                        full |= 1 << shift;
+            context_label = (context_label << 1) & reuse_mask;
+            for k in 0..changing_entries_length {
+                let j0_i32 = j as i32 + changing_template_x[k] as i32;
+                if j0_i32 >= 0 && j0_i32 < width_i32 {
+                    let j0 = j0_i32 as usize;
+                    let val = unsafe { *context_row_ptrs[k].add(j0 >> 3) };
+                    if (val >> (7 - (j0 & 7))) & 1 != 0 {
+                        context_label |= changing_template_bit[k];
                     }
                 }
-                shift -= 1;
             }
-            context_label = full;
             let pixel = decoder.read_bit(contexts, context_label as usize);
             unsafe {
                 bitmap.set_pixel_at_index_unchecked(row_start_index, j, pixel);
@@ -989,21 +985,17 @@ fn decode_bitmap_with_skip(
         }
 
         for j in safe_end..params.width {
-            let mut full = 0u16;
-            let mut shift = template_length as i32 - 1;
-            for k in 0..template_length {
-                let j0 = j as i32 + template_x[k] as i32;
-                if j0 >= 0 && j0 < width_i32 && template_is_valid[k] {
-                    if unsafe {
-                        bitmap.get_pixel_at_index_unchecked(template_offsets[k], j0 as usize)
-                    } != 0
-                    {
-                        full |= 1 << shift;
+            context_label = (context_label << 1) & reuse_mask;
+            for k in 0..changing_entries_length {
+                let j0_i32 = j as i32 + changing_template_x[k] as i32;
+                if j0_i32 >= 0 && j0_i32 < width_i32 {
+                    let j0 = j0_i32 as usize;
+                    let val = unsafe { *context_row_ptrs[k].add(j0 >> 3) };
+                    if (val >> (7 - (j0 & 7))) & 1 != 0 {
+                        context_label |= changing_template_bit[k];
                     }
                 }
-                shift -= 1;
             }
-            context_label = full;
             let byte_index = j >> 3;
             let mask = 1u8 << (7 - (j & 7));
             let pixel = if (skip_row[byte_index] & mask) != 0 {

@@ -54,6 +54,7 @@ impl Bitmap {
     /// # Safety
     ///
     /// The caller must ensure that the bitmap data is written to before being read.
+    #[allow(clippy::uninit_vec)]
     pub unsafe fn uninit(width: usize, height: usize) -> Self {
         // Use checked arithmetic to avoid overflow in stride and buffer sizing.
         let stride = width

@@ -28,5 +28,30 @@ fn bench_generic_no_skip(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_generic_no_skip);
+fn bench_generic_no_skip_narrow(c: &mut Criterion) {
+    // Narrow width to stress the edge handling loop.
+    let at = [(0, 0); 4]; // Dummy AT pixels
+    let params = DecodeBitmapParams {
+        mmr: false,
+        width: 8,
+        height: 1024 * 128, // Same total pixels (1M)
+        template_index: 1,
+        prediction: false,
+        skip: None,
+        at: &at,
+    };
+
+    // Create sufficient dummy data.
+    let data = vec![0u8; 1024 * 128]; // Compressed data is small anyway
+
+    c.bench_function("generic_no_skip_narrow", |b| {
+        b.iter(|| {
+            // Re-create context each iteration
+            let mut decoding_context = DecodingContext::new(black_box(&data), 0, data.len());
+            let _ = decode_bitmap(&params, &mut decoding_context);
+        })
+    });
+}
+
+criterion_group!(benches, bench_generic_no_skip, bench_generic_no_skip_narrow);
 criterion_main!(benches);
