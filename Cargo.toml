@@ -50,3 +50,7 @@ harness = false
 [[bench]]
 name = "reader_bench"
 harness = false
+
+[[bench]]
+name = "uncompressed_bench"
+harness = false
