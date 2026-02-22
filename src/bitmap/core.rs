@@ -49,6 +49,33 @@ impl Bitmap {
         }
     }
 
+    /// Create a new bitmap with uninitialized data.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the bitmap data is written to before being read.
+    pub unsafe fn uninit(width: usize, height: usize) -> Self {
+        // Use checked arithmetic to avoid overflow in stride and buffer sizing.
+        let stride = width
+            .checked_add(7)
+            .expect("width too large for stride calculation")
+            >> 3;
+
+        let buffer_size = stride.checked_mul(height).expect("buffer size overflow");
+
+        let mut data = Vec::with_capacity(buffer_size);
+        unsafe {
+            data.set_len(buffer_size);
+        }
+
+        Bitmap {
+            data,
+            width,
+            height,
+            stride,
+        }
+    }
+
     /// Return the pixel value at `(x, y)`, or 0 for out-of-bounds reads.
     ///
     /// # Arguments

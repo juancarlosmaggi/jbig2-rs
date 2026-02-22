@@ -77,7 +77,13 @@ fn decode_bitmap_template0(
     let mut decoder = decoding_context.get_decoder();
     let mut contexts = decoding_context.get_contexts("GB");
     let contexts = contexts.as_mut();
-    let mut bitmap = Bitmap::new(width, height);
+    // SAFETY: We use an uninitialized bitmap because this function guarantees
+    // that every byte of the bitmap (including padding bits in the last byte of each row)
+    // is overwritten before it is read.
+    // The decoder writes byte-by-byte: `row[x >> 3] = result`.
+    // Padding bits in `result` are zeroed.
+    // Stride is equal to `padded_width / 8`, so there are no stride padding bytes.
+    let mut bitmap = unsafe { Bitmap::uninit(width, height) };
     if width == 0 || height == 0 {
         return Ok(bitmap);
     }
@@ -206,7 +212,13 @@ fn decode_bitmap_template0_with_skip(
     let mut decoder = decoding_context.get_decoder();
     let mut contexts = decoding_context.get_contexts("GB");
     let contexts = contexts.as_mut();
-    let mut bitmap = Bitmap::new(width, height);
+    // SAFETY: We use an uninitialized bitmap because this function guarantees
+    // that every byte of the bitmap (including padding bits in the last byte of each row)
+    // is overwritten before it is read.
+    // The decoder writes byte-by-byte: `row[x >> 3] = result`.
+    // Padding bits in `result` are zeroed.
+    // Stride is equal to `padded_width / 8`, so there are no stride padding bytes.
+    let mut bitmap = unsafe { Bitmap::uninit(width, height) };
     if width == 0 || height == 0 {
         return Ok(bitmap);
     }
