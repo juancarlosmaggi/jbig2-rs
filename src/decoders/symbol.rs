@@ -454,10 +454,10 @@ pub fn decode_symbol_dictionary(
     }
 
     let offset = input_symbols_len;
-    for (j, symbol) in new_symbols.iter().enumerate() {
+    for (j, symbol) in new_symbols.into_iter().enumerate() {
         let flag_idx = offset + j;
         if flag_idx < flags.len() && flags[flag_idx] {
-            exported_symbols.push(symbol.clone());
+            exported_symbols.push(symbol);
         }
     }
 
