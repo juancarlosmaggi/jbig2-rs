@@ -288,11 +288,21 @@ impl Bitmap {
     /// * `y` - Y coordinate in this bitmap where the source should be placed
     /// * `operator` - Combination operator (0=OR, 1=AND, 2=XOR, 3=XNOR, 4=REPLACE)
     pub fn combine(&mut self, other: &Bitmap, x: isize, y: isize, operator: u8) {
-        if operator == 0 {
-            self.combine_or(other, x, y);
-            return;
+        match operator {
+            0 => self.combine_or(other, x, y),
+            1 => self.combine_op(other, x, y, |d, s| d & s),
+            2 => self.combine_op(other, x, y, |d, s| d ^ s),
+            3 => self.combine_op(other, x, y, |d, s| !(d ^ s)),
+            4 => self.combine_op(other, x, y, |_, s| s),
+            _ => {}
         }
+    }
 
+    #[inline(always)]
+    fn combine_op<F>(&mut self, other: &Bitmap, x: isize, y: isize, op: F)
+    where
+        F: Fn(u8, u8) -> u8 + Copy,
+    {
         // Clip to destination bounds before iterating.
         let start_y = y.max(0) as usize;
         let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
@@ -357,13 +367,8 @@ impl Bitmap {
                 let mask = mask_high & mask_low;
 
                 let dst_byte = self.data[dst_byte_idx];
-                let new_byte = match operator {
-                    1 => (dst_byte & !mask) | ((dst_byte & src_aligned) & mask),
-                    2 => (dst_byte & !mask) | ((dst_byte ^ src_aligned) & mask),
-                    3 => (dst_byte & !mask) | ((!(dst_byte ^ src_aligned)) & mask),
-                    4 => (dst_byte & !mask) | (src_aligned & mask),
-                    _ => dst_byte,
-                };
+                let result_byte = op(dst_byte, src_aligned);
+                let new_byte = (dst_byte & !mask) | (result_byte & mask);
                 self.data[dst_byte_idx] = new_byte;
 
                 current_x += bits_to_process;
@@ -379,71 +384,15 @@ impl Bitmap {
                 let src_byte_start = src_row_start + (current_src_x >> 3);
                 let src_bit_offset = current_src_x & 7;
 
-                if src_bit_offset == 0 {
-                    // Aligned source
-                    for k in 0..full_bytes {
-                        unsafe {
-                            let s = *other.data.get_unchecked(src_byte_start + k);
-                            let d_ptr = self.data.as_mut_ptr().add(dst_byte_start + k);
-                            let d = *d_ptr;
-                            let res = match operator {
-                                1 => d & s,
-                                2 => d ^ s,
-                                3 => !(d ^ s),
-                                4 => s,
-                                _ => d,
-                            };
-                            *d_ptr = res;
-                        }
-                    }
-                } else {
-                    // Unaligned source
-                    let shift_comp = 8 - src_bit_offset;
-                    // We can read src[i+1] safely if src_start + i + 1 < src_end
-                    let safe_count = if src_byte_start + full_bytes < src_row_end {
-                        full_bytes
-                    } else {
-                        full_bytes.saturating_sub(1)
-                    };
-
-                    for k in 0..safe_count {
-                        unsafe {
-                            let s0 = *other.data.get_unchecked(src_byte_start + k);
-                            let s1 = *other.data.get_unchecked(src_byte_start + k + 1);
-                            let s = (s0 << src_bit_offset) | (s1 >> shift_comp);
-
-                            let d_ptr = self.data.as_mut_ptr().add(dst_byte_start + k);
-                            let d = *d_ptr;
-                            let res = match operator {
-                                1 => d & s,
-                                2 => d ^ s,
-                                3 => !(d ^ s),
-                                4 => s,
-                                _ => d,
-                            };
-                            *d_ptr = res;
-                        }
-                    }
-
-                    if safe_count < full_bytes {
-                        let k = safe_count;
-                        unsafe {
-                            let s0 = *other.data.get_unchecked(src_byte_start + k);
-                            // s1 is assumed 0 (out of bounds)
-                            let s = s0 << src_bit_offset;
-                            let d_ptr = self.data.as_mut_ptr().add(dst_byte_start + k);
-                            let d = *d_ptr;
-                            let res = match operator {
-                                1 => d & s,
-                                2 => d ^ s,
-                                3 => !(d ^ s),
-                                4 => s,
-                                _ => d,
-                            };
-                            *d_ptr = res;
-                        }
-                    }
-                }
+                self.combine_row_op(
+                    dst_byte_start,
+                    src_byte_start,
+                    full_bytes,
+                    src_bit_offset,
+                    &other.data,
+                    src_row_end,
+                    op,
+                );
 
                 let bits_processed = full_bytes << 3;
                 current_x += bits_processed;
@@ -471,14 +420,62 @@ impl Bitmap {
                 let mask = !(0xFFu8 >> remaining);
 
                 let dst_byte = self.data[dst_byte_idx];
-                let new_byte = match operator {
-                    1 => (dst_byte & !mask) | ((dst_byte & src_aligned) & mask),
-                    2 => (dst_byte & !mask) | ((dst_byte ^ src_aligned) & mask),
-                    3 => (dst_byte & !mask) | ((!(dst_byte ^ src_aligned)) & mask),
-                    4 => (dst_byte & !mask) | (src_aligned & mask),
-                    _ => dst_byte,
-                };
+                let result_byte = op(dst_byte, src_aligned);
+                let new_byte = (dst_byte & !mask) | (result_byte & mask);
                 self.data[dst_byte_idx] = new_byte;
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn combine_row_op<F>(
+        &mut self,
+        dst_start: usize,
+        src_start: usize,
+        count: usize,
+        src_shift: usize,
+        src_data: &[u8],
+        src_end: usize,
+        op: F,
+    ) where
+        F: Fn(u8, u8) -> u8 + Copy,
+    {
+        if src_shift == 0 {
+            for i in 0..count {
+                unsafe {
+                    let s = *src_data.get_unchecked(src_start + i);
+                    let d_ptr = self.data.as_mut_ptr().add(dst_start + i);
+                    *d_ptr = op(*d_ptr, s);
+                }
+            }
+        } else {
+            let shift_comp = 8 - src_shift;
+            // We can read src[i+1] safely if src_start + i + 1 < src_end
+            let safe_count = if src_start + count < src_end {
+                count
+            } else {
+                count.saturating_sub(1)
+            };
+
+            for i in 0..safe_count {
+                unsafe {
+                    let s0 = *src_data.get_unchecked(src_start + i);
+                    let s1 = *src_data.get_unchecked(src_start + i + 1);
+                    let s = (s0 << src_shift) | (s1 >> shift_comp);
+                    let d_ptr = self.data.as_mut_ptr().add(dst_start + i);
+                    *d_ptr = op(*d_ptr, s);
+                }
+            }
+
+            if safe_count < count {
+                let i = safe_count;
+                unsafe {
+                    let s0 = *src_data.get_unchecked(src_start + i);
+                    // s1 is assumed 0 (out of bounds)
+                    let s = s0 << src_shift;
+                    let d_ptr = self.data.as_mut_ptr().add(dst_start + i);
+                    *d_ptr = op(*d_ptr, s);
+                }
             }
         }
     }

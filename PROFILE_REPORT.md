@@ -8,54 +8,54 @@ Averaged over 5 run(s).
 
 | Rank | Label | Total ms | Calls | Avg ms |
 | --- | --- | --- | --- | --- |
-| 1 | immediate_halftone_region | 1363.713 | 160 | 8.523 |
-| 2 | immediate_generic_region | 829.089 | 21 | 39.480 |
-| 3 | immediate_generic_refinement_region | 529.848 | 4 | 132.462 |
-| 4 | immediate_text_region | 274.728 | 10 | 27.473 |
-| 5 | symbol_dictionary | 85.060 | 18 | 4.726 |
-| 6 | finalize_current_page | 44.573 | 67 | 0.665 |
-| 7 | pattern_dictionary | 31.712 | 40 | 0.793 |
-| 8 | intermediate_text_region | 13.897 | 4 | 3.474 |
-| 9 | end_of_stripe | 7.031 | 145 | 0.048 |
-| 10 | page_information | 1.335 | 67 | 0.020 |
-| 11 | read_segments | 0.924 | 67 | 0.014 |
+| 1 | immediate_halftone_region | 1356.103 | 160 | 8.476 |
+| 2 | immediate_generic_region | 818.358 | 21 | 38.969 |
+| 3 | immediate_generic_refinement_region | 542.598 | 4 | 135.650 |
+| 4 | immediate_text_region | 295.971 | 10 | 29.597 |
+| 5 | symbol_dictionary | 84.692 | 18 | 4.705 |
+| 6 | finalize_current_page | 47.523 | 67 | 0.709 |
+| 7 | pattern_dictionary | 32.389 | 40 | 0.810 |
+| 8 | intermediate_text_region | 13.517 | 4 | 3.379 |
+| 9 | end_of_stripe | 7.500 | 145 | 0.052 |
+| 10 | page_information | 1.368 | 67 | 0.020 |
+| 11 | read_segments | 0.985 | 67 | 0.015 |
 
 ## Slowest Files (Total Decode)
 
 | Rank | File | Total ms |
 | --- | --- | --- |
-| 1 | 600-lossless.jb2 | 769.558 |
-| 2 | 600-6-45.jb2 | 403.628 |
-| 3 | 042_24.jb2 | 314.729 |
-| 4 | 042_23.jb2 | 305.468 |
-| 5 | 042_21.jb2 | 273.037 |
-| 6 | 200-3-45-stripe.jb2 | 269.881 |
-| 7 | 042_22.jb2 | 216.375 |
-| 8 | 600-10-45.jb2 | 201.376 |
-| 9 | 200-4-45-stripe.jb2 | 173.785 |
-| 10 | 600-6-0.jb2 | 164.265 |
-| 11 | 042_7.jb2 | 152.873 |
-| 12 | 200-5-45-stripe.jb2 | 122.266 |
-| 13 | 200-6-45-stripe.jb2 | 115.525 |
-| 14 | 042_6.jb2 | 111.691 |
-| 15 | 042_25.jb2 | 111.683 |
+| 1 | 600-lossless.jb2 | 770.992 |
+| 2 | 600-6-45.jb2 | 399.394 |
+| 3 | 042_23.jb2 | 300.917 |
+| 4 | 042_21.jb2 | 300.842 |
+| 5 | 042_24.jb2 | 284.457 |
+| 6 | 200-3-45-stripe.jb2 | 258.464 |
+| 7 | 042_22.jb2 | 247.380 |
+| 8 | 600-10-45.jb2 | 206.238 |
+| 9 | 200-4-45-stripe.jb2 | 177.019 |
+| 10 | 600-6-0.jb2 | 167.046 |
+| 11 | 042_7.jb2 | 152.084 |
+| 12 | 200-5-45-stripe.jb2 | 123.299 |
+| 13 | 200-6-45-stripe.jb2 | 112.175 |
+| 14 | 042_25.jb2 | 111.645 |
+| 15 | 200-3-45.jb2 | 104.932 |
 
 ## Per-File Top Hotspot (Excludes total_decode)
 
 | Rank | File | Top Label | Total ms |
 | --- | --- | --- | --- |
-| 1 | 600-lossless.jb2 | immediate_generic_region | 381.259 |
-| 2 | 600-6-45.jb2 | immediate_halftone_region | 198.568 |
-| 3 | 042_24.jb2 | immediate_generic_refinement_region | 150.780 |
-| 4 | 042_23.jb2 | immediate_generic_refinement_region | 146.201 |
-| 5 | 200-3-45-stripe.jb2 | immediate_halftone_region | 134.044 |
-| 6 | 042_21.jb2 | immediate_generic_refinement_region | 130.620 |
-| 7 | 042_22.jb2 | immediate_generic_refinement_region | 102.248 |
-| 8 | 600-10-45.jb2 | immediate_halftone_region | 97.291 |
-| 9 | 200-4-45-stripe.jb2 | immediate_halftone_region | 86.012 |
-| 10 | 600-6-0.jb2 | immediate_halftone_region | 78.752 |
-| 11 | 042_7.jb2 | immediate_generic_region | 76.087 |
-| 12 | 200-5-45-stripe.jb2 | immediate_halftone_region | 60.183 |
-| 13 | 200-6-45-stripe.jb2 | immediate_halftone_region | 56.692 |
-| 14 | 042_6.jb2 | immediate_generic_region | 55.504 |
-| 15 | 200-3-45.jb2 | immediate_halftone_region | 54.539 |
+| 1 | 600-lossless.jb2 | immediate_generic_region | 381.840 |
+| 2 | 600-6-45.jb2 | immediate_halftone_region | 196.022 |
+| 3 | 042_23.jb2 | immediate_generic_refinement_region | 144.456 |
+| 4 | 042_21.jb2 | immediate_generic_refinement_region | 144.393 |
+| 5 | 042_24.jb2 | immediate_generic_refinement_region | 136.193 |
+| 6 | 200-3-45-stripe.jb2 | immediate_halftone_region | 128.254 |
+| 7 | 042_22.jb2 | immediate_generic_refinement_region | 117.556 |
+| 8 | 600-10-45.jb2 | immediate_halftone_region | 99.417 |
+| 9 | 200-4-45-stripe.jb2 | immediate_halftone_region | 87.529 |
+| 10 | 600-6-0.jb2 | immediate_halftone_region | 80.018 |
+| 11 | 042_7.jb2 | immediate_generic_region | 75.669 |
+| 12 | 200-5-45-stripe.jb2 | immediate_halftone_region | 60.663 |
+| 13 | 200-6-45-stripe.jb2 | immediate_halftone_region | 54.914 |
+| 14 | 200-3-45.jb2 | immediate_halftone_region | 52.093 |
+| 15 | 042_5.jb2 | immediate_generic_region | 51.998 |
