@@ -10,21 +10,15 @@ struct CCITTFaxDecoder<'a> {
     width: usize,
     height: usize,
     end_of_block: bool,
-    ref_line: Vec<u8>,
-    curr_line: Vec<u8>,
 }
 
 impl<'a> CCITTFaxDecoder<'a> {
     fn new(reader: Reader<'a>, width: usize, height: usize, end_of_block: bool) -> Self {
-        // Packed lines: (width + 7) / 8 bytes.
-        let stride = (width + 7) >> 3;
         CCITTFaxDecoder {
             reader,
             width,
             height,
             end_of_block,
-            ref_line: vec![0; stride],
-            curr_line: vec![0; stride],
         }
     }
 
@@ -32,7 +26,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         self.reader.read_bit()
     }
 
-    fn set_run(&mut self, start: usize, end: usize, val: u8) {
+    fn set_run(&self, curr_line: &mut [u8], start: usize, end: usize, val: u8) {
         if val == 0 || start >= end {
             return;
         }
@@ -43,7 +37,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         // Handle first partial byte
         if (idx & 7) != 0 {
             let byte_idx = idx >> 3;
-            if byte_idx >= self.curr_line.len() {
+            if byte_idx >= curr_line.len() {
                 return;
             }
 
@@ -66,26 +60,26 @@ impl<'a> CCITTFaxDecoder<'a> {
 
             let mask = (0xFF >> start_bit) & (0xFF << (8 - end_bit));
 
-            self.curr_line[byte_idx] |= mask;
+            curr_line[byte_idx] |= mask;
             idx += bits;
         }
 
         // Handle full bytes
         let start_byte = idx >> 3;
-        if start_byte >= self.curr_line.len() {
+        if start_byte >= curr_line.len() {
             return;
         }
 
         let num_bytes = (end - idx) >> 3;
         if num_bytes > 0 {
             let end_byte = start_byte + num_bytes;
-            let actual_end_byte = end_byte.min(self.curr_line.len());
+            let actual_end_byte = end_byte.min(curr_line.len());
 
-            self.curr_line[start_byte..actual_end_byte].fill(0xFF);
+            curr_line[start_byte..actual_end_byte].fill(0xFF);
 
             idx += (actual_end_byte - start_byte) << 3;
 
-            if actual_end_byte == self.curr_line.len() {
+            if actual_end_byte == curr_line.len() {
                 return;
             }
         }
@@ -93,7 +87,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         // Handle last partial byte
         if idx < end {
             let byte_idx = idx >> 3;
-            if byte_idx >= self.curr_line.len() {
+            if byte_idx >= curr_line.len() {
                 return;
             }
 
@@ -102,11 +96,16 @@ impl<'a> CCITTFaxDecoder<'a> {
             // wait, if we had a first partial block, idx is now aligned.
 
             let mask = 0xFF << (8 - bits);
-            self.curr_line[byte_idx] |= mask;
+            curr_line[byte_idx] |= mask;
         }
     }
 
-    fn decode_2d_line(&mut self, _eofb: &mut bool) -> Result<(), Jbig2Error> {
+    fn decode_2d_line(
+        &mut self,
+        ref_line: &[u8],
+        curr_line: &mut [u8],
+        _eofb: &mut bool,
+    ) -> Result<(), Jbig2Error> {
         if self.width == 0 {
             return Ok(());
         }
@@ -123,12 +122,12 @@ impl<'a> CCITTFaxDecoder<'a> {
             }
 
             let b1 = self.find_changing_element_of_color(
-                &self.ref_line,
+                ref_line,
                 a0,
                 self.width,
                 1 - current_color,
             );
-            let b2 = self.find_changing_element(&self.ref_line, b1 as i32, self.width);
+            let b2 = self.find_changing_element(ref_line, b1 as i32, self.width);
 
             let mode = match self.read_mode_code() {
                 Ok(m) => m,
@@ -142,7 +141,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                 0 => {
                     // Pass mode
                     // Fill from x to b2 with current_color
-                    self.set_run(x, b2, current_color);
+                    self.set_run(curr_line, x, b2, current_color);
                     x = b2;
                     a0 = x as i32;
                     // color unchanged
@@ -165,7 +164,7 @@ impl<'a> CCITTFaxDecoder<'a> {
                     }
 
                     let end = (a1 as usize).min(self.width);
-                    self.set_run(x, end, current_color);
+                    self.set_run(curr_line, x, end, current_color);
                     x = end;
                     a0 = a1;
                     current_color = 1 - current_color;
@@ -187,11 +186,11 @@ impl<'a> CCITTFaxDecoder<'a> {
                     };
 
                     let end1 = (x + r1).min(self.width);
-                    self.set_run(x, end1, current_color);
+                    self.set_run(curr_line, x, end1, current_color);
                     x += r1;
 
                     let end2 = (x + r2).min(self.width);
-                    self.set_run(x, end2, 1 - current_color);
+                    self.set_run(curr_line, x, end2, 1 - current_color);
                     x += r2;
 
                     a0 = x as i32;
@@ -469,21 +468,30 @@ impl<'a> CCITTFaxDecoder<'a> {
     fn decode(&mut self) -> Result<Bitmap, Jbig2Error> {
         let mut bitmap = Bitmap::new(self.width, self.height);
         let mut eofb = false;
-        let mut y = 0usize;
 
-        while y < self.height && !eofb {
-            self.decode_2d_line(&mut eofb)?;
+        // Zero line for the first row reference
+        let stride = bitmap.stride;
+        let zero_line = vec![0u8; stride];
 
-            let row_start = y * bitmap.stride;
-            let row_slice = &mut bitmap.data[row_start..row_start + bitmap.stride];
+        for y in 0..self.height {
+            if eofb {
+                break;
+            }
 
-            row_slice.copy_from_slice(&self.curr_line);
+            // Determine ref_line and curr_line slices
+            let (ref_slice, curr_slice) = if y == 0 {
+                let curr = &mut bitmap.data[0..stride];
+                (zero_line.as_slice(), curr)
+            } else {
+                let (prev, curr) = bitmap.data.split_at_mut(y * stride);
+                let ref_row = &prev[(y - 1) * stride..];
+                let curr_row = &mut curr[..stride];
+                (ref_row as &[u8], curr_row)
+            };
 
-            std::mem::swap(&mut self.ref_line, &mut self.curr_line);
-            self.curr_line.fill(0);
-
-            y += 1;
+            self.decode_2d_line(ref_slice, curr_slice, &mut eofb)?;
         }
+
         if self.end_of_block {
             self.consume_eofb_marker();
         }
