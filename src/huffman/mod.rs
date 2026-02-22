@@ -84,10 +84,13 @@ impl HuffmanTable {
             Self::assign_prefix_codes(&mut lines);
         }
 
-        let mut nodes = vec![HuffmanNode::Internal {
+        // A Huffman tree with N leaves has at most 2*N nodes.
+        // We use lines.len() * 2 as a safe upper bound estimate.
+        let mut nodes = Vec::with_capacity(lines.len() * 2);
+        nodes.push(HuffmanNode::Internal {
             left: NO_CHILD,
             right: NO_CHILD,
-        }];
+        });
 
         for line in &lines {
             if line.prefix_length > 0 {
