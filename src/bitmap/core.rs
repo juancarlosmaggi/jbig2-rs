@@ -292,6 +292,7 @@ impl Bitmap {
             self.combine_or(other, x, y);
             return;
         }
+
         // Clip to destination bounds before iterating.
         let start_y = y.max(0) as usize;
         let end_y = (y + other.height as isize).min(self.height as isize).max(0) as usize;
@@ -310,34 +311,6 @@ impl Bitmap {
         // Track corresponding source offsets for each clipped row.
         let src_start_y = (start_y as isize - y) as usize;
         let src_start_x = (start_x as isize - x) as usize;
-        let _width = end_x - start_x;
-
-        if operator == 0 && (start_x & 7) == 0 && (src_start_x & 7) == 0 {
-            let width = end_x - start_x;
-            let full_bytes = width >> 3;
-            let rem_bits = width & 7;
-            let row_bytes = full_bytes + usize::from(rem_bits != 0);
-            let src_byte_offset = src_start_x >> 3;
-            let dst_byte_offset = start_x >> 3;
-
-            for i in 0..(end_y - start_y) {
-                let dst_y = start_y + i;
-                let src_y = src_start_y + i;
-
-                let dst_row_start = dst_y * self.stride + dst_byte_offset;
-                let src_row_start = src_y * other.stride + src_byte_offset;
-
-                let dst_row = &mut self.data[dst_row_start..dst_row_start + row_bytes];
-                let src_row = &other.data[src_row_start..src_row_start + row_bytes];
-
-                or_bytes_unaligned(&mut dst_row[..full_bytes], &src_row[..full_bytes]);
-                if rem_bits != 0 {
-                    let mask = 0xFFu8 << (8 - rem_bits);
-                    dst_row[full_bytes] |= src_row[full_bytes] & mask;
-                }
-            }
-            return;
-        }
 
         // Process the row in chunks to minimize per-pixel work.
         for i in 0..(end_y - start_y) {
@@ -346,17 +319,20 @@ impl Bitmap {
 
             let dst_row_start = dst_y * self.stride;
             let src_row_start = src_y * other.stride;
+            let src_row_end = src_row_start + other.stride;
 
             let mut current_x = start_x;
             let mut current_src_x = src_start_x;
-            let src_row_end = src_row_start + other.stride;
+            let mut remaining = end_x - start_x;
 
-            while current_x < end_x {
+            let dst_bit_offset = current_x & 7;
+
+            // 1. Prologue: Handle unaligned start of the destination byte.
+            if dst_bit_offset != 0 {
+                let bits_to_process = (8 - dst_bit_offset).min(remaining);
                 let dst_byte_idx = dst_row_start + (current_x >> 3);
-                let bits_left_in_byte = 8 - (current_x & 7);
-                let bits_to_process = bits_left_in_byte.min(end_x - current_x);
 
-                // Align the source bits to the destination byte boundary.
+                // Align source bits.
                 let src_byte_idx = src_row_start + (current_src_x >> 3);
                 let src_byte = other.data[src_byte_idx];
                 let next_byte = if src_byte_idx + 1 < src_row_end {
@@ -367,14 +343,12 @@ impl Bitmap {
                 let src_word = ((src_byte as u16) << 8) | next_byte as u16;
                 let src_bit_offset = current_src_x & 7;
                 let mut src_aligned = ((src_word << src_bit_offset) >> 8) as u8;
-                let dst_bit_offset = current_x & 7;
-                if dst_bit_offset != 0 {
-                    src_aligned >>= dst_bit_offset;
-                }
+                // Shift down to match destination alignment
+                src_aligned >>= dst_bit_offset;
 
-                // Mask off only the destination bits covered by this chunk.
-                let mask_high = 0xFFu8 >> (current_x & 7);
-                let shift_low = (current_x & 7) + bits_to_process;
+                // Create mask for destination
+                let mask_high = 0xFFu8 >> dst_bit_offset;
+                let shift_low = dst_bit_offset + bits_to_process;
                 let mask_low = if shift_low >= 8 {
                     0xFF
                 } else {
@@ -383,28 +357,128 @@ impl Bitmap {
                 let mask = mask_high & mask_low;
 
                 let dst_byte = self.data[dst_byte_idx];
-                let mut new_byte = dst_byte;
-
-                match operator {
-                    0 => new_byte |= src_aligned & mask, // OR
-                    1 => new_byte = (dst_byte & src_aligned & mask) | (dst_byte & !mask), // AND within mask, preserve outside
-                    2 => new_byte ^= src_aligned & mask,                                  // XOR
-                    3 => {
-                        // XNOR.
-                        let xor = dst_byte ^ src_aligned;
-                        new_byte = (new_byte & !mask) | (!xor & mask);
-                    }
-                    4 => {
-                        // REPLACE.
-                        new_byte = (new_byte & !mask) | (src_aligned & mask);
-                    }
-                    _ => {}
-                }
-
+                let new_byte = match operator {
+                    1 => (dst_byte & !mask) | ((dst_byte & src_aligned) & mask),
+                    2 => (dst_byte & !mask) | ((dst_byte ^ src_aligned) & mask),
+                    3 => (dst_byte & !mask) | ((!(dst_byte ^ src_aligned)) & mask),
+                    4 => (dst_byte & !mask) | (src_aligned & mask),
+                    _ => dst_byte,
+                };
                 self.data[dst_byte_idx] = new_byte;
 
                 current_x += bits_to_process;
                 current_src_x += bits_to_process;
+                remaining -= bits_to_process;
+            }
+
+            // 2. Body: Process full bytes (8 bits at a time).
+            // Destination is now byte-aligned.
+            let full_bytes = remaining >> 3;
+            if full_bytes > 0 {
+                let dst_byte_start = dst_row_start + (current_x >> 3);
+                let src_byte_start = src_row_start + (current_src_x >> 3);
+                let src_bit_offset = current_src_x & 7;
+
+                if src_bit_offset == 0 {
+                    // Aligned source
+                    for k in 0..full_bytes {
+                        unsafe {
+                            let s = *other.data.get_unchecked(src_byte_start + k);
+                            let d_ptr = self.data.as_mut_ptr().add(dst_byte_start + k);
+                            let d = *d_ptr;
+                            let res = match operator {
+                                1 => d & s,
+                                2 => d ^ s,
+                                3 => !(d ^ s),
+                                4 => s,
+                                _ => d,
+                            };
+                            *d_ptr = res;
+                        }
+                    }
+                } else {
+                    // Unaligned source
+                    let shift_comp = 8 - src_bit_offset;
+                    // We can read src[i+1] safely if src_start + i + 1 < src_end
+                    let safe_count = if src_byte_start + full_bytes < src_row_end {
+                        full_bytes
+                    } else {
+                        full_bytes.saturating_sub(1)
+                    };
+
+                    for k in 0..safe_count {
+                        unsafe {
+                            let s0 = *other.data.get_unchecked(src_byte_start + k);
+                            let s1 = *other.data.get_unchecked(src_byte_start + k + 1);
+                            let s = (s0 << src_bit_offset) | (s1 >> shift_comp);
+
+                            let d_ptr = self.data.as_mut_ptr().add(dst_byte_start + k);
+                            let d = *d_ptr;
+                            let res = match operator {
+                                1 => d & s,
+                                2 => d ^ s,
+                                3 => !(d ^ s),
+                                4 => s,
+                                _ => d,
+                            };
+                            *d_ptr = res;
+                        }
+                    }
+
+                    if safe_count < full_bytes {
+                        let k = safe_count;
+                        unsafe {
+                            let s0 = *other.data.get_unchecked(src_byte_start + k);
+                            // s1 is assumed 0 (out of bounds)
+                            let s = s0 << src_bit_offset;
+                            let d_ptr = self.data.as_mut_ptr().add(dst_byte_start + k);
+                            let d = *d_ptr;
+                            let res = match operator {
+                                1 => d & s,
+                                2 => d ^ s,
+                                3 => !(d ^ s),
+                                4 => s,
+                                _ => d,
+                            };
+                            *d_ptr = res;
+                        }
+                    }
+                }
+
+                let bits_processed = full_bytes << 3;
+                current_x += bits_processed;
+                current_src_x += bits_processed;
+                remaining -= bits_processed;
+            }
+
+            // 3. Epilogue: Handle remaining bits.
+            if remaining > 0 {
+                let dst_byte_idx = dst_row_start + (current_x >> 3);
+
+                // Align source bits.
+                let src_byte_idx = src_row_start + (current_src_x >> 3);
+                let src_byte = other.data[src_byte_idx];
+                let next_byte = if src_byte_idx + 1 < src_row_end {
+                    other.data[src_byte_idx + 1]
+                } else {
+                    0
+                };
+                let src_word = ((src_byte as u16) << 8) | next_byte as u16;
+                let src_bit_offset = current_src_x & 7;
+                let src_aligned = ((src_word << src_bit_offset) >> 8) as u8;
+
+                // Mask for remaining bits (MSB aligned since we are byte aligned).
+                let mask = !(0xFFu8 >> remaining);
+
+                let dst_byte = self.data[dst_byte_idx];
+                let new_byte = match operator {
+                    1 => (dst_byte & !mask) | ((dst_byte & src_aligned) & mask),
+                    2 => (dst_byte & !mask) | ((dst_byte ^ src_aligned) & mask),
+                    3 => (dst_byte & !mask) | ((!(dst_byte ^ src_aligned)) & mask),
+                    4 => (dst_byte & !mask) | (src_aligned & mask),
+                    _ => dst_byte,
+                };
+                self.data[dst_byte_idx] = new_byte;
             }
         }
     }
