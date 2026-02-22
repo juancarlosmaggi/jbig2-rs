@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-const BIT_MASKS: [u8; 8] = [0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01];
 const SHIFTED_PATTERN_CACHE_LIMIT: usize = 32;
 
 thread_local! {
@@ -649,21 +648,24 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
         .first()
         .map(|plane| plane.stride)
         .unwrap_or(0);
+    let mut plane_bytes = vec![0u8; bits_per_value];
     for _ in 0..params.grid_height {
         let mut x = base_x;
         let mut y = base_y;
         for byte_index in 0..full_bytes {
-            for &bit_mask in &BIT_MASKS {
+            for (j, plane) in params
+                .gray_scale_bit_planes
+                .iter()
+                .enumerate()
+                .take(bits_per_value)
+            {
+                plane_bytes[j] = plane.data[row_offset + byte_index];
+            }
+            for shift in (0..8).rev() {
                 let mut pattern_index = 0usize;
-                for (j, plane) in params
-                    .gray_scale_bit_planes
-                    .iter()
-                    .enumerate()
-                    .take(bits_per_value)
-                {
-                    if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
-                        pattern_index |= 1usize << j;
-                    }
+                for (j, &byte_val) in plane_bytes.iter().enumerate() {
+                    let bit = (byte_val >> shift) & 1;
+                    pattern_index |= (bit as usize) << j;
                 }
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
@@ -675,17 +677,19 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
         }
         if tail_bits != 0 {
             let byte_index = full_bytes;
-            for &bit_mask in BIT_MASKS.iter().take(tail_bits) {
+            for (j, plane) in params
+                .gray_scale_bit_planes
+                .iter()
+                .enumerate()
+                .take(bits_per_value)
+            {
+                plane_bytes[j] = plane.data[row_offset + byte_index];
+            }
+            for shift in (0..8).rev().take(tail_bits) {
                 let mut pattern_index = 0usize;
-                for (j, plane) in params
-                    .gray_scale_bit_planes
-                    .iter()
-                    .enumerate()
-                    .take(bits_per_value)
-                {
-                    if (plane.data[row_offset + byte_index] & bit_mask) != 0 {
-                        pattern_index |= 1usize << j;
-                    }
+                for (j, &byte_val) in plane_bytes.iter().enumerate() {
+                    let bit = (byte_val >> shift) & 1;
+                    pattern_index |= (bit as usize) << j;
                 }
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
