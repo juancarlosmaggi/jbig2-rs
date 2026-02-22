@@ -152,8 +152,65 @@ pub(crate) fn build_shifted_patterns(patterns: &[Bitmap]) -> Arc<Vec<ShiftedPatt
     Arc::new(patterns.iter().map(build_shifted_pattern).collect())
 }
 
+struct FastHasher {
+    hash: u64,
+}
+
+impl Default for FastHasher {
+    #[inline]
+    fn default() -> Self {
+        FastHasher { hash: 0 }
+    }
+}
+
+const FX_HASH_K: u64 = 0x517cc1b727220a95;
+
+impl std::hash::Hasher for FastHasher {
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.hash
+    }
+
+    #[inline]
+    fn write(&mut self, mut bytes: &[u8]) {
+        while bytes.len() >= 8 {
+            let chunk = u64::from_ne_bytes(bytes[..8].try_into().unwrap());
+            self.hash = (self.hash.rotate_left(5) ^ chunk).wrapping_mul(FX_HASH_K);
+            bytes = &bytes[8..];
+        }
+        for &byte in bytes {
+            self.hash = (self.hash.rotate_left(5) ^ byte as u64).wrapping_mul(FX_HASH_K);
+        }
+    }
+
+    #[inline]
+    fn write_u8(&mut self, i: u8) {
+        self.hash = (self.hash.rotate_left(5) ^ i as u64).wrapping_mul(FX_HASH_K);
+    }
+
+    #[inline]
+    fn write_u16(&mut self, i: u16) {
+        self.hash = (self.hash.rotate_left(5) ^ i as u64).wrapping_mul(FX_HASH_K);
+    }
+
+    #[inline]
+    fn write_u32(&mut self, i: u32) {
+        self.hash = (self.hash.rotate_left(5) ^ i as u64).wrapping_mul(FX_HASH_K);
+    }
+
+    #[inline]
+    fn write_u64(&mut self, i: u64) {
+        self.hash = (self.hash.rotate_left(5) ^ i).wrapping_mul(FX_HASH_K);
+    }
+
+    #[inline]
+    fn write_usize(&mut self, i: usize) {
+        self.hash = (self.hash.rotate_left(5) ^ i as u64).wrapping_mul(FX_HASH_K);
+    }
+}
+
 fn compute_patterns_hash(patterns: &[Bitmap]) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut hasher = FastHasher::default();
     patterns.len().hash(&mut hasher);
     for pattern in patterns {
         pattern.width.hash(&mut hasher);
