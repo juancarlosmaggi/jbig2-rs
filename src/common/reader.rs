@@ -28,6 +28,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Read the next bit, advancing the internal position.
+    #[inline]
     pub fn read_bit(&mut self) -> Result<u8, crate::common::error::Jbig2Error> {
         if self.shift < 0 {
             if self.position >= self.end {
@@ -47,6 +48,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Read a multi-bit value MSB-first from the stream.
+    #[inline]
     pub fn read_bits(
         &mut self,
         mut num_bits: u32,
@@ -184,6 +186,7 @@ impl<'a> Reader<'a> {
             self.end = self.data.len();
         }
     }
+
 }
 
 #[cfg(test)]
