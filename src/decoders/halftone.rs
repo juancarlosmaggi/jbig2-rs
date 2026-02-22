@@ -55,8 +55,31 @@ fn fill_shifted_rows(pattern: &Bitmap, shift: usize, dst_stride: usize, dst: &mu
             dst_row.copy_from_slice(src_row);
         } else {
             let mut carry = 0u8;
-            let mut dst_idx = 0usize;
-            for (idx, &b0) in src_row.iter().enumerate() {
+            let mut cursor = 0;
+            let mut dst_idx = 0;
+
+            let src_end_safe = if src_rem_bits != 0 {
+                src_stride.saturating_sub(1)
+            } else {
+                src_stride
+            };
+
+            while cursor + 8 <= src_end_safe && cursor + 8 <= dst_stride {
+                let chunk_bytes = &src_row[cursor..cursor + 8];
+                let chunk = u64::from_be_bytes(chunk_bytes.try_into().unwrap());
+
+                let out_val = (chunk >> shift) | ((carry as u64) << 56);
+
+                dst_row[cursor..cursor + 8].copy_from_slice(&out_val.to_be_bytes());
+
+                carry = ((chunk << (64 - shift)) >> 56) as u8;
+
+                cursor += 8;
+                dst_idx += 8;
+            }
+
+            for (i, &b0) in src_row[cursor..].iter().enumerate() {
+                let idx = cursor + i;
                 let mut b = b0;
                 if src_rem_bits != 0 && idx + 1 == src_stride {
                     b &= src_mask;
@@ -110,8 +133,7 @@ fn build_shifted_pattern(pattern: &Bitmap) -> ShiftedPattern {
     });
 
     let mut data = vec![0u8; total_size];
-    for shift in 0..8 {
-        let info = &shifts[shift];
+    for (shift, info) in shifts.iter().enumerate() {
         fill_shifted_rows(
             pattern,
             shift,
