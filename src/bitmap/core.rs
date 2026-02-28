@@ -163,6 +163,9 @@ impl Bitmap {
     }
 
     /// Return the byte offset for the start of the given row without bounds checks.
+    ///
+    /// # Safety
+    /// Caller must ensure `y < self.height`.
     #[inline(always)]
     pub unsafe fn get_row_start_index_unchecked(&self, y: usize) -> usize {
         debug_assert!(y < self.height);
@@ -171,7 +174,8 @@ impl Bitmap {
 
     /// Return the pixel value at `(x, row_start_index)` without bounds checks.
     ///
-    /// Caller must ensure `x < width` and `row_start_index` is valid for `y < height`.
+    /// # Safety
+    /// Caller must ensure `x < self.width` and `row_start_index + (x >> 3) < self.data.len()`.
     #[inline(always)]
     pub unsafe fn get_pixel_at_index_unchecked(&self, row_start_index: usize, x: usize) -> u8 {
         debug_assert!(x < self.width);
@@ -182,7 +186,8 @@ impl Bitmap {
 
     /// Set the pixel at `(x, row_start_index)` without bounds checks.
     ///
-    /// Caller must ensure `x < width` and `row_start_index` is valid for `y < height`.
+    /// # Safety
+    /// Caller must ensure `x < self.width` and `row_start_index + (x >> 3) < self.data.len()`.
     #[inline(always)]
     pub unsafe fn set_pixel_at_index_unchecked(
         &mut self,
@@ -436,6 +441,7 @@ impl Bitmap {
     }
 
     #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
     fn combine_row_op<F>(
         &mut self,
         dst_start: usize,
