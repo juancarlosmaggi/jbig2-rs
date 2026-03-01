@@ -1,6 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use jbig2_rs::arithmetic::contexts::DecodingContext;
-use jbig2_rs::common::error::Jbig2Error;
 use jbig2_rs::decoders::generic::{DecodeBitmapParams, decode_bitmap};
 
 fn bench_generic_decode_template0_y0(c: &mut Criterion) {

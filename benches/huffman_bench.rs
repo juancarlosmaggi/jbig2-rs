@@ -50,7 +50,7 @@ fn bench_huffman_decode_zeros(c: &mut Criterion) {
     c.bench_function("huffman_decode_table_1_zeros", |b| {
         b.iter(|| {
             let mut reader = Reader::new(black_box(&data), 0, data.len());
-            while let Ok(_) = table.decode_entry(&mut reader) {
+            while table.decode_entry(&mut reader).is_ok() {
                 if reader.get_position() >= data_len - 1 {
                     break;
                 }
@@ -62,13 +62,13 @@ fn bench_huffman_decode_zeros(c: &mut Criterion) {
 fn bench_huffman_decode_mixed(c: &mut Criterion) {
     let table = get_standard_table(1).unwrap();
     let data_len = 10000;
-    let pattern = vec![0xAA, 0x55, 0xFF, 0x00, 0x12, 0x34];
+    let pattern = [0xAA, 0x55, 0xFF, 0x00, 0x12, 0x34];
     let data: Vec<u8> = pattern.iter().cycle().take(data_len).cloned().collect();
 
     c.bench_function("huffman_decode_table_1_mixed", |b| {
         b.iter(|| {
             let mut reader = Reader::new(black_box(&data), 0, data.len());
-            while let Ok(_) = table.decode_entry(&mut reader) {
+            while table.decode_entry(&mut reader).is_ok() {
                 if reader.get_position() >= data_len - 1 {
                     break;
                 }
@@ -81,13 +81,13 @@ fn bench_huffman_decode_table_10_mixed(c: &mut Criterion) {
     let lines = get_table_lines();
     let table = HuffmanTable::new(lines, true);
     let data_len = 10000;
-    let pattern = vec![0xAA, 0x55, 0xFF, 0x00, 0x12, 0x34, 0x9A, 0xBC];
+    let pattern = [0xAA, 0x55, 0xFF, 0x00, 0x12, 0x34, 0x9A, 0xBC];
     let data: Vec<u8> = pattern.iter().cycle().take(data_len).cloned().collect();
 
     c.bench_function("huffman_decode_table_10_mixed", |b| {
         b.iter(|| {
             let mut reader = Reader::new(black_box(&data), 0, data.len());
-            while let Ok(_) = table.decode_entry(&mut reader) {
+            while table.decode_entry(&mut reader).is_ok() {
                 if reader.get_position() >= data_len - 1 {
                     break;
                 }
