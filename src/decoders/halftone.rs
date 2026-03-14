@@ -4,15 +4,15 @@ use crate::bitmap::utils as bitmap_utils;
 use crate::common::error::Jbig2Error;
 use crate::decoders::generic::{DecodeBitmapParams, decode_bitmap};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 const SHIFTED_PATTERN_CACHE_LIMIT: usize = 32;
 
 thread_local! {
-    static SHIFTED_PATTERN_CACHE: RefCell<HashMap<u64, Arc<Vec<ShiftedPattern>>>> =
-        RefCell::new(HashMap::new());
+    static SHIFTED_PATTERN_CACHE: RefCell<(HashMap<u64, Arc<Vec<ShiftedPattern>>>, VecDeque<u64>)> =
+        RefCell::new((HashMap::new(), VecDeque::with_capacity(SHIFTED_PATTERN_CACHE_LIMIT)));
 }
 
 struct ShiftedRows {
@@ -224,16 +224,20 @@ fn compute_patterns_hash(patterns: &[Bitmap]) -> u64 {
 
 fn get_shifted_patterns(patterns: &[Bitmap]) -> Arc<Vec<ShiftedPattern>> {
     let hash = compute_patterns_hash(patterns);
-    SHIFTED_PATTERN_CACHE.with(|cache| {
-        let mut cache = cache.borrow_mut();
+    SHIFTED_PATTERN_CACHE.with(|cache_tuple| {
+        let mut tuple = cache_tuple.borrow_mut();
+        let (ref mut cache, ref mut queue) = *tuple;
         if let Some(cached) = cache.get(&hash) {
             return Arc::clone(cached);
         }
         let shifted = build_shifted_patterns(patterns);
         if cache.len() >= SHIFTED_PATTERN_CACHE_LIMIT {
-            cache.clear();
+            if let Some(oldest_hash) = queue.pop_front() {
+                cache.remove(&oldest_hash);
+            }
         }
         cache.insert(hash, Arc::clone(&shifted));
+        queue.push_back(hash);
         shifted
     })
 }
