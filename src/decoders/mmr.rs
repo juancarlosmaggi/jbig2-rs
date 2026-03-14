@@ -22,6 +22,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         }
     }
 
+    #[inline]
     fn read_bit(&mut self) -> Result<u8, Jbig2Error> {
         self.reader.read_bit()
     }
@@ -259,6 +260,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         Err(Jbig2Error::new("no valid MMR mode code"))
     }
 
+    #[inline]
     fn consume_eofb_marker(&mut self) -> bool {
         let saved_pos = self.reader.get_position();
         let saved_shift = self.reader.get_shift();
@@ -287,6 +289,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         }
     }
 
+    #[inline]
     fn find_changing_element(&self, line: &[u8], pos: i32, width: usize) -> usize {
         if width == 0 {
             return 0;
@@ -389,6 +392,7 @@ impl<'a> CCITTFaxDecoder<'a> {
         width
     }
 
+    #[inline]
     fn find_changing_element_of_color(
         &self,
         line: &[u8],
