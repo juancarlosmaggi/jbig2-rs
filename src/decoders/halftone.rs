@@ -262,15 +262,13 @@ unsafe fn or_row_bytes_ptr(dst: *mut u8, src: *const u8, len: usize) {
 fn place_halftone_pattern<const INSIDE: bool>(
     params: &mut RenderHalftoneGridParams<'_>,
     pattern_index: usize,
-    x: i64,
-    y: i64,
+    region_x: i64,
+    region_y: i64,
 ) {
     let shifted_pattern = &params.shifted_patterns[pattern_index];
     if !shifted_pattern.has_black {
         return;
     }
-    let region_x = x >> 8;
-    let region_y = y >> 8;
     let inside = if INSIDE {
         true
     } else {
@@ -452,14 +450,14 @@ fn render_halftone_grid_b0<const INSIDE: bool>(
         let mut y = base_y;
         for _ in 0..full_bytes {
             for _ in 0..8 {
-                place_halftone_pattern::<INSIDE>(&mut params, 0, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, 0, x >> 8, y >> 8);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
         }
         if tail_bits != 0 {
             for _ in 0..tail_bits {
-                place_halftone_pattern::<INSIDE>(&mut params, 0, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, 0, x >> 8, y >> 8);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
@@ -491,7 +489,7 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
@@ -504,7 +502,7 @@ fn render_halftone_grid_b1<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
@@ -540,7 +538,7 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 p1 <<= 1;
                 x += params.grid_vector_x;
@@ -555,7 +553,7 @@ fn render_halftone_grid_b2<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 p1 <<= 1;
                 x += params.grid_vector_x;
@@ -594,7 +592,7 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -611,7 +609,7 @@ fn render_halftone_grid_b3<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -654,7 +652,7 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -674,7 +672,7 @@ fn render_halftone_grid_b4<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 p0 <<= 1;
                 p1 <<= 1;
                 p2 <<= 1;
@@ -727,7 +725,7 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
@@ -751,7 +749,7 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
-                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x, y);
+                place_halftone_pattern::<INSIDE>(&mut params, pattern_index, x >> 8, y >> 8);
                 x += params.grid_vector_x;
                 y -= params.grid_vector_y;
             }
