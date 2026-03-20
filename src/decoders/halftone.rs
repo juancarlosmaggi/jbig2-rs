@@ -10,8 +10,11 @@ use std::sync::Arc;
 
 const SHIFTED_PATTERN_CACHE_LIMIT: usize = 32;
 
+type ShiftedPatternMap = HashMap<u64, Arc<Vec<ShiftedPattern>>>;
+type ShiftedPatternCache = (ShiftedPatternMap, VecDeque<u64>);
+
 thread_local! {
-    static SHIFTED_PATTERN_CACHE: RefCell<(HashMap<u64, Arc<Vec<ShiftedPattern>>>, VecDeque<u64>)> =
+    static SHIFTED_PATTERN_CACHE: RefCell<ShiftedPatternCache> =
         RefCell::new((HashMap::new(), VecDeque::with_capacity(SHIFTED_PATTERN_CACHE_LIMIT)));
 }
 
