@@ -853,15 +853,16 @@ pub(crate) fn decode_halftone_region_with_shifted(
                 let base_y = grid_offset_y + mg as i64 * grid_vector_x;
                 let mut x = base_x;
                 let mut y = base_y;
+                let row_start = unsafe { skip.get_row_start_index_unchecked(mg) };
                 for ng in 0..params.grid_width {
                     let region_x = x >> 8;
                     let region_y = y >> 8;
-                    let outside = region_x + pattern_width <= 0
-                        || region_x >= region_width
-                        || region_y + pattern_height <= 0
-                        || region_y >= region_height;
-                    if outside {
-                        skip.set_pixel(ng, mg, 1);
+                    let inside = region_x > -pattern_width
+                        && region_x < region_width
+                        && region_y > -pattern_height
+                        && region_y < region_height;
+                    if !inside {
+                        unsafe { skip.set_pixel_at_index_unchecked(row_start, ng, 1) };
                     }
                     x += grid_vector_x;
                     y -= grid_vector_y;
