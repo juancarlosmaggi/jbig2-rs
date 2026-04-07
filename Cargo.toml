@@ -62,3 +62,6 @@ harness = false
 [[bench]]
 name = "generic_no_skip_bench"
 harness = false
+[[bench]]
+name = "skip_loop_bench"
+harness = false
