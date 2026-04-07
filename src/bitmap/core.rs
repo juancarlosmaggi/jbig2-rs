@@ -659,22 +659,106 @@ mod tests {
             return;
         }
 
-        for dst_y in start_y..end_y {
+        let mut dst_y = start_y;
+        while dst_y < end_y {
             let src_y = (dst_y as isize - y) as usize;
-            for dst_x in start_x..end_x {
-                let src_x = (dst_x as isize - x) as usize;
-                let src = other.get_pixel(src_x, src_y);
-                let dst_val = dst.get_pixel(dst_x, dst_y);
-                let value = match operator {
-                    0 => dst_val | src,
-                    1 => dst_val & src,
-                    2 => dst_val ^ src,
-                    3 => (dst_val ^ src) ^ 1,
-                    4 => src,
-                    _ => dst_val | src,
-                };
-                dst.set_pixel(dst_x, dst_y, value);
+
+            // Re-implement bit level access using precalculated row indices to avoid multiplication
+            let dst_row_idx = unsafe { dst.get_row_start_index_unchecked(dst_y) };
+            let src_row_idx = unsafe { other.get_row_start_index_unchecked(src_y) };
+
+            let mut dst_x = start_x;
+
+            // Word-sized (64-bit) chunk processing where alignment allows it
+            // We check if both the destination and source are byte-aligned
+            if (dst_x % 8 == 0) && (((dst_x as isize - x) as usize % 8) == 0) {
+                let mut remaining_bits = end_x - dst_x;
+
+                // Process in 64-bit (8-byte) chunks
+                while remaining_bits >= 64 {
+                    let src_x = (dst_x as isize - x) as usize;
+                    let dst_byte_idx = dst_row_idx + (dst_x / 8);
+                    let src_byte_idx = src_row_idx + (src_x / 8);
+
+                    let dst_ptr = dst.data.as_mut_ptr();
+                    let src_ptr = other.data.as_ptr();
+
+                    unsafe {
+                        let dst_chunk_ptr = dst_ptr.add(dst_byte_idx) as *mut u64;
+                        let src_chunk_ptr = src_ptr.add(src_byte_idx) as *const u64;
+
+                        let dst_val = std::ptr::read_unaligned(dst_chunk_ptr);
+                        let src_val = std::ptr::read_unaligned(src_chunk_ptr);
+
+                        let result = match operator {
+                            0 => dst_val | src_val,
+                            1 => dst_val & src_val,
+                            2 => dst_val ^ src_val,
+                            3 => !(dst_val ^ src_val),
+                            4 => src_val,
+                            _ => dst_val | src_val,
+                        };
+
+                        std::ptr::write_unaligned(dst_chunk_ptr, result);
+                    }
+
+                    dst_x += 64;
+                    remaining_bits -= 64;
+                }
+
+                // Process in 8-bit (1-byte) chunks
+                while remaining_bits >= 8 {
+                    let src_x = (dst_x as isize - x) as usize;
+                    let dst_byte_idx = dst_row_idx + (dst_x / 8);
+                    let src_byte_idx = src_row_idx + (src_x / 8);
+
+                    let src_val = other.data[src_byte_idx];
+                    let dst_val = dst.data[dst_byte_idx];
+
+                    let result = match operator {
+                        0 => dst_val | src_val,
+                        1 => dst_val & src_val,
+                        2 => dst_val ^ src_val,
+                        3 => !(dst_val ^ src_val),
+                        4 => src_val,
+                        _ => dst_val | src_val,
+                    };
+
+                    dst.data[dst_byte_idx] = result;
+
+                    dst_x += 8;
+                    remaining_bits -= 8;
+                }
             }
+
+            // Fallback to bit-by-bit for unaligned parts or remaining bits
+            while dst_x < end_x {
+                let src_x = (dst_x as isize - x) as usize;
+
+                let src_byte = other.data[src_row_idx + (src_x >> 3)];
+                let src_bit = (src_byte >> (7 - (src_x & 7))) & 1;
+
+                let dst_byte = dst.data[dst_row_idx + (dst_x >> 3)];
+                let dst_bit = (dst_byte >> (7 - (dst_x & 7))) & 1;
+
+                let value = match operator {
+                    0 => dst_bit | src_bit,
+                    1 => dst_bit & src_bit,
+                    2 => dst_bit ^ src_bit,
+                    3 => (dst_bit ^ src_bit) ^ 1,
+                    4 => src_bit,
+                    _ => dst_bit | src_bit,
+                };
+
+                if value != 0 {
+                    dst.data[dst_row_idx + (dst_x >> 3)] |= 1 << (7 - (dst_x & 7));
+                } else {
+                    dst.data[dst_row_idx + (dst_x >> 3)] &= !(1 << (7 - (dst_x & 7)));
+                }
+
+                dst_x += 1;
+            }
+            dst_y += 1;
         }
     }
 
