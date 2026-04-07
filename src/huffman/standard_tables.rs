@@ -1,12 +1,30 @@
 use super::{HuffmanLine, HuffmanTable};
 use crate::common::error::Jbig2Error;
+use std::sync::OnceLock;
+
+static STANDARD_TABLES: [OnceLock<HuffmanTable>; 16] = [
+    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
+    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
+    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
+    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
+];
 
 /// Return one of the predefined Huffman tables by id.
 pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
     if number == 0 || number > 15 {
         return Err(Jbig2Error::new("invalid standard Huffman table number"));
     }
-    let lines = match number {
+
+    let table = STANDARD_TABLES[number as usize].get_or_init(|| {
+        let lines = get_standard_table_definition(number);
+        HuffmanTable::new(lines, true)
+    });
+
+    Ok(table.clone())
+}
+
+fn get_standard_table_definition(number: u32) -> Vec<HuffmanLine> {
+    match number {
         1 => vec![
             HuffmanLine::new(vec![0, 1, 4, 0x0]),
             HuffmanLine::new(vec![16, 2, 8, 0x2]),
@@ -221,12 +239,6 @@ pub fn get_standard_table(number: u32) -> Result<HuffmanTable, Jbig2Error> {
             HuffmanLine::new(vec![-25, 7, 32, 0x7e, 1]), // lower
             HuffmanLine::new(vec![25, 7, 32, 0x7f]),     // upper
         ],
-        _ => {
-            return Err(Jbig2Error::new(&format!(
-                "standard table B.{} does not exist",
-                number
-            )));
-        }
-    };
-    Ok(HuffmanTable::new(lines, true))
+        _ => unreachable!(),
+    }
 }
