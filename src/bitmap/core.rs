@@ -671,7 +671,7 @@ mod tests {
 
             // Word-sized (64-bit) chunk processing where alignment allows it
             // We check if both the destination and source are byte-aligned
-            if (dst_x % 8 == 0) && (((dst_x as isize - x) as usize % 8) == 0) {
+            if dst_x.is_multiple_of(8) && ((dst_x as isize - x) as usize).is_multiple_of(8) {
                 let mut remaining_bits = end_x - dst_x;
 
                 // Process in 64-bit (8-byte) chunks
