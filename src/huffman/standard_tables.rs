@@ -3,10 +3,22 @@ use crate::common::error::Jbig2Error;
 use std::sync::OnceLock;
 
 static STANDARD_TABLES: [OnceLock<HuffmanTable>; 16] = [
-    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
-    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
-    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
-    OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
+    OnceLock::new(),
 ];
 
 /// Return one of the predefined Huffman tables by id.
