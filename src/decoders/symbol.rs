@@ -22,7 +22,7 @@ pub struct SymbolDictionaryParams<'a> {
     pub template_index: usize,
     pub at: Vec<(i8, i8)>,
     pub refinement_template_index: usize,
-    pub refinement_at: Vec<(i8, i8)>,
+    pub refinement_at: &'a [(i8, i8)],
     pub huffman_tables: Option<SymbolDictionaryHuffmanTables>,
 }
 
@@ -230,7 +230,7 @@ pub fn decode_symbol_dictionary(
                                 offset_x: rdx,
                                 offset_y: rdy,
                                 prediction: false,
-                                at: params.refinement_at.as_slice(),
+                                at: params.refinement_at,
                             },
                             &mut temp_context,
                         )?
@@ -244,7 +244,7 @@ pub fn decode_symbol_dictionary(
                                 offset_x: rdx,
                                 offset_y: rdy,
                                 prediction: false,
-                                at: params.refinement_at.as_slice(),
+                                at: params.refinement_at,
                             },
                             decoding_context,
                         )?
@@ -269,7 +269,7 @@ pub fn decode_symbol_dictionary(
                         total_symbols,
                         refinement: true,
                         refinement_template_index: params.refinement_template_index,
-                        refinement_at: params.refinement_at.clone(),
+                        refinement_at: params.refinement_at,
                         huffman,
                     };
                     let bitmap = decode_aggregate_symbol(

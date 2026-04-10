@@ -32,7 +32,7 @@ pub struct TextRegionParams<'a> {
     pub log_strip_size: usize,
     pub huffman_tables: Option<TextRegionHuffmanTables>,
     pub refinement_template_index: usize,
-    pub refinement_at: Vec<(i8, i8)>,
+    pub refinement_at: &'a [(i8, i8)],
 }
 
 /// Decode a text region and return the composed bitmap.
@@ -247,7 +247,7 @@ pub fn decode_text_region(
                                 offset_x: (rdw >> 1) + rdx,
                                 offset_y: (rdh >> 1) + rdy,
                                 prediction: false,
-                                at: params.refinement_at.as_slice(),
+                                at: params.refinement_at,
                             },
                             &mut temp_context,
                         )?
@@ -261,7 +261,7 @@ pub fn decode_text_region(
                                 offset_x: (rdw >> 1) + rdx,
                                 offset_y: (rdh >> 1) + rdy,
                                 prediction: false,
-                                at: params.refinement_at.as_slice(),
+                                at: params.refinement_at,
                             },
                             decoding_context,
                         )?

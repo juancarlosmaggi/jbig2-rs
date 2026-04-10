@@ -28,7 +28,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);
@@ -60,7 +60,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);
@@ -91,7 +91,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);
@@ -122,7 +122,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);
@@ -153,7 +153,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);
@@ -185,7 +185,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);
@@ -217,7 +217,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);
@@ -250,7 +250,7 @@ mod tests {
             log_strip_size: 0,
             huffman_tables: None,
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
         };
 
         let result = decode_text_region(&params, &mut context, None);

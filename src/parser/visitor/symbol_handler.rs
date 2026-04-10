@@ -72,7 +72,7 @@ pub(super) fn on_symbol_dictionary(
         template_index: template,
         at,
         refinement_template_index: refinement_template,
-        refinement_at,
+        refinement_at: &refinement_at,
         huffman_tables,
     };
 

@@ -8,7 +8,7 @@ use crate::huffman::{TextRegionHuffmanTables, get_aggregate_symbol_huffman_table
 
 /// Parameters for decoding an aggregate symbol bitmap.
 #[derive(Clone)]
-pub struct AggregateSymbolParams {
+pub struct AggregateSymbolParams<'a> {
     pub current_width: i32,
     pub current_height: i32,
     pub number_of_instances: i32,
@@ -16,7 +16,7 @@ pub struct AggregateSymbolParams {
     pub total_symbols: usize,
     pub refinement: bool,
     pub refinement_template_index: usize,
-    pub refinement_at: Vec<(i8, i8)>,
+    pub refinement_at: &'a [(i8, i8)],
     pub huffman: bool,
 }
 
@@ -85,7 +85,7 @@ pub fn split_collective_bitmap(
 
 /// Build text-region parameters for aggregate symbol decoding.
 pub fn create_aggregate_text_params<'a>(
-    params: &AggregateSymbolParams,
+    params: &AggregateSymbolParams<'a>,
     input_symbols: Vec<&'a Bitmap>,
     huffman_tables: Option<TextRegionHuffmanTables>,
 ) -> TextRegionParams<'a> {
@@ -107,13 +107,13 @@ pub fn create_aggregate_text_params<'a>(
         log_strip_size: 0,
         huffman_tables,
         refinement_template_index: params.refinement_template_index,
-        refinement_at: params.refinement_at.clone(),
+        refinement_at: params.refinement_at,
     }
 }
 
 /// Decode an aggregate symbol bitmap using text-region decoding.
 pub fn decode_aggregate_symbol(
-    params: &AggregateSymbolParams,
+    params: &AggregateSymbolParams<'_>,
     existing_symbols: &[&Bitmap],
     new_symbols: &[Bitmap],
     decoding_context: &mut DecodingContext<'_>,
