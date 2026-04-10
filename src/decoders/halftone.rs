@@ -723,12 +723,19 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
             {
                 plane_bytes[j] = plane.data[row_offset + byte_index];
             }
-            for shift in (0..8).rev() {
-                let mut pattern_index = 0usize;
-                for (j, &byte_val) in plane_bytes.iter().enumerate() {
-                    let bit = (byte_val >> shift) & 1;
-                    pattern_index |= (bit as usize) << j;
-                }
+            let mut pattern_indices = [0usize; 8];
+            for (j, &byte_val) in plane_bytes.iter().enumerate() {
+                let bv = byte_val as usize;
+                pattern_indices[0] |= ((bv >> 7) & 1) << j;
+                pattern_indices[1] |= ((bv >> 6) & 1) << j;
+                pattern_indices[2] |= ((bv >> 5) & 1) << j;
+                pattern_indices[3] |= ((bv >> 4) & 1) << j;
+                pattern_indices[4] |= ((bv >> 3) & 1) << j;
+                pattern_indices[5] |= ((bv >> 2) & 1) << j;
+                pattern_indices[6] |= ((bv >> 1) & 1) << j;
+                pattern_indices[7] |= (bv & 1) << j;
+            }
+            for mut pattern_index in pattern_indices {
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
@@ -747,12 +754,19 @@ fn render_halftone_grid_bn<const INSIDE: bool, const CLAMP: bool>(
             {
                 plane_bytes[j] = plane.data[row_offset + byte_index];
             }
-            for shift in (0..8).rev().take(tail_bits) {
-                let mut pattern_index = 0usize;
-                for (j, &byte_val) in plane_bytes.iter().enumerate() {
-                    let bit = (byte_val >> shift) & 1;
-                    pattern_index |= (bit as usize) << j;
-                }
+            let mut pattern_indices = [0usize; 8];
+            for (j, &byte_val) in plane_bytes.iter().enumerate() {
+                let bv = byte_val as usize;
+                pattern_indices[0] |= ((bv >> 7) & 1) << j;
+                pattern_indices[1] |= ((bv >> 6) & 1) << j;
+                pattern_indices[2] |= ((bv >> 5) & 1) << j;
+                pattern_indices[3] |= ((bv >> 4) & 1) << j;
+                pattern_indices[4] |= ((bv >> 3) & 1) << j;
+                pattern_indices[5] |= ((bv >> 2) & 1) << j;
+                pattern_indices[6] |= ((bv >> 1) & 1) << j;
+                pattern_indices[7] |= (bv & 1) << j;
+            }
+            for mut pattern_index in pattern_indices.into_iter().take(tail_bits) {
                 if CLAMP && pattern_index > max_pattern_index {
                     pattern_index = max_pattern_index;
                 }
