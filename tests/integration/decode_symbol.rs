@@ -17,7 +17,7 @@ mod tests {
             template_index: 0,
             at: vec![],
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
             huffman_tables: None,
         };
 
@@ -39,7 +39,7 @@ mod tests {
             template_index: 99,
             at: vec![],
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
             huffman_tables: None,
         };
 
@@ -61,7 +61,7 @@ mod tests {
             template_index: 0,
             at: vec![],
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
             huffman_tables: None,
         };
 
@@ -83,7 +83,7 @@ mod tests {
             template_index: 0,
             at: vec![],
             refinement_template_index: 0,
-            refinement_at: vec![],
+            refinement_at: &[],
             huffman_tables: None,
         };
 

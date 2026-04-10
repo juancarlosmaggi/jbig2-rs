@@ -162,7 +162,7 @@ pub(super) fn on_immediate_text_region(
         log_strip_size,
         huffman_tables,
         refinement_template_index: refinement_template,
-        refinement_at,
+        refinement_at: &refinement_at,
     };
 
     let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
@@ -316,7 +316,7 @@ pub(super) fn on_intermediate_text_region(
         log_strip_size,
         huffman_tables,
         refinement_template_index: refinement_template,
-        refinement_at,
+        refinement_at: &refinement_at,
     };
 
     let bitmap = decode_text_region(&params, &mut decoding_context, huffman_reader.as_mut())?;
