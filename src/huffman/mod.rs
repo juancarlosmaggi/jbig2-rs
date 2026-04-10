@@ -15,6 +15,7 @@ pub use table_selectors::{
 // Core Huffman types and decoding logic.
 use crate::common::error::Jbig2Error;
 use crate::common::reader::Reader;
+use std::sync::Arc;
 
 /// Represents a single line in a Huffman table definition.
 #[derive(Clone)]
@@ -74,7 +75,7 @@ pub enum HuffmanNode {
 /// Huffman table with a decoded binary tree.
 #[derive(Clone)]
 pub struct HuffmanTable {
-    pub nodes: Vec<HuffmanNode>,
+    pub nodes: Arc<[HuffmanNode]>,
 }
 
 impl HuffmanTable {
@@ -98,7 +99,9 @@ impl HuffmanTable {
             }
         }
 
-        HuffmanTable { nodes }
+        HuffmanTable {
+            nodes: Arc::from(nodes),
+        }
     }
 
     fn add_line(nodes: &mut Vec<HuffmanNode>, line: &HuffmanLine) {
