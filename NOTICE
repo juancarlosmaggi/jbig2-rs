@@ -1,0 +1,8 @@
+jbig2-rs
+
+Pure Rust JBIG2 decoder for images and PDFs.
+
+Copyright (c) 2026 jbig2-rs contributors.
+
+Licensed under either the MIT license or the Apache License, Version 2.0, at
+your option. See LICENSE-MIT and LICENSE-APACHE in this distribution.

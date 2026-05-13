@@ -104,13 +104,18 @@ pub mod bitmap;
 pub mod common;
 pub mod decoders;
 pub mod document;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 pub mod huffman;
 pub mod parser;
+pub mod portable;
 pub mod probe;
 
-pub use common::error::Jbig2Error;
+pub use common::error::{Jbig2Error, Jbig2ErrorCode};
+pub use common::options::{DecodeLimits, DecodeOptions};
 pub use common::profile::DecodeProfile;
 pub use document::{Jbig2Chunk, Jbig2Document, Jbig2Image};
+pub use portable::{BitmapPolarity, DecodedPage, decode_first_page, decode_page};
 pub use probe::probe_stream_consumed_bytes;
 
 #[cfg(test)]

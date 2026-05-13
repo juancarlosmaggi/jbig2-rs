@@ -101,6 +101,7 @@ pub fn process_segment<'a>(
     }
     match header.segment_type {
         0 => {
+            require_payload(start, end, 10)?;
             let dictionary_flags = read_u16(data, start);
 
             // Decode dictionary flags and optional AT parameters.
@@ -124,6 +125,13 @@ pub fn process_segment<'a>(
             if sdrefagg && !sdrtemplate {
                 refinement_at_pixels = parse_at_parameters(data, offset, 2)?;
                 offset += 4; // 4 bytes for refinement AT
+            }
+
+            if offset + 8 > end {
+                return Err(
+                    Jbig2Error::insufficient_data(offset + 8 - start, end - start)
+                        .with_position(start),
+                );
             }
 
             // Read symbol counts after the variable-size header fields.
@@ -153,6 +161,7 @@ pub fn process_segment<'a>(
             visitor.on_symbol_dictionary(&params)?;
         }
         6 | 7 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 6)?;
             // Dispatch immediate text region parameters and payload.
             let params = parse_text_region_params(data, start);
 
@@ -167,6 +176,7 @@ pub fn process_segment<'a>(
             )?;
         }
         48 => {
+            require_payload(start, end, 19)?;
             // Parse page information and initialize the page state.
             let mut width = read_u32(data, start);
             let mut height = read_u32(data, start + 4);
@@ -216,9 +226,10 @@ pub fn process_segment<'a>(
                 height_unknown,
             };
 
-            visitor.on_page_information(info);
+            visitor.on_page_information(info)?;
         }
         16 => {
+            require_payload(start, end, 7)?;
             // Dispatch pattern dictionary parameters and payload.
             let params = parse_pattern_dictionary_params(data, start);
             visitor.on_pattern_dictionary(
@@ -234,6 +245,7 @@ pub fn process_segment<'a>(
             )?;
         }
         22 | 23 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21)?;
             // Dispatch immediate halftone region parameters and payload.
             let params = parse_halftone_region_params(data, start);
             visitor.on_immediate_halftone_region(
@@ -256,12 +268,14 @@ pub fn process_segment<'a>(
             )?;
         }
         38 | 39 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1)?;
             // Dispatch immediate generic region payload.
             use super::parser::read_generic_region;
             let generic_region = read_generic_region(data, start)?;
             visitor.on_immediate_generic_region(&generic_region, data, start, end)?;
         }
         42 | 43 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1)?;
             // Dispatch immediate generic refinement region payload.
             let region_info = read_region_segment_information(data, start);
             visitor.on_immediate_generic_refinement_region(
@@ -273,6 +287,7 @@ pub fn process_segment<'a>(
             )?;
         }
         4 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 6)?;
             // Dispatch intermediate text region payload.
             let params = parse_text_region_params(data, start);
             visitor.on_intermediate_text_region(
@@ -287,6 +302,7 @@ pub fn process_segment<'a>(
             )?;
         }
         20 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21)?;
             // Dispatch intermediate halftone region payload.
             let params = parse_halftone_region_params(data, start);
             visitor.on_intermediate_halftone_region(
@@ -310,6 +326,7 @@ pub fn process_segment<'a>(
             )?;
         }
         36 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1)?;
             // Dispatch intermediate generic region payload.
             use super::parser::read_generic_region;
             let generic_region = read_generic_region(data, start)?;
@@ -323,6 +340,7 @@ pub fn process_segment<'a>(
             )?;
         }
         40 => {
+            require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 1)?;
             // Dispatch intermediate generic refinement region payload.
             let region_info = read_region_segment_information(data, start);
             visitor.on_intermediate_generic_refinement_region(
@@ -338,9 +356,10 @@ pub fn process_segment<'a>(
             // End-of-page marker does not carry payload.
         }
         50 => {
+            require_payload(start, end, 4)?;
             // End-of-stripe carries the stripe height.
             let height = read_u32(data, start) as usize;
-            visitor.on_end_of_stripe(height);
+            visitor.on_end_of_stripe(height)?;
         }
         51 => {
             // End-of-file marker does not carry payload.
@@ -356,6 +375,14 @@ pub fn process_segment<'a>(
             // Extension segments are currently ignored.
         }
         _ => {} // Unknown segment types are skipped.
+    }
+    Ok(())
+}
+
+fn require_payload(start: usize, end: usize, required: usize) -> Result<(), Jbig2Error> {
+    let available = end.saturating_sub(start);
+    if available < required {
+        return Err(Jbig2Error::insufficient_data(required, available).with_position(start));
     }
     Ok(())
 }

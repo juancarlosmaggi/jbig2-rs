@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         page.page_info.width, page.page_info.height
                     );
 
-                    let bitmap_data = page.to_image_data();
+                    let bitmap_data = page.packed_bitmap();
                     println!("  Bitmap size: {} bytes", bitmap_data.len());
                 }
             }

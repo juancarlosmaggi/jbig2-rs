@@ -81,6 +81,12 @@ pub enum Jbig2ErrorKind {
         position: usize,
         limit: usize,
     },
+    ResourceLimitExceeded {
+        resource: &'static str,
+        limit: usize,
+        actual: usize,
+    },
+    Cancelled,
     MissingResource {
         resource: String,
     },
@@ -94,6 +100,61 @@ pub enum Jbig2ErrorKind {
     Other {
         message: String,
     },
+}
+
+/// Stable numeric error codes for FFI and non-Rust callers.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Jbig2ErrorCode {
+    Other = 1,
+    InsufficientData = 2,
+    InvalidSegment = 3,
+    UnknownSegmentLength = 4,
+    InvalidFieldValue = 5,
+    InvalidDimensions = 6,
+    DimensionsTooLarge = 7,
+    InvalidTemplateIndex = 8,
+    InvalidCombinationOperator = 9,
+    InvalidReferenceCorner = 10,
+    MmrDecodingFailed = 11,
+    ArithmeticDecodingFailed = 12,
+    HuffmanDecodingFailed = 13,
+    InvalidRunLength = 14,
+    TooManySymbols = 15,
+    InfiniteLoopDetected = 16,
+    BufferOverrun = 17,
+    ResourceLimitExceeded = 18,
+    Cancelled = 19,
+    MissingResource = 20,
+    UnsupportedFeature = 21,
+}
+
+impl Jbig2ErrorCode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Other => "other",
+            Self::InsufficientData => "insufficient_data",
+            Self::InvalidSegment => "invalid_segment",
+            Self::UnknownSegmentLength => "unknown_segment_length",
+            Self::InvalidFieldValue => "invalid_field_value",
+            Self::InvalidDimensions => "invalid_dimensions",
+            Self::DimensionsTooLarge => "dimensions_too_large",
+            Self::InvalidTemplateIndex => "invalid_template_index",
+            Self::InvalidCombinationOperator => "invalid_combination_operator",
+            Self::InvalidReferenceCorner => "invalid_reference_corner",
+            Self::MmrDecodingFailed => "mmr_decoding_failed",
+            Self::ArithmeticDecodingFailed => "arithmetic_decoding_failed",
+            Self::HuffmanDecodingFailed => "huffman_decoding_failed",
+            Self::InvalidRunLength => "invalid_run_length",
+            Self::TooManySymbols => "too_many_symbols",
+            Self::InfiniteLoopDetected => "infinite_loop_detected",
+            Self::BufferOverrun => "buffer_overrun",
+            Self::ResourceLimitExceeded => "resource_limit_exceeded",
+            Self::Cancelled => "cancelled",
+            Self::MissingResource => "missing_resource",
+            Self::UnsupportedFeature => "unsupported_feature",
+        }
+    }
 }
 
 /// Primary error type used throughout the decoding pipeline.
@@ -243,6 +304,24 @@ impl Jbig2Error {
         }
     }
 
+    pub fn resource_limit_exceeded(resource: &'static str, limit: usize, actual: usize) -> Self {
+        Self {
+            kind: Jbig2ErrorKind::ResourceLimitExceeded {
+                resource,
+                limit,
+                actual,
+            },
+            context: None,
+        }
+    }
+
+    pub fn cancelled() -> Self {
+        Self {
+            kind: Jbig2ErrorKind::Cancelled,
+            context: None,
+        }
+    }
+
     pub fn missing_resource(resource: impl Into<String>) -> Self {
         Self {
             kind: Jbig2ErrorKind::MissingResource {
@@ -282,6 +361,37 @@ impl Jbig2Error {
             .get_or_insert_with(ErrorContext::default)
             .segment_number = Some(number);
         self
+    }
+
+    pub fn code(&self) -> Jbig2ErrorCode {
+        use Jbig2ErrorKind::*;
+        match &self.kind {
+            InsufficientData { .. } => Jbig2ErrorCode::InsufficientData,
+            InvalidSegment { .. } => Jbig2ErrorCode::InvalidSegment,
+            UnknownSegmentLength => Jbig2ErrorCode::UnknownSegmentLength,
+            InvalidFieldValue { .. } => Jbig2ErrorCode::InvalidFieldValue,
+            InvalidDimensions { .. } => Jbig2ErrorCode::InvalidDimensions,
+            DimensionsTooLarge { .. } => Jbig2ErrorCode::DimensionsTooLarge,
+            InvalidTemplateIndex { .. } => Jbig2ErrorCode::InvalidTemplateIndex,
+            InvalidCombinationOperator { .. } => Jbig2ErrorCode::InvalidCombinationOperator,
+            InvalidReferenceCorner { .. } => Jbig2ErrorCode::InvalidReferenceCorner,
+            MmrDecodingFailed { .. } => Jbig2ErrorCode::MmrDecodingFailed,
+            ArithmeticDecodingFailed { .. } => Jbig2ErrorCode::ArithmeticDecodingFailed,
+            HuffmanDecodingFailed { .. } => Jbig2ErrorCode::HuffmanDecodingFailed,
+            InvalidRunLength { .. } => Jbig2ErrorCode::InvalidRunLength,
+            TooManySymbols { .. } => Jbig2ErrorCode::TooManySymbols,
+            InfiniteLoopDetected { .. } => Jbig2ErrorCode::InfiniteLoopDetected,
+            BufferOverrun { .. } => Jbig2ErrorCode::BufferOverrun,
+            ResourceLimitExceeded { .. } => Jbig2ErrorCode::ResourceLimitExceeded,
+            Cancelled => Jbig2ErrorCode::Cancelled,
+            MissingResource { .. } => Jbig2ErrorCode::MissingResource,
+            UnsupportedFeature { .. } => Jbig2ErrorCode::UnsupportedFeature,
+            Other { .. } => Jbig2ErrorCode::Other,
+        }
+    }
+
+    pub fn code_name(&self) -> &'static str {
+        self.code().as_str()
     }
 }
 
@@ -355,6 +465,20 @@ impl fmt::Display for Jbig2Error {
                     "Buffer overrun at position {} (limit: {})",
                     position, limit
                 )?;
+            }
+            ResourceLimitExceeded {
+                resource,
+                limit,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Resource limit exceeded for {}: {} > {}",
+                    resource, actual, limit
+                )?;
+            }
+            Cancelled => {
+                write!(f, "Decode cancelled")?;
             }
             MissingResource { resource } => {
                 write!(f, "Missing required resource: {}", resource)?;

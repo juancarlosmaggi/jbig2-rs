@@ -6,17 +6,33 @@ license = "MIT OR Apache-2.0"
 description = "Pure Rust JBIG2 decoder for images and PDFs"
 keywords = ["jbig2", "image", "decoder", "pdf"]
 categories = ["multimedia::images", "encoding"]
+repository = "https://github.com/juancarlosmaggi/jbig2-rs"
+homepage = "https://github.com/juancarlosmaggi/jbig2-rs"
+documentation = "https://docs.rs/jbig2-rs"
+readme = "README.md"
+
+[features]
+default = []
+cli = ["dep:clap", "image-export"]
+ffi = []
+image-export = ["dep:image"]
 
 [dependencies]
-clap = { version = "4.0", features = ["derive"] }
-image = "0.25"
+clap = { version = "4.0", features = ["derive"], optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
 [lib]
 bench = false
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [[bin]]
 name = "jbig2-rs"
 bench = false
+required-features = ["cli"]
+
+[[example]]
+name = "process_test_resources"
+required-features = ["image-export"]
 
 [dev-dependencies]
 rstest = "0.18"

@@ -1,4 +1,5 @@
 use crate::common::error::Jbig2Error;
+use crate::common::options::DecodeOptions;
 use crate::common::profile::DecodeProfile;
 use crate::document::page::Jbig2Page;
 use crate::parser::segment::{process_segments, read_segments};
@@ -85,6 +86,38 @@ impl Jbig2Document {
     /// # Ok::<(), jbig2_rs::Jbig2Error>(())
     /// ```
     pub fn parse(data: &[u8]) -> Result<Self, Jbig2Error> {
+        Self::parse_with_options(data, &DecodeOptions::default())
+    }
+
+    /// Parse JBIG2 data with resource limits and cancellation.
+    pub fn parse_with_options(data: &[u8], options: &DecodeOptions) -> Result<Self, Jbig2Error> {
+        let (document, _) = Self::parse_impl(data, options, false)?;
+        Ok(document)
+    }
+
+    pub fn parse_with_profile(data: &[u8]) -> Result<(Self, DecodeProfile), Jbig2Error> {
+        let options = DecodeOptions::default().with_profile(true);
+        Self::parse_with_options_and_profile(data, &options)
+    }
+
+    /// Parse JBIG2 data with resource limits, cancellation, and profiling.
+    pub fn parse_with_options_and_profile(
+        data: &[u8],
+        options: &DecodeOptions,
+    ) -> Result<(Self, DecodeProfile), Jbig2Error> {
+        let (document, profile) = Self::parse_impl(data, options, true)?;
+        Ok((document, profile.unwrap_or_default()))
+    }
+
+    fn parse_impl(
+        data: &[u8],
+        options: &DecodeOptions,
+        collect_profile: bool,
+    ) -> Result<(Self, Option<DecodeProfile>), Jbig2Error> {
+        options.check_cancelled()?;
+        options.limits.check_input_bytes(data.len())?;
+
+        let total_start = Instant::now();
         let magic = b"\x97\x4a\x42\x32\x0d\x0a\x1a\x0a";
         let (has_file_header, sequential, num_pages, pos) =
             if data.len() >= 8 && &data[0..8] == magic {
@@ -119,6 +152,18 @@ impl Jbig2Document {
             };
         let data_start = pos;
 
+        options.limits.check_page_count(num_pages as usize)?;
+
+        let mut visitor = if collect_profile {
+            SimpleSegmentVisitor::new_with_profile_and_options(
+                options.limits.clone(),
+                options.cancel_flag(),
+            )
+        } else {
+            SimpleSegmentVisitor::new_with_options(options.limits.clone(), options.cancel_flag())
+        };
+
+        let read_start = collect_profile.then(Instant::now);
         let segments = read_segments(
             data,
             pos,
@@ -127,12 +172,16 @@ impl Jbig2Document {
             data_start,
             has_file_header,
         )?;
+        if let Some(read_start) = read_start {
+            visitor.record_profile("read_segments", read_start.elapsed());
+        }
+        options.check_cancelled()?;
+        options.limits.check_segment_count(segments.len())?;
         if segments.is_empty() {
             return Err(Jbig2Error::new("no segments found"));
         }
-        let mut visitor = SimpleSegmentVisitor::new();
         process_segments(&segments, &mut visitor)?;
-        visitor.finalize_current_page();
+        visitor.finalize_current_page()?;
 
         if visitor.pages.is_empty() {
             return Err(Jbig2Error::new(
@@ -147,81 +196,13 @@ impl Jbig2Document {
         {
             return Err(Jbig2Error::new("page count mismatch"));
         }
-        Ok(Jbig2Document {
-            pages: visitor.pages,
-        })
-    }
+        options.limits.check_page_count(visitor.pages.len())?;
 
-    pub fn parse_with_profile(data: &[u8]) -> Result<(Self, DecodeProfile), Jbig2Error> {
-        let total_start = Instant::now();
-        let magic = b"\x97\x4a\x42\x32\x0d\x0a\x1a\x0a";
-        let (has_file_header, sequential, num_pages, pos) =
-            if data.len() >= 8 && &data[0..8] == magic {
-                let mut pos = 8;
-                if data.len() <= pos {
-                    return Err(Jbig2Error::new("insufficient data for file header"));
-                }
-                let flags = data[pos];
-                pos += 1;
-                let sequential = (flags & 1) != 0;
-                let has_num_pages = (flags & 2) == 0;
-                if (flags & 0xfc) != 0 {
-                    return Err(Jbig2Error::new("invalid file header flags"));
-                }
-                let num_pages = if has_num_pages {
-                    if data.len() < pos + 4 {
-                        return Err(Jbig2Error::new("insufficient data for num_pages"));
-                    }
-                    let num_pages = ((data[pos] as u32) << 24)
-                        | ((data[pos + 1] as u32) << 16)
-                        | ((data[pos + 2] as u32) << 8)
-                        | (data[pos + 3] as u32);
-                    pos += 4;
-                    if num_pages == 0 { 1 } else { num_pages }
-                } else {
-                    1
-                };
-                (true, sequential, num_pages, pos)
-            } else {
-                (false, true, 1u32, 0)
-            };
-        let data_start = pos;
-
-        let mut visitor = SimpleSegmentVisitor::new_with_profile();
-        let read_start = Instant::now();
-        let segments = read_segments(
-            data,
-            pos,
-            data.len(),
-            sequential,
-            data_start,
-            has_file_header,
-        )?;
-        visitor.record_profile("read_segments", read_start.elapsed());
-        if segments.is_empty() {
-            return Err(Jbig2Error::new("no segments found"));
+        if collect_profile {
+            visitor.record_profile("total_decode", total_start.elapsed());
         }
+        let profile = visitor.take_profile();
 
-        process_segments(&segments, &mut visitor)?;
-
-        visitor.finalize_current_page();
-
-        if visitor.pages.is_empty() {
-            return Err(Jbig2Error::new(
-                "no pages created after processing segments",
-            ));
-        }
-
-        if has_file_header
-            && !sequential
-            && num_pages != 0
-            && num_pages as usize != visitor.pages.len()
-        {
-            return Err(Jbig2Error::new("page count mismatch"));
-        }
-
-        visitor.record_profile("total_decode", total_start.elapsed());
-        let profile = visitor.take_profile().unwrap_or_default();
         Ok((
             Jbig2Document {
                 pages: visitor.pages,
@@ -252,37 +233,63 @@ impl Jbig2Document {
     /// # Ok::<(), jbig2_rs::Jbig2Error>(())
     /// ```
     pub fn parse_chunks(chunks: &[Jbig2Chunk]) -> Result<Self, Jbig2Error> {
-        let mut visitor = SimpleSegmentVisitor::new();
-        for chunk in chunks {
-            if chunk.start > chunk.end || chunk.end > chunk.data.len() {
-                return Err(Jbig2Error::new("invalid chunk bounds"));
-            }
-            let segments = read_segments(
-                &chunk.data,
-                chunk.start,
-                chunk.end,
-                true,
-                chunk.start,
-                false,
-            )?; // Chunks assume sequential, no header
-            process_segments(&segments, &mut visitor)?;
-        }
-        visitor.finalize_current_page();
-        Ok(Jbig2Document {
-            pages: visitor.pages,
-        })
+        Self::parse_chunks_with_options(chunks, &DecodeOptions::default())
+    }
+
+    /// Parse multiple JBIG2 chunks with resource limits and cancellation.
+    pub fn parse_chunks_with_options(
+        chunks: &[Jbig2Chunk],
+        options: &DecodeOptions,
+    ) -> Result<Self, Jbig2Error> {
+        let (document, _) = Self::parse_chunks_impl(chunks, options, false)?;
+        Ok(document)
     }
 
     pub fn parse_chunks_with_profile(
         chunks: &[Jbig2Chunk],
     ) -> Result<(Self, DecodeProfile), Jbig2Error> {
-        let total_start = Instant::now();
-        let mut visitor = SimpleSegmentVisitor::new_with_profile();
-        for chunk in chunks {
+        let options = DecodeOptions::default().with_profile(true);
+        Self::parse_chunks_with_options_and_profile(chunks, &options)
+    }
+
+    /// Parse multiple chunks with resource limits, cancellation, and profiling.
+    pub fn parse_chunks_with_options_and_profile(
+        chunks: &[Jbig2Chunk],
+        options: &DecodeOptions,
+    ) -> Result<(Self, DecodeProfile), Jbig2Error> {
+        let (document, profile) = Self::parse_chunks_impl(chunks, options, true)?;
+        Ok((document, profile.unwrap_or_default()))
+    }
+
+    fn parse_chunks_impl(
+        chunks: &[Jbig2Chunk],
+        options: &DecodeOptions,
+        collect_profile: bool,
+    ) -> Result<(Self, Option<DecodeProfile>), Jbig2Error> {
+        options.check_cancelled()?;
+        let total_input_bytes = chunks.iter().try_fold(0usize, |total, chunk| {
             if chunk.start > chunk.end || chunk.end > chunk.data.len() {
                 return Err(Jbig2Error::new("invalid chunk bounds"));
             }
-            let read_start = Instant::now();
+            total.checked_add(chunk.end - chunk.start).ok_or_else(|| {
+                Jbig2Error::resource_limit_exceeded("input bytes", usize::MAX, usize::MAX)
+            })
+        })?;
+        options.limits.check_input_bytes(total_input_bytes)?;
+
+        let total_start = Instant::now();
+        let mut visitor = if collect_profile {
+            SimpleSegmentVisitor::new_with_profile_and_options(
+                options.limits.clone(),
+                options.cancel_flag(),
+            )
+        } else {
+            SimpleSegmentVisitor::new_with_options(options.limits.clone(), options.cancel_flag())
+        };
+        let mut segment_count = 0usize;
+        for chunk in chunks {
+            options.check_cancelled()?;
+            let read_start = collect_profile.then(Instant::now);
             let segments = read_segments(
                 &chunk.data,
                 chunk.start,
@@ -291,12 +298,21 @@ impl Jbig2Document {
                 chunk.start,
                 false,
             )?;
-            visitor.record_profile("read_segments", read_start.elapsed());
+            if let Some(read_start) = read_start {
+                visitor.record_profile("read_segments", read_start.elapsed());
+            }
+            segment_count = segment_count.checked_add(segments.len()).ok_or_else(|| {
+                Jbig2Error::resource_limit_exceeded("segment count", usize::MAX, usize::MAX)
+            })?;
+            options.limits.check_segment_count(segment_count)?;
             process_segments(&segments, &mut visitor)?;
         }
-        visitor.finalize_current_page();
-        visitor.record_profile("total_decode", total_start.elapsed());
-        let profile = visitor.take_profile().unwrap_or_default();
+        visitor.finalize_current_page()?;
+        options.limits.check_page_count(visitor.pages.len())?;
+        if collect_profile {
+            visitor.record_profile("total_decode", total_start.elapsed());
+        }
+        let profile = visitor.take_profile();
         Ok((
             Jbig2Document {
                 pages: visitor.pages,

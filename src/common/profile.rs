@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct DecodeProfile {
     stats: BTreeMap<&'static str, ProfileStat>,
     total: Duration,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 struct ProfileStat {
     total: Duration,
     count: u64,
