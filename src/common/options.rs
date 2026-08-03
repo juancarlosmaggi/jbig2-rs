@@ -108,23 +108,12 @@ pub(crate) fn packed_bitmap_len(width: usize, height: usize) -> Option<usize> {
 }
 
 /// Options for high-level embedding and bounded document decoding.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DecodeOptions {
     pub limits: DecodeLimits,
     pub page_index: usize,
     pub collect_profile: bool,
     cancel_flag: Option<Arc<AtomicBool>>,
-}
-
-impl Default for DecodeOptions {
-    fn default() -> Self {
-        Self {
-            limits: DecodeLimits::default(),
-            page_index: 0,
-            collect_profile: false,
-            cancel_flag: None,
-        }
-    }
 }
 
 impl DecodeOptions {
