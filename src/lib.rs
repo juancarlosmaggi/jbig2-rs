@@ -1,5 +1,3 @@
-#![allow(clippy::collapsible_if)]
-
 //! # jbig2-rs
 //!
 //! A pure Rust implementation of the JBIG2 image compression standard (ITU-T T.88).

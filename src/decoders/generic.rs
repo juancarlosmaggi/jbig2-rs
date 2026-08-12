@@ -699,13 +699,14 @@ fn decode_bitmap_no_skip(
                 let mut shift = template_length as i32 - 1;
                 for k in 0..template_length {
                     let j0 = j as i32 + template_x[k] as i32;
-                    if j0 >= 0 && j0 < width_i32 && template_is_valid[k] {
-                        if unsafe {
+                    if j0 >= 0
+                        && j0 < width_i32
+                        && template_is_valid[k]
+                        && unsafe {
                             bitmap.get_pixel_at_index_unchecked(template_offsets[k], j0 as usize)
                         } != 0
-                        {
-                            full |= 1 << shift;
-                        }
+                    {
+                        full |= 1 << shift;
                     }
                     shift -= 1;
                 }
@@ -728,13 +729,14 @@ fn decode_bitmap_no_skip(
             let mut shift = template_length as i32 - 1;
             for k in 0..template_length {
                 let j0 = j as i32 + template_x[k] as i32;
-                if j0 >= 0 && j0 < width_i32 && template_is_valid[k] {
-                    if unsafe {
+                if j0 >= 0
+                    && j0 < width_i32
+                    && template_is_valid[k]
+                    && unsafe {
                         bitmap.get_pixel_at_index_unchecked(template_offsets[k], j0 as usize)
                     } != 0
-                    {
-                        full |= 1 << shift;
-                    }
+                {
+                    full |= 1 << shift;
                 }
                 shift -= 1;
             }
@@ -961,13 +963,14 @@ fn decode_bitmap_with_skip(
                 let mut shift = template_length as i32 - 1;
                 for k in 0..template_length {
                     let j0 = j as i32 + template_x[k] as i32;
-                    if j0 >= 0 && j0 < width_i32 && template_is_valid[k] {
-                        if unsafe {
+                    if j0 >= 0
+                        && j0 < width_i32
+                        && template_is_valid[k]
+                        && unsafe {
                             bitmap.get_pixel_at_index_unchecked(template_offsets[k], j0 as usize)
                         } != 0
-                        {
-                            full |= 1 << shift;
-                        }
+                    {
+                        full |= 1 << shift;
                     }
                     shift -= 1;
                 }
@@ -996,13 +999,14 @@ fn decode_bitmap_with_skip(
             let mut shift = template_length as i32 - 1;
             for k in 0..template_length {
                 let j0 = j as i32 + template_x[k] as i32;
-                if j0 >= 0 && j0 < width_i32 && template_is_valid[k] {
-                    if unsafe {
+                if j0 >= 0
+                    && j0 < width_i32
+                    && template_is_valid[k]
+                    && unsafe {
                         bitmap.get_pixel_at_index_unchecked(template_offsets[k], j0 as usize)
                     } != 0
-                    {
-                        full |= 1 << shift;
-                    }
+                {
+                    full |= 1 << shift;
                 }
                 shift -= 1;
             }

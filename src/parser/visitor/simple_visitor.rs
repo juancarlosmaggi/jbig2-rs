@@ -1,3 +1,4 @@
+use super::{IntermediateResources, PageComposeTarget, SegmentSlice};
 use crate::bitmap::Bitmap;
 use crate::common::error::Jbig2Error;
 use crate::common::options::{DecodeLimits, check_cancelled, packed_bitmap_len};
@@ -5,7 +6,10 @@ use crate::common::profile::DecodeProfile;
 use crate::decoders::halftone::ShiftedPattern;
 use crate::document::{Jbig2Page, PageInfo};
 use crate::huffman::HuffmanTable;
-use crate::parser::segment::{GenericRegion, RegionInfo, SymbolDictionaryParams};
+use crate::parser::segment::{
+    GenericRegion, HalftoneRegionParams, PatternDictionaryParams, RegionInfo,
+    SymbolDictionaryParams, TextRegionParams,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
@@ -207,9 +211,10 @@ impl SimpleSegmentVisitor {
         self.check_cancelled()?;
         self.time_call("draw_bitmap", |this| {
             super::region_handlers::draw_bitmap(
-                &this.current_page_info,
-                &mut this.current_bitmap,
-                this.current_y,
+                PageComposeTarget {
+                    page_info: &mut this.current_page_info,
+                    bitmap: &mut this.current_bitmap,
+                },
                 region_info,
                 src_bitmap,
             )
@@ -228,13 +233,12 @@ impl SimpleSegmentVisitor {
         self.check_region_budget(&region.info, "immediate generic region")?;
         self.time_call("immediate_generic_region", |this| {
             super::region_handlers::on_immediate_generic_region(
-                &mut this.current_page_info,
-                &mut this.current_bitmap,
-                this.current_y,
+                PageComposeTarget {
+                    page_info: &mut this.current_page_info,
+                    bitmap: &mut this.current_bitmap,
+                },
                 region,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
             )
         })
     }
@@ -252,15 +256,14 @@ impl SimpleSegmentVisitor {
         self.check_region_budget(region_info, "immediate refinement region")?;
         self.time_call("immediate_generic_refinement_region", |this| {
             super::region_handlers::on_immediate_generic_refinement_region(
-                &mut this.current_page_info,
-                &mut this.current_bitmap,
-                this.current_y,
+                PageComposeTarget {
+                    page_info: &mut this.current_page_info,
+                    bitmap: &mut this.current_bitmap,
+                },
                 &this.bitmaps,
                 region_info,
                 referred_to,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
             )
         })
     }
@@ -282,55 +285,44 @@ impl SimpleSegmentVisitor {
         self.check_retained_budgets()
     }
 
-    #[allow(clippy::too_many_arguments)]
     /// Decode and draw an immediate text region.
     pub fn on_immediate_text_region(
         &mut self,
-        region_info: &RegionInfo,
-        text_region_segment_flags: u16,
-        number_of_symbol_instances: u32,
+        params: &TextRegionParams,
         referred_to: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
         self.check_cancelled()?;
-        self.check_region_budget(region_info, "immediate text region")?;
+        self.check_region_budget(&params.region_info, "immediate text region")?;
         self.time_call("immediate_text_region", |this| {
             super::text_handler::on_immediate_text_region(
-                &mut this.current_page_info,
-                &mut this.current_bitmap,
-                this.current_y,
+                PageComposeTarget {
+                    page_info: &mut this.current_page_info,
+                    bitmap: &mut this.current_bitmap,
+                },
                 &this.symbols,
                 &this.custom_tables,
-                region_info,
-                text_region_segment_flags,
-                number_of_symbol_instances,
+                params,
                 referred_to,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
             )
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     /// Decode and store a pattern dictionary segment.
     pub fn on_pattern_dictionary(
         &mut self,
-        mmr: bool,
-        pattern_width: usize,
-        pattern_height: usize,
-        max_pattern_index: usize,
-        template: usize,
+        params: &PatternDictionaryParams,
         current_segment: u32,
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
         self.check_cancelled()?;
-        let pattern_count = max_pattern_index.saturating_add(1);
-        let pattern_bytes = packed_bitmap_len(pattern_width, pattern_height)
+        let pattern_count = params.max_pattern_index.saturating_add(1);
+        let pattern_bytes = packed_bitmap_len(params.pattern_width, params.pattern_height)
             .and_then(|bytes| bytes.checked_mul(pattern_count))
             .ok_or_else(|| {
                 Jbig2Error::resource_limit_exceeded(
@@ -352,67 +344,37 @@ impl SimpleSegmentVisitor {
             super::pattern_handler::on_pattern_dictionary(
                 &mut this.patterns,
                 &mut this.pattern_shifts,
-                mmr,
-                pattern_width,
-                pattern_height,
-                max_pattern_index,
-                template,
+                params,
                 current_segment,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
             )
         })?;
         self.check_retained_budgets()
     }
 
-    #[allow(clippy::too_many_arguments)]
     /// Decode and draw an immediate halftone region.
     pub fn on_immediate_halftone_region(
         &mut self,
-        region_info: &RegionInfo,
-        mmr: bool,
-        template: usize,
-        enable_skip: bool,
-        combination_operator: usize,
-        default_pixel_value: u8,
-        grid_width: usize,
-        grid_height: usize,
-        grid_offset_x: i32,
-        grid_offset_y: i32,
-        grid_vector_x: i16,
-        grid_vector_y: i16,
+        params: &HalftoneRegionParams,
         referred_to: &[u32],
         data: &[u8],
         start: usize,
         end: usize,
     ) -> Result<(), Jbig2Error> {
         self.check_cancelled()?;
-        self.check_region_budget(region_info, "immediate halftone region")?;
-        self.check_bitmap_budget(grid_width, grid_height, "halftone grid")?;
+        self.check_region_budget(&params.region_info, "immediate halftone region")?;
+        self.check_bitmap_budget(params.grid_width, params.grid_height, "halftone grid")?;
         self.time_call("immediate_halftone_region", |this| {
             super::halftone_handler::on_immediate_halftone_region(
-                &mut this.current_page_info,
-                &mut this.current_bitmap,
-                this.current_y,
+                PageComposeTarget {
+                    page_info: &mut this.current_page_info,
+                    bitmap: &mut this.current_bitmap,
+                },
                 &this.patterns,
                 &this.pattern_shifts,
-                region_info,
-                mmr,
-                template,
-                enable_skip,
-                combination_operator,
-                default_pixel_value,
-                grid_width,
-                grid_height,
-                grid_offset_x,
-                grid_offset_y,
-                grid_vector_x,
-                grid_vector_y,
+                params,
                 referred_to,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
             )
         })
     }
@@ -450,15 +412,15 @@ impl SimpleSegmentVisitor {
         self.check_region_budget(&region.info, "intermediate generic region")?;
         self.time_call("intermediate_generic_region", |this| {
             super::region_handlers::on_intermediate_generic_region(
-                &this.symbols,
-                &this.patterns,
-                &this.custom_tables,
-                &mut this.bitmaps,
+                IntermediateResources {
+                    symbols: &this.symbols,
+                    patterns: &this.patterns,
+                    custom_tables: &this.custom_tables,
+                    bitmaps: &mut this.bitmaps,
+                },
                 region,
                 referred_to,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
                 segment_number,
             )
         })?;
@@ -482,22 +444,17 @@ impl SimpleSegmentVisitor {
                 &mut this.bitmaps,
                 region_info,
                 referred_to,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
                 segment_number,
             )
         })?;
         self.check_retained_budgets()
     }
 
-    #[allow(clippy::too_many_arguments)]
     /// Decode an intermediate text region (no page compositing).
     pub fn on_intermediate_text_region(
         &mut self,
-        region_info: &RegionInfo,
-        text_region_segment_flags: u16,
-        number_of_symbol_instances: u32,
+        params: &TextRegionParams,
         referred_to: &[u32],
         data: &[u8],
         start: usize,
@@ -505,42 +462,28 @@ impl SimpleSegmentVisitor {
         segment_number: u32,
     ) -> Result<(), Jbig2Error> {
         self.check_cancelled()?;
-        self.check_region_budget(region_info, "intermediate text region")?;
+        self.check_region_budget(&params.region_info, "intermediate text region")?;
         self.time_call("intermediate_text_region", |this| {
             super::text_handler::on_intermediate_text_region(
-                &this.symbols,
-                &this.patterns,
-                &this.custom_tables,
-                &mut this.bitmaps,
-                region_info,
-                text_region_segment_flags,
-                number_of_symbol_instances,
+                IntermediateResources {
+                    symbols: &this.symbols,
+                    patterns: &this.patterns,
+                    custom_tables: &this.custom_tables,
+                    bitmaps: &mut this.bitmaps,
+                },
+                params,
                 referred_to,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
                 segment_number,
             )
         })?;
         self.check_retained_budgets()
     }
 
-    #[allow(clippy::too_many_arguments)]
     /// Decode and store an intermediate halftone region.
     pub fn on_intermediate_halftone_region(
         &mut self,
-        region_info: &RegionInfo,
-        mmr: bool,
-        template: usize,
-        enable_skip: bool,
-        combination_operator: usize,
-        default_pixel_value: u8,
-        grid_width: usize,
-        grid_height: usize,
-        grid_offset_x: i32,
-        grid_offset_y: i32,
-        grid_vector_x: i16,
-        grid_vector_y: i16,
+        params: &HalftoneRegionParams,
         referred_to: &[u32],
         data: &[u8],
         start: usize,
@@ -548,29 +491,16 @@ impl SimpleSegmentVisitor {
         segment_number: u32,
     ) -> Result<(), Jbig2Error> {
         self.check_cancelled()?;
-        self.check_region_budget(region_info, "intermediate halftone region")?;
-        self.check_bitmap_budget(grid_width, grid_height, "halftone grid")?;
+        self.check_region_budget(&params.region_info, "intermediate halftone region")?;
+        self.check_bitmap_budget(params.grid_width, params.grid_height, "halftone grid")?;
         self.time_call("intermediate_halftone_region", |this| {
             super::halftone_handler::on_intermediate_halftone_region(
                 &this.patterns,
                 &this.pattern_shifts,
                 &mut this.bitmaps,
-                region_info,
-                mmr,
-                template,
-                enable_skip,
-                combination_operator,
-                default_pixel_value,
-                grid_width,
-                grid_height,
-                grid_offset_x,
-                grid_offset_y,
-                grid_vector_x,
-                grid_vector_y,
+                params,
                 referred_to,
-                data,
-                start,
-                end,
+                SegmentSlice { data, start, end },
                 segment_number,
             )
         })?;

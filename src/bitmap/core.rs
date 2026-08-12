@@ -58,8 +58,7 @@ impl Bitmap {
     ///
     /// # Safety
     ///
-    /// The caller must ensure that the bitmap data is written to before being read.
-    #[allow(clippy::uninit_vec)]
+    /// The caller must write every byte of `data` before any read.
     pub unsafe fn uninit(width: usize, height: usize) -> Self {
         if width > MAX_BITMAP_DIMENSION || height > MAX_BITMAP_DIMENSION {
             panic!("Bitmap dimensions unreasonable");
@@ -71,11 +70,7 @@ impl Bitmap {
             >> 3;
 
         let buffer_size = stride.checked_mul(height).expect("buffer size overflow");
-
-        let mut data = Vec::with_capacity(buffer_size);
-        unsafe {
-            data.set_len(buffer_size);
-        }
+        let data = uninit_bytes(buffer_size);
 
         Bitmap {
             data,
@@ -399,11 +394,13 @@ impl Bitmap {
 
                 self.combine_row_op(
                     dst_byte_start,
-                    src_byte_start,
                     full_bytes,
-                    src_bit_offset,
-                    &other.data,
-                    src_row_end,
+                    CombineRowSource {
+                        data: &other.data,
+                        start: src_byte_start,
+                        end: src_row_end,
+                        shift: src_bit_offset,
+                    },
                     op,
                 );
 
@@ -441,31 +438,27 @@ impl Bitmap {
     }
 
     #[inline(always)]
-    #[allow(clippy::too_many_arguments)]
     fn combine_row_op<F>(
         &mut self,
         dst_start: usize,
-        src_start: usize,
         count: usize,
-        src_shift: usize,
-        src_data: &[u8],
-        src_end: usize,
+        src: CombineRowSource<'_>,
         op: F,
     ) where
         F: Fn(u8, u8) -> u8 + Copy,
     {
-        if src_shift == 0 {
+        if src.shift == 0 {
             for i in 0..count {
                 unsafe {
-                    let s = *src_data.get_unchecked(src_start + i);
+                    let s = *src.data.get_unchecked(src.start + i);
                     let d_ptr = self.data.as_mut_ptr().add(dst_start + i);
                     *d_ptr = op(*d_ptr, s);
                 }
             }
         } else {
-            let shift_comp = 8 - src_shift;
-            // We can read src[i+1] safely if src_start + i + 1 < src_end
-            let safe_count = if src_start + count < src_end {
+            let shift_comp = 8 - src.shift;
+            // We can read src[i+1] safely if src.start + i + 1 < src.end
+            let safe_count = if src.start + count < src.end {
                 count
             } else {
                 count.saturating_sub(1)
@@ -473,9 +466,9 @@ impl Bitmap {
 
             for i in 0..safe_count {
                 unsafe {
-                    let s0 = *src_data.get_unchecked(src_start + i);
-                    let s1 = *src_data.get_unchecked(src_start + i + 1);
-                    let s = (s0 << src_shift) | (s1 >> shift_comp);
+                    let s0 = *src.data.get_unchecked(src.start + i);
+                    let s1 = *src.data.get_unchecked(src.start + i + 1);
+                    let s = (s0 << src.shift) | (s1 >> shift_comp);
                     let d_ptr = self.data.as_mut_ptr().add(dst_start + i);
                     *d_ptr = op(*d_ptr, s);
                 }
@@ -484,9 +477,9 @@ impl Bitmap {
             if safe_count < count {
                 let i = safe_count;
                 unsafe {
-                    let s0 = *src_data.get_unchecked(src_start + i);
+                    let s0 = *src.data.get_unchecked(src.start + i);
                     // s1 is assumed 0 (out of bounds)
-                    let s = s0 << src_shift;
+                    let s = s0 << src.shift;
                     let d_ptr = self.data.as_mut_ptr().add(dst_start + i);
                     *d_ptr = op(*d_ptr, s);
                 }
@@ -621,6 +614,27 @@ impl Bitmap {
             }
         }
     }
+}
+
+struct CombineRowSource<'a> {
+    data: &'a [u8],
+    start: usize,
+    end: usize,
+    shift: usize,
+}
+
+fn uninit_bytes(len: usize) -> Vec<u8> {
+    let mut uninit = Vec::<std::mem::MaybeUninit<u8>>::with_capacity(len);
+    // SAFETY: MaybeUninit<u8> has no drop glue and does not require initialization.
+    unsafe {
+        uninit.set_len(len);
+    }
+    let ptr = uninit.as_mut_ptr() as *mut u8;
+    let cap = uninit.capacity();
+    std::mem::forget(uninit);
+    // SAFETY: `ptr` came from a Vec of the same length and capacity; the caller
+    // of Bitmap::uninit must overwrite every byte before any read.
+    unsafe { Vec::from_raw_parts(ptr, len, cap) }
 }
 
 fn or_bytes_unaligned(dst: &mut [u8], src: &[u8]) {

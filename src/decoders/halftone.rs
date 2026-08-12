@@ -234,10 +234,10 @@ fn get_shifted_patterns(patterns: &[Bitmap]) -> Arc<Vec<ShiftedPattern>> {
             return Arc::clone(cached);
         }
         let shifted = build_shifted_patterns(patterns);
-        if cache.len() >= SHIFTED_PATTERN_CACHE_LIMIT {
-            if let Some(oldest_hash) = queue.pop_front() {
-                cache.remove(&oldest_hash);
-            }
+        if cache.len() >= SHIFTED_PATTERN_CACHE_LIMIT
+            && let Some(oldest_hash) = queue.pop_front()
+        {
+            cache.remove(&oldest_hash);
         }
         cache.insert(hash, Arc::clone(&shifted));
         queue.push_back(hash);

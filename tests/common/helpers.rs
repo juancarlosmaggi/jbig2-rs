@@ -11,7 +11,6 @@ pub fn load_test_file(filename: &str) -> Vec<u8> {
 }
 
 /// Assert that two bitmaps are identical in size and pixels.
-#[allow(dead_code)]
 pub fn assert_bitmap_equals(actual: &Bitmap, expected: &Bitmap) {
     assert_eq!(actual.width, expected.width, "Bitmap widths differ");
     assert_eq!(actual.height, expected.height, "Bitmap heights differ");
@@ -84,6 +83,13 @@ mod tests {
     fn test_create_test_reader() {
         let data = vec![1, 2, 3, 4, 5];
         let _reader = create_test_reader(data);
+    }
+
+    #[test]
+    fn test_assert_bitmap_equals() {
+        let actual = Bitmap::new(4, 4);
+        let expected = Bitmap::new(4, 4);
+        assert_bitmap_equals(&actual, &expected);
     }
 
     #[test]

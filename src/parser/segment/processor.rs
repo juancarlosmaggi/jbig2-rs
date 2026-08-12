@@ -53,13 +53,13 @@ pub fn process_segments<'a>(
             current_page += 1;
         }
     }
-    if !page_segments.is_empty() {
-        if let Err(err) = process_page_segments(&page_segments, visitor) {
-            if strict || visitor.current_page_info.is_none() {
-                return Err(err);
-            }
-            return Ok(());
+    if !page_segments.is_empty()
+        && let Err(err) = process_page_segments(&page_segments, visitor)
+    {
+        if strict || visitor.current_page_info.is_none() {
+            return Err(err);
         }
+        return Ok(());
     }
     Ok(())
 }
@@ -165,15 +165,7 @@ pub fn process_segment<'a>(
             // Dispatch immediate text region parameters and payload.
             let params = parse_text_region_params(data, start);
 
-            visitor.on_immediate_text_region(
-                &params.region_info,
-                params.text_region_segment_flags,
-                params.number_of_symbol_instances,
-                &header.referred_to,
-                data,
-                start,
-                end,
-            )?;
+            visitor.on_immediate_text_region(&params, &header.referred_to, data, start, end)?;
         }
         48 => {
             require_payload(start, end, 19)?;
@@ -232,35 +224,14 @@ pub fn process_segment<'a>(
             require_payload(start, end, 7)?;
             // Dispatch pattern dictionary parameters and payload.
             let params = parse_pattern_dictionary_params(data, start);
-            visitor.on_pattern_dictionary(
-                params.mmr,
-                params.pattern_width,
-                params.pattern_height,
-                params.max_pattern_index,
-                params.template,
-                header.number,
-                data,
-                start + 7,
-                end,
-            )?;
+            visitor.on_pattern_dictionary(&params, header.number, data, start + 7, end)?;
         }
         22 | 23 => {
             require_payload(start, end, REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21)?;
             // Dispatch immediate halftone region parameters and payload.
             let params = parse_halftone_region_params(data, start);
             visitor.on_immediate_halftone_region(
-                &params.region_info,
-                params.mmr,
-                params.template,
-                params.enable_skip,
-                params.combination_operator,
-                params.default_pixel_value,
-                params.grid_width,
-                params.grid_height,
-                params.grid_offset_x,
-                params.grid_offset_y,
-                params.grid_vector_x,
-                params.grid_vector_y,
+                &params,
                 &header.referred_to,
                 data,
                 start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21,
@@ -291,9 +262,7 @@ pub fn process_segment<'a>(
             // Dispatch intermediate text region payload.
             let params = parse_text_region_params(data, start);
             visitor.on_intermediate_text_region(
-                &params.region_info,
-                params.text_region_segment_flags,
-                params.number_of_symbol_instances,
+                &params,
                 &header.referred_to,
                 data,
                 start,
@@ -306,18 +275,7 @@ pub fn process_segment<'a>(
             // Dispatch intermediate halftone region payload.
             let params = parse_halftone_region_params(data, start);
             visitor.on_intermediate_halftone_region(
-                &params.region_info,
-                params.mmr,
-                params.template,
-                params.enable_skip,
-                params.combination_operator,
-                params.default_pixel_value,
-                params.grid_width,
-                params.grid_height,
-                params.grid_offset_x,
-                params.grid_offset_y,
-                params.grid_vector_x,
-                params.grid_vector_y,
+                &params,
                 &header.referred_to,
                 data,
                 start + REGION_SEGMENT_INFORMATION_FIELD_LENGTH + 21,

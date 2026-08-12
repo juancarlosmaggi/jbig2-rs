@@ -113,36 +113,57 @@ fn clamp_range(start: i32, end: i32, limit: i32) -> (usize, usize) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-#[inline(always)]
-fn decode_refinement_range_slow(
-    bitmap: &mut Bitmap,
-    reference_bitmap: &Bitmap,
-    decoder: &mut ArithmeticDecoder<'_>,
-    contexts: &mut [i8],
-    row: usize,
-    start: usize,
-    end: usize,
-    use_prediction: bool,
+#[derive(Clone, Copy)]
+struct TemplateCoords<'a> {
+    length: usize,
+    x: &'a [i32],
+    y: &'a [i32],
+}
+
+struct RefinementGeometry {
     offset_x: i32,
     offset_y: i32,
     width_i32: i32,
     reference_width_i32: i32,
     reference_height_i32: i32,
-    coding_template_length: usize,
-    coding_template_x: &[i32],
-    coding_template_y: &[i32],
-    reference_template_length: usize,
-    reference_template_x: &[i32],
-    reference_template_y: &[i32],
-) -> Result<(), Jbig2Error> {
+}
+
+struct RefinementRangeSlow<'a, 'dec> {
+    bitmap: &'a mut Bitmap,
+    reference_bitmap: &'a Bitmap,
+    decoder: &'a mut ArithmeticDecoder<'dec>,
+    contexts: &'a mut [i8],
+    row: usize,
+    start: usize,
+    end: usize,
+    use_prediction: bool,
+    geometry: &'a RefinementGeometry,
+    coding: TemplateCoords<'a>,
+    reference: TemplateCoords<'a>,
+}
+
+#[inline(always)]
+fn decode_refinement_range_slow(input: RefinementRangeSlow<'_, '_>) -> Result<(), Jbig2Error> {
+    let RefinementRangeSlow {
+        bitmap,
+        reference_bitmap,
+        decoder,
+        contexts,
+        row,
+        start,
+        end,
+        use_prediction,
+        geometry,
+        coding,
+        reference,
+    } = input;
     let row_start_index = unsafe { bitmap.get_row_start_index_unchecked(row) };
     let bitmap_height = bitmap.height as i32;
 
     let mut coding_offsets = [0usize; 16];
     let mut coding_is_valid = [false; 16];
-    for k in 0..coding_template_length {
-        let i0 = row as i32 + coding_template_y[k];
+    for k in 0..coding.length {
+        let i0 = row as i32 + coding.y[k];
         if i0 >= 0 && i0 < bitmap_height {
             coding_is_valid[k] = true;
             coding_offsets[k] = unsafe { bitmap.get_row_start_index_unchecked(i0 as usize) };
@@ -153,9 +174,9 @@ fn decode_refinement_range_slow(
 
     let mut reference_offsets = [0usize; 16];
     let mut reference_is_valid = [false; 16];
-    for k in 0..reference_template_length {
-        let i0 = row as i32 + reference_template_y[k] - offset_y;
-        if i0 >= 0 && i0 < reference_height_i32 {
+    for k in 0..reference.length {
+        let i0 = row as i32 + reference.y[k] - geometry.offset_y;
+        if i0 >= 0 && i0 < geometry.reference_height_i32 {
             reference_is_valid[k] = true;
             reference_offsets[k] =
                 unsafe { reference_bitmap.get_row_start_index_unchecked(i0 as usize) };
@@ -168,10 +189,14 @@ fn decode_refinement_range_slow(
         let mut context_label = 0u16;
         let mut implicit = None;
         if use_prediction {
-            let i_ref = j as i32 - offset_x;
-            let j_ref = row as i32 - offset_y;
+            let i_ref = j as i32 - geometry.offset_x;
+            let j_ref = row as i32 - geometry.offset_y;
             let get_ref = |x: i32, y: i32| -> u8 {
-                if x < 0 || y < 0 || x >= reference_width_i32 || y >= reference_height_i32 {
+                if x < 0
+                    || y < 0
+                    || x >= geometry.reference_width_i32
+                    || y >= geometry.reference_height_i32
+                {
                     0
                 } else {
                     reference_bitmap.get_pixel_unchecked(x as usize, y as usize)
@@ -196,9 +221,9 @@ fn decode_refinement_range_slow(
             }
             continue;
         }
-        for k in 0..coding_template_length {
-            let j0 = j as i32 + coding_template_x[k];
-            if j0 >= 0 && j0 < width_i32 && coding_is_valid[k] {
+        for k in 0..coding.length {
+            let j0 = j as i32 + coding.x[k];
+            if j0 >= 0 && j0 < geometry.width_i32 && coding_is_valid[k] {
                 let bit =
                     unsafe { bitmap.get_pixel_at_index_unchecked(coding_offsets[k], j0 as usize) }
                         as u16;
@@ -207,14 +232,14 @@ fn decode_refinement_range_slow(
                 }
             }
         }
-        for k in 0..reference_template_length {
-            let j0 = j as i32 + reference_template_x[k] - offset_x;
-            if j0 >= 0 && j0 < reference_width_i32 && reference_is_valid[k] {
+        for k in 0..reference.length {
+            let j0 = j as i32 + reference.x[k] - geometry.offset_x;
+            if j0 >= 0 && j0 < geometry.reference_width_i32 && reference_is_valid[k] {
                 let bit = unsafe {
                     reference_bitmap.get_pixel_at_index_unchecked(reference_offsets[k], j0 as usize)
                 } as u16;
                 if bit != 0 {
-                    context_label |= 1 << (coding_template_length + k);
+                    context_label |= 1 << (coding.length + k);
                 }
             }
         }
@@ -292,6 +317,23 @@ pub fn decode_refinement<'a>(
     let offset_x = params.offset_x;
     let offset_y = params.offset_y;
     let start_context = REFINEMENT_REUSED_CONTEXTS[params.template_index];
+    let geometry = RefinementGeometry {
+        offset_x,
+        offset_y,
+        width_i32,
+        reference_width_i32,
+        reference_height_i32,
+    };
+    let coding = TemplateCoords {
+        length: coding_template_length,
+        x: &coding_template_x,
+        y: &coding_template_y,
+    };
+    let reference = TemplateCoords {
+        length: reference_template_length,
+        x: &reference_template_x,
+        y: &reference_template_y,
+    };
     let safe_x_start = 0.max(-coding_min_x).max(offset_x - ref_min_x);
     let safe_x_end = width_i32
         .min(width_i32 - coding_max_x)
@@ -316,27 +358,19 @@ pub fn decode_refinement<'a>(
         let row_safe = i >= safe_y_start && i < safe_y_end && safe_x_start < safe_x_end;
 
         if row_safe {
-            decode_refinement_range_slow(
-                &mut bitmap,
-                params.reference_bitmap,
-                &mut decoder,
+            decode_refinement_range_slow(RefinementRangeSlow {
+                bitmap: &mut bitmap,
+                reference_bitmap: params.reference_bitmap,
+                decoder: &mut decoder,
                 contexts,
-                i,
-                0,
-                safe_x_start,
+                row: i,
+                start: 0,
+                end: safe_x_start,
                 use_prediction,
-                offset_x,
-                offset_y,
-                width_i32,
-                reference_width_i32,
-                reference_height_i32,
-                coding_template_length,
-                &coding_template_x,
-                &coding_template_y,
-                reference_template_length,
-                &reference_template_x,
-                &reference_template_y,
-            )?;
+                geometry: &geometry,
+                coding,
+                reference,
+            })?;
 
             // Precalculate offsets for safe inner loops
             let row_start_index = unsafe { bitmap.get_row_start_index_unchecked(i) };
@@ -441,49 +475,33 @@ pub fn decode_refinement<'a>(
                 }
             }
 
-            decode_refinement_range_slow(
-                &mut bitmap,
-                params.reference_bitmap,
-                &mut decoder,
+            decode_refinement_range_slow(RefinementRangeSlow {
+                bitmap: &mut bitmap,
+                reference_bitmap: params.reference_bitmap,
+                decoder: &mut decoder,
                 contexts,
-                i,
-                safe_x_end,
-                params.width,
+                row: i,
+                start: safe_x_end,
+                end: params.width,
                 use_prediction,
-                offset_x,
-                offset_y,
-                width_i32,
-                reference_width_i32,
-                reference_height_i32,
-                coding_template_length,
-                &coding_template_x,
-                &coding_template_y,
-                reference_template_length,
-                &reference_template_x,
-                &reference_template_y,
-            )?;
+                geometry: &geometry,
+                coding,
+                reference,
+            })?;
         } else {
-            decode_refinement_range_slow(
-                &mut bitmap,
-                params.reference_bitmap,
-                &mut decoder,
+            decode_refinement_range_slow(RefinementRangeSlow {
+                bitmap: &mut bitmap,
+                reference_bitmap: params.reference_bitmap,
+                decoder: &mut decoder,
                 contexts,
-                i,
-                0,
-                params.width,
+                row: i,
+                start: 0,
+                end: params.width,
                 use_prediction,
-                offset_x,
-                offset_y,
-                width_i32,
-                reference_width_i32,
-                reference_height_i32,
-                coding_template_length,
-                &coding_template_x,
-                &coding_template_y,
-                reference_template_length,
-                &reference_template_x,
-                &reference_template_y,
-            )?;
+                geometry: &geometry,
+                coding,
+                reference,
+            })?;
         }
     }
     Ok(bitmap)

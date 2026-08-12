@@ -278,10 +278,8 @@ pub fn decode_text_region(
                     )
                 }
             } else {
-                if apply_refinement {
-                    if let Some(size) = bmsize {
-                        huffman_input.as_mut().unwrap().skip(size as usize);
-                    }
+                if apply_refinement && let Some(size) = bmsize {
+                    huffman_input.as_mut().unwrap().skip(size as usize);
                 }
                 (0, 0, None)
             };

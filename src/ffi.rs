@@ -99,6 +99,13 @@ pub extern "C" fn jbig2_ffi_decode_options_default() -> Jbig2FfiDecodeOptions {
 ///
 /// Inputs are borrowed for the duration of the call and are never freed by
 /// Rust. If `global_len` is zero, `global_ptr` is ignored.
+///
+/// # Safety
+///
+/// `page_ptr` must be valid for `page_len` bytes when `page_len` is non-zero.
+/// `global_ptr` must be valid for `global_len` bytes when `global_len` is
+/// non-zero. `options` may be null; otherwise it must point to a valid
+/// `Jbig2FfiDecodeOptions`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn jbig2_ffi_decode_page(
     page_ptr: *const u8,
@@ -128,6 +135,11 @@ pub unsafe extern "C" fn jbig2_ffi_decode_page(
 }
 
 /// Free buffers owned by a C ABI decode result.
+///
+/// # Safety
+///
+/// `result` must be a value previously returned by `jbig2_ffi_decode_page`
+/// and must not be used again after this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn jbig2_ffi_result_free(result: Jbig2FfiResult) {
     if !result.data.is_null() {
