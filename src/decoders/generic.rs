@@ -277,10 +277,8 @@ fn decode_bitmap_template0(
 
                 let bit = decoder.read_bit(contexts, context as usize);
                 result |= bit;
-                context = ((context & 0x7bf7) << 1)
-                    | (bit as u32)
-                    | (line_m1 & 0x10)
-                    | (line_m2 & 0x800);
+                context =
+                    ((context & 0x7bf7) << 1) | (bit as u32) | (line_m1 & 0x10) | (line_m2 & 0x800);
             } else {
                 for x_minor in 0..minor_width {
                     let bit = decoder.read_bit(contexts, context as usize);
