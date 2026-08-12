@@ -158,11 +158,46 @@ fn decode_bitmap_template0(
                 line_m1 = (line_m1 << 8) | next;
 
                 let mut result = 0u8;
-                for x_minor in 0..minor_width {
+                if minor_width == 8 {
+                    // Unrolled loop for the common full-byte case.
                     let bit = decoder.read_bit(contexts, context as usize);
-                    result |= bit << (7 - x_minor);
-                    let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
-                    context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
+                    result |= bit << 7;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | ((line_m1 >> 7) & 0x10);
+
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit << 6;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | ((line_m1 >> 6) & 0x10);
+
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit << 5;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | ((line_m1 >> 5) & 0x10);
+
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit << 4;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | ((line_m1 >> 4) & 0x10);
+
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit << 3;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | ((line_m1 >> 3) & 0x10);
+
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit << 2;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | ((line_m1 >> 2) & 0x10);
+
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit << 1;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | ((line_m1 >> 1) & 0x10);
+
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | (line_m1 & 0x10);
+                } else {
+                    for x_minor in 0..minor_width {
+                        let bit = decoder.read_bit(contexts, context as usize);
+                        result |= bit << (7 - x_minor);
+                        let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
+                        context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit;
+                    }
                 }
                 row[x >> 3] = result;
             }
@@ -189,12 +224,71 @@ fn decode_bitmap_template0(
             line_m2 = (line_m2 << 8) | (next2 << 6);
 
             let mut result = 0u8;
-            for x_minor in 0..minor_width {
+            if minor_width == 8 {
+                // Unrolled loop for the common full-byte case (hot path for tall pages).
                 let bit = decoder.read_bit(contexts, context as usize);
-                result |= bit << (7 - x_minor);
-                let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
-                let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
-                context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                result |= bit << 7;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | ((line_m1 >> 7) & 0x10)
+                    | ((line_m2 >> 7) & 0x800);
+
+                let bit = decoder.read_bit(contexts, context as usize);
+                result |= bit << 6;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | ((line_m1 >> 6) & 0x10)
+                    | ((line_m2 >> 6) & 0x800);
+
+                let bit = decoder.read_bit(contexts, context as usize);
+                result |= bit << 5;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | ((line_m1 >> 5) & 0x10)
+                    | ((line_m2 >> 5) & 0x800);
+
+                let bit = decoder.read_bit(contexts, context as usize);
+                result |= bit << 4;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | ((line_m1 >> 4) & 0x10)
+                    | ((line_m2 >> 4) & 0x800);
+
+                let bit = decoder.read_bit(contexts, context as usize);
+                result |= bit << 3;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | ((line_m1 >> 3) & 0x10)
+                    | ((line_m2 >> 3) & 0x800);
+
+                let bit = decoder.read_bit(contexts, context as usize);
+                result |= bit << 2;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | ((line_m1 >> 2) & 0x10)
+                    | ((line_m2 >> 2) & 0x800);
+
+                let bit = decoder.read_bit(contexts, context as usize);
+                result |= bit << 1;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | ((line_m1 >> 1) & 0x10)
+                    | ((line_m2 >> 1) & 0x800);
+
+                let bit = decoder.read_bit(contexts, context as usize);
+                result |= bit;
+                context = ((context & 0x7bf7) << 1)
+                    | (bit as u32)
+                    | (line_m1 & 0x10)
+                    | (line_m2 & 0x800);
+            } else {
+                for x_minor in 0..minor_width {
+                    let bit = decoder.read_bit(contexts, context as usize);
+                    result |= bit << (7 - x_minor);
+                    let line_m1_bit = (line_m1 >> (7 - x_minor)) & 0x10;
+                    let line_m2_bit = (line_m2 >> (7 - x_minor)) & 0x800;
+                    context = ((context & 0x7bf7) << 1) | (bit as u32) | line_m1_bit | line_m2_bit;
+                }
             }
             row[x >> 3] = result;
         }
