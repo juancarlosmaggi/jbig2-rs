@@ -27,7 +27,7 @@ impl DecodeProfile {
             .iter()
             .map(|(label, stat)| (*label, stat.total, stat.count))
             .collect();
-        rows.sort_by(|a, b| b.1.cmp(&a.1));
+        rows.sort_by_key(|row| std::cmp::Reverse(row.1));
 
         let mut out = String::new();
         out.push_str(&format!(

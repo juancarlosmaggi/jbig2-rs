@@ -355,13 +355,13 @@ impl<'a> CCITTFaxDecoder<'a> {
         // Optimization: Scan for the first byte that is not target_byte
         if start_byte_idx < limit_byte {
             let slice = &line[start_byte_idx..limit_byte];
-            let mut chunks = slice.chunks_exact(8);
+            let (chunks, remainder) = slice.as_chunks::<8>();
             let target_chunk = if target_byte == 0 { 0u64 } else { !0u64 };
             let mut offset = 0;
 
-            for chunk in chunks.by_ref() {
+            for chunk in chunks {
                 // Check 8 bytes at once
-                let val = u64::from_ne_bytes(chunk.try_into().unwrap());
+                let val = u64::from_ne_bytes(*chunk);
                 if val != target_chunk {
                     // Found mismatch in this chunk
                     for (i, &b) in chunk.iter().enumerate() {
@@ -378,7 +378,7 @@ impl<'a> CCITTFaxDecoder<'a> {
             }
 
             // Check remaining bytes
-            for (i, &b) in chunks.remainder().iter().enumerate() {
+            for (i, &b) in remainder.iter().enumerate() {
                 if b != target_byte {
                     let byte_idx = start_byte_idx + offset + i;
                     let check_byte = if color_to_match == 0 { b } else { !b };

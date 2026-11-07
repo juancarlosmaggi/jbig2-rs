@@ -959,8 +959,8 @@ fn xor_plane_bytes(dst: &mut [u8], src: &[u8]) {
     let middle_byte_len = middle.len() * 8;
     if middle_byte_len > 0 {
         let src_middle = &src[prefix_len..prefix_len + middle_byte_len];
-        for (d, s_chunk) in middle.iter_mut().zip(src_middle.chunks_exact(8)) {
-            let s_val = u64::from_ne_bytes(s_chunk.try_into().unwrap());
+        for (d, s_chunk) in middle.iter_mut().zip(src_middle.as_chunks::<8>().0) {
+            let s_val = u64::from_ne_bytes(*s_chunk);
             *d ^= s_val;
         }
     }

@@ -112,7 +112,7 @@ pub fn decode_text_region(
                         .unwrap()
                         .read_bits(params.log_strip_size as u32)? as i32
                 } else {
-                    decode_integer_context(decoding_context, "IAIT")?.unwrap_or(0) as i32
+                    decode_integer_context(decoding_context, "IAIT")?.unwrap_or(0)
                 };
             }
             let t = (params.strip_size as i32)
